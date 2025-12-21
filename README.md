@@ -194,8 +194,11 @@ sudo ./nas-dockge.sh harden-ssh             # Harden SSH configuration
 
 # 1. Initial Setup
 sudo ./nas-dockge.sh                    # Creates config file
+
 sudo ./nas-dockge.sh edit-config        # Edit with your settings
+
 sudo ./nas-dockge.sh validate-config    # Verify config
+
 sudo ./nas-dockge.sh                    # Run full setup
 
 # 2. Enable Auto-Start
