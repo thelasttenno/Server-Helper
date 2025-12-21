@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Server Helper Setup Script for Ubuntu 24.04.3 LTS
+
 set -e
 
 # Configuration file path
@@ -34,7 +36,12 @@ else
 # Server Helper Configuration File
 # Edit this file with your settings
 
-# NAS Configuration
+# NAS Configuration (Multiple shares supported)
+# Format: "IP:SHARE:MOUNT_POINT:USERNAME:PASSWORD"
+# Separate multiple shares with semicolons
+NAS_SHARES="192.168.1.100:share1:/mnt/nas1:user1:pass1;192.168.1.100:share2:/mnt/nas2:user1:pass1"
+
+# Legacy single NAS config (kept for backward compatibility)
 NAS_IP="192.168.1.100"
 NAS_SHARE="share"
 NAS_MOUNT_POINT="/mnt/nas"
@@ -46,6 +53,10 @@ DOCKGE_PORT="5001"
 DOCKGE_DATA_DIR="/opt/dockge"
 BACKUP_DIR="$NAS_MOUNT_POINT/dockge_backups"
 BACKUP_RETENTION_DAYS="30"
+
+# NAS Mount Settings
+NAS_MOUNT_REQUIRED="false"          # Set to "true" to fail setup if NAS doesn't mount
+NAS_MOUNT_SKIP="false"              # Set to "true" to skip NAS mounting entirely
 
 # System Configuration
 NEW_HOSTNAME=""
@@ -78,6 +89,7 @@ EOF
 fi
 
 # Set defaults if not in config
+NAS_SHARES="${NAS_SHARES:-}"
 NAS_IP="${NAS_IP:-192.168.1.100}"
 NAS_SHARE="${NAS_SHARE:-share}"
 NAS_MOUNT_POINT="${NAS_MOUNT_POINT:-/mnt/nas}"
@@ -87,6 +99,8 @@ DOCKGE_PORT="${DOCKGE_PORT:-5001}"
 DOCKGE_DATA_DIR="${DOCKGE_DATA_DIR:-/opt/dockge}"
 BACKUP_DIR="${BACKUP_DIR:-$NAS_MOUNT_POINT/dockge_backups}"
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
+NAS_MOUNT_REQUIRED="${NAS_MOUNT_REQUIRED:-false}"
+NAS_MOUNT_SKIP="${NAS_MOUNT_SKIP:-false}"
 NEW_HOSTNAME="${NEW_HOSTNAME:-}"
 UPTIME_KUMA_NAS_URL="${UPTIME_KUMA_NAS_URL:-}"
 UPTIME_KUMA_DOCKGE_URL="${UPTIME_KUMA_DOCKGE_URL:-}"
@@ -103,9 +117,116 @@ FAIL2BAN_ENABLED="${FAIL2BAN_ENABLED:-false}"
 UFW_ENABLED="${UFW_ENABLED:-false}"
 SSH_HARDENING_ENABLED="${SSH_HARDENING_ENABLED:-false}"
 
-# Function to mount NAS
+# Parse NAS shares into array
+declare -a NAS_ARRAY
+if [ -n "$NAS_SHARES" ]; then
+    IFS=';' read -ra NAS_ARRAY <<< "$NAS_SHARES"
+fi
+
+# Function to mount a single NAS share
+mount_single_nas() {
+    local nas_ip="$1"
+    local nas_share="$2"
+    local mount_point="$3"
+    local username="$4"
+    local password="$5"
+    
+    log "Setting up NAS mount: //$nas_ip/$nas_share -> $mount_point"
+    
+    # Validate inputs
+    if [ -z "$nas_ip" ] || [ -z "$nas_share" ] || [ -z "$mount_point" ]; then
+        warning "Missing required NAS parameters - skipping this mount"
+        return 1
+    fi
+    
+    if [ ! -d "$mount_point" ]; then
+        log "Creating mount point: $mount_point"
+        sudo mkdir -p "$mount_point"
+    fi
+    
+    if mountpoint -q "$mount_point"; then
+        log "Already mounted at $mount_point"
+        return 0
+    fi
+    
+    # Create unique credentials file
+    local creds_file="/root/.nascreds_$(echo $mount_point | tr '/' '_' | tr -d ' ')"
+    
+    # Escape special characters in password
+    local escaped_password="${password//\\/\\\\}"
+    escaped_password="${escaped_password//\$/\\\$}"
+    
+    sudo bash -c "cat > $creds_file << 'EOFCREDS'
+username=$username
+password=$escaped_password
+EOFCREDS"
+    sudo chmod 600 "$creds_file"
+    
+    log "Attempting to mount //$nas_ip/$nas_share to $mount_point"
+    
+    # Try mount with different SMB versions
+    local mount_opts=""
+    local mount_success=false
+    
+    # Try SMB 3.0
+    if sudo mount -t cifs "//$nas_ip/$nas_share" "$mount_point" \
+        -o "credentials=$creds_file,uid=$(id -u),gid=$(id -g),file_mode=0775,dir_mode=0775,vers=3.0" 2>/dev/null; then
+        log "✓ Mounted successfully with SMB 3.0"
+        mount_opts="credentials=$creds_file,uid=$(id -u),gid=$(id -g),file_mode=0775,dir_mode=0775,vers=3.0"
+        mount_success=true
+    # Try SMB 2.1
+    elif sudo mount -t cifs "//$nas_ip/$nas_share" "$mount_point" \
+        -o "credentials=$creds_file,uid=$(id -u),gid=$(id -g),file_mode=0775,dir_mode=0775,vers=2.1" 2>/dev/null; then
+        log "✓ Mounted successfully with SMB 2.1"
+        mount_opts="credentials=$creds_file,uid=$(id -u),gid=$(id -g),file_mode=0775,dir_mode=0775,vers=2.1"
+        mount_success=true
+    # Try SMB 1.0
+    elif sudo mount -t cifs "//$nas_ip/$nas_share" "$mount_point" \
+        -o "credentials=$creds_file,uid=$(id -u),gid=$(id -g),file_mode=0775,dir_mode=0775,vers=1.0" 2>/dev/null; then
+        warning "Mounted with SMB 1.0 (legacy, consider upgrading NAS)"
+        mount_opts="credentials=$creds_file,uid=$(id -u),gid=$(id -g),file_mode=0775,dir_mode=0775,vers=1.0"
+        mount_success=true
+    # Try without version specification (auto-negotiate)
+    elif sudo mount -t cifs "//$nas_ip/$nas_share" "$mount_point" \
+        -o "credentials=$creds_file,uid=$(id -u),gid=$(id -g),file_mode=0775,dir_mode=0775" 2>/dev/null; then
+        log "✓ Mounted successfully (auto-negotiated SMB version)"
+        mount_opts="credentials=$creds_file,uid=$(id -u),gid=$(id -g),file_mode=0775,dir_mode=0775"
+        mount_success=true
+    fi
+    
+    if [ "$mount_success" = false ]; then
+        warning "Failed to mount //$nas_ip/$nas_share to $mount_point"
+        warning "Checking kernel logs for details..."
+        sudo dmesg | tail -5 | while read line; do
+            warning "  $line"
+        done
+        warning "Common issues:"
+        warning "  - Verify NAS IP is reachable: ping $nas_ip"
+        warning "  - Check share name is correct"
+        warning "  - Verify username/password"
+        warning "  - Ensure SMB is enabled on NAS"
+        return 1
+    fi
+    
+    # Add to fstab if mounted successfully
+    if ! grep -q "$mount_point" /etc/fstab 2>/dev/null; then
+        log "Adding to /etc/fstab for auto-mount on boot"
+        echo "//$nas_ip/$nas_share $mount_point cifs $mount_opts,_netdev,nofail 0 0" | sudo tee -a /etc/fstab > /dev/null
+    fi
+    
+    log "✓ NAS mounted successfully: $mount_point"
+    return 0
+}
+
+# Function to mount NAS (supports multiple shares)
 mount_nas() {
-    log "Setting up NAS mount..."
+    # Check if NAS mounting should be skipped
+    if [ "$NAS_MOUNT_SKIP" = "true" ]; then
+        log "NAS mounting is disabled (NAS_MOUNT_SKIP=true)"
+        return 0
+    fi
+    
+    log "Setting up NAS mounts..."
     
     if ! dpkg -l | grep -q cifs-utils; then
         log "Installing cifs-utils..."
@@ -113,33 +234,75 @@ mount_nas() {
         sudo apt-get install -y cifs-utils
     fi
     
-    if [ ! -d "$NAS_MOUNT_POINT" ]; then
-        log "Creating mount point: $NAS_MOUNT_POINT"
-        sudo mkdir -p "$NAS_MOUNT_POINT"
+    local mount_count=0
+    local failed_count=0
+    local total_count=0
+    
+    # Mount shares from NAS_SHARES if configured
+    if [ ${#NAS_ARRAY[@]} -gt 0 ]; then
+        total_count=${#NAS_ARRAY[@]}
+        log "Attempting to mount $total_count NAS share(s)..."
+        
+        for nas_config in "${NAS_ARRAY[@]}"; do
+            IFS=':' read -r nas_ip nas_share mount_point username password <<< "$nas_config"
+            
+            if [ -z "$nas_ip" ] || [ -z "$nas_share" ] || [ -z "$mount_point" ]; then
+                warning "Invalid NAS config format: $nas_config"
+                warning "Expected format: IP:SHARE:MOUNT_POINT:USERNAME:PASSWORD"
+                failed_count=$((failed_count + 1))
+                continue
+            fi
+            
+            if mount_single_nas "$nas_ip" "$nas_share" "$mount_point" "$username" "$password"; then
+                mount_count=$((mount_count + 1))
+            else
+                failed_count=$((failed_count + 1))
+            fi
+        done
+    else
+        # Fallback to legacy single NAS config
+        total_count=1
+        log "Using legacy single NAS configuration..."
+        
+        if mount_single_nas "$NAS_IP" "$NAS_SHARE" "$NAS_MOUNT_POINT" "$NAS_USERNAME" "$NAS_PASSWORD"; then
+            mount_count=$((mount_count + 1))
+        else
+            failed_count=$((failed_count + 1))
+        fi
     fi
     
-    if mountpoint -q "$NAS_MOUNT_POINT"; then
-        log "NAS is already mounted at $NAS_MOUNT_POINT"
-        return 0
+    echo ""
+    log "═══════════════════════════════════════════════════════"
+    log "NAS Mount Summary: $mount_count/$total_count successful"
+    log "═══════════════════════════════════════════════════════"
+    
+    if [ $failed_count -gt 0 ]; then
+        warning "$failed_count NAS share(s) failed to mount"
+        
+        if [ "$NAS_MOUNT_REQUIRED" = "true" ]; then
+            error "NAS_MOUNT_REQUIRED is set to true, but some mounts failed"
+            error "Setup cannot continue. Please fix NAS configuration and try again."
+            return 1
+        else
+            warning "Continuing setup without all NAS shares mounted"
+            warning "Backups to NAS will not work until NAS is mounted"
+            warning "Set NAS_MOUNT_REQUIRED=true in config to make NAS mandatory"
+        fi
     fi
     
-    CREDS_FILE="/root/.nascreds"
-    sudo bash -c "cat > $CREDS_FILE << EOFCREDS
-username=$NAS_USERNAME
-password=$NAS_PASSWORD
-EOFCREDS"
-    sudo chmod 600 "$CREDS_FILE"
-    
-    log "Mounting NAS from //$NAS_IP/$NAS_SHARE to $NAS_MOUNT_POINT"
-    sudo mount -t cifs "//$NAS_IP/$NAS_SHARE" "$NAS_MOUNT_POINT" \
-        -o credentials="$CREDS_FILE",uid=$(id -u),gid=$(id -g),file_mode=0775,dir_mode=0775
-    
-    if ! grep -q "$NAS_MOUNT_POINT" /etc/fstab; then
-        log "Adding NAS mount to /etc/fstab"
-        echo "//$NAS_IP/$NAS_SHARE $NAS_MOUNT_POINT cifs credentials=$CREDS_FILE,uid=$(id -u),gid=$(id -g),file_mode=0775,dir_mode=0775,_netdev 0 0" | sudo tee -a /etc/fstab
+    if [ $mount_count -eq 0 ]; then
+        warning "No NAS shares were mounted successfully!"
+        
+        if [ "$NAS_MOUNT_REQUIRED" = "true" ]; then
+            error "Setup cannot continue without NAS (NAS_MOUNT_REQUIRED=true)"
+            return 1
+        else
+            warning "Continuing setup without NAS storage"
+            warning "Features requiring NAS (backups) will not work"
+        fi
     fi
     
-    log "NAS mounted successfully"
+    return 0
 }
 
 # Function to set hostname
@@ -236,23 +399,48 @@ start_dockge() {
     log "Dockge started successfully on port $DOCKGE_PORT"
 }
 
-# Function to check NAS heartbeat
+# Function to check NAS heartbeat (supports multiple shares)
 check_nas_heartbeat() {
     local status=0
+    local failed_mounts=""
     
-    if ! mountpoint -q "$NAS_MOUNT_POINT"; then
-        error "NAS is not mounted at $NAS_MOUNT_POINT"
-        status=1
-    elif ! timeout 5 ls "$NAS_MOUNT_POINT" > /dev/null 2>&1; then
-        error "NAS mount point is not responding"
-        status=1
+    # Check all configured NAS shares
+    if [ ${#NAS_ARRAY[@]} -gt 0 ]; then
+        for nas_config in "${NAS_ARRAY[@]}"; do
+            IFS=':' read -r nas_ip nas_share mount_point username password <<< "$nas_config"
+            
+            if [ -z "$mount_point" ]; then
+                continue
+            fi
+            
+            if ! mountpoint -q "$mount_point"; then
+                error "NAS not mounted: $mount_point"
+                failed_mounts="${failed_mounts}${mount_point},"
+                status=1
+            elif ! timeout 5 ls "$mount_point" > /dev/null 2>&1; then
+                error "NAS not responding: $mount_point"
+                failed_mounts="${failed_mounts}${mount_point},"
+                status=1
+            fi
+        done
+    else
+        # Check legacy single NAS
+        if ! mountpoint -q "$NAS_MOUNT_POINT"; then
+            error "NAS is not mounted at $NAS_MOUNT_POINT"
+            failed_mounts="$NAS_MOUNT_POINT"
+            status=1
+        elif ! timeout 5 ls "$NAS_MOUNT_POINT" > /dev/null 2>&1; then
+            error "NAS mount point is not responding"
+            failed_mounts="$NAS_MOUNT_POINT"
+            status=1
+        fi
     fi
     
     if [ -n "$UPTIME_KUMA_NAS_URL" ]; then
         if [ $status -eq 0 ]; then
             curl -fsS -m 10 "${UPTIME_KUMA_NAS_URL}?status=up&msg=OK&ping=" > /dev/null 2>&1 || true
         else
-            curl -fsS -m 10 "${UPTIME_KUMA_NAS_URL}?status=down&msg=NAS%20Error" > /dev/null 2>&1 || true
+            curl -fsS -m 10 "${UPTIME_KUMA_NAS_URL}?status=down&msg=Failed:${failed_mounts}" > /dev/null 2>&1 || true
         fi
     fi
     
@@ -286,9 +474,30 @@ check_dockge_heartbeat() {
 backup_dockge() {
     log "Starting Dockge backup..."
     
-    if ! mountpoint -q "$NAS_MOUNT_POINT"; then
-        error "NAS is not mounted. Cannot perform backup."
-        return 1
+    # Check if primary backup location is available
+    if ! mountpoint -q "$NAS_MOUNT_POINT" 2>/dev/null && ! [ -d "$BACKUP_DIR" ]; then
+        warning "NAS is not mounted and backup directory doesn't exist"
+        
+        # Try to find any mounted NAS share
+        local alt_backup_dir=""
+        if [ ${#NAS_ARRAY[@]} -gt 0 ]; then
+            for nas_config in "${NAS_ARRAY[@]}"; do
+                IFS=':' read -r nas_ip nas_share mount_point username password <<< "$nas_config"
+                if mountpoint -q "$mount_point" 2>/dev/null; then
+                    alt_backup_dir="$mount_point/dockge_backups"
+                    warning "Using alternative backup location: $alt_backup_dir"
+                    BACKUP_DIR="$alt_backup_dir"
+                    break
+                fi
+            done
+        fi
+        
+        if [ -z "$alt_backup_dir" ]; then
+            # Fallback to local backup
+            BACKUP_DIR="/opt/dockge_backups_local"
+            warning "No NAS available - using local backup: $BACKUP_DIR"
+            warning "Local backups will not survive server failures!"
+        fi
     fi
     
     if [ ! -d "$BACKUP_DIR" ]; then
@@ -303,14 +512,14 @@ backup_dockge() {
     log "Creating backup: $BACKUP_NAME"
     
     if sudo tar -czf "$BACKUP_PATH" -C "$DOCKGE_DATA_DIR" stacks data 2>/dev/null; then
-        log "Backup created successfully: $BACKUP_PATH"
+        log "✓ Backup created successfully: $BACKUP_PATH"
         BACKUP_SIZE=$(du -h "$BACKUP_PATH" | cut -f1)
         log "Backup size: $BACKUP_SIZE"
         
         log "Cleaning up backups older than $BACKUP_RETENTION_DAYS days..."
-        find "$BACKUP_DIR" -name "dockge_backup_*.tar.gz" -type f -mtime +$BACKUP_RETENTION_DAYS -delete
+        find "$BACKUP_DIR" -name "dockge_backup_*.tar.gz" -type f -mtime +$BACKUP_RETENTION_DAYS -delete 2>/dev/null
         
-        BACKUP_COUNT=$(find "$BACKUP_DIR" -name "dockge_backup_*.tar.gz" -type f | wc -l)
+        BACKUP_COUNT=$(find "$BACKUP_DIR" -name "dockge_backup_*.tar.gz" -type f 2>/dev/null | wc -l)
         log "Total backups retained: $BACKUP_COUNT"
         return 0
     else
@@ -489,8 +698,6 @@ update_system() {
     
     return 0
 }
-
-# PART 2 OF 2 - Paste this after Part 1
 
 # Function to perform full upgrade
 full_upgrade() {
@@ -1018,7 +1225,18 @@ monitor_services() {
         if ! check_nas_heartbeat; then
             NAS_OK=false
             error "NAS heartbeat failed - attempting to remount..."
-            sudo umount -f "$NAS_MOUNT_POINT" 2>/dev/null || true
+            
+            # Unmount all NAS shares
+            if [ ${#NAS_ARRAY[@]} -gt 0 ]; then
+                for nas_config in "${NAS_ARRAY[@]}"; do
+                    IFS=':' read -r nas_ip nas_share mount_point username password <<< "$nas_config"
+                    [ -n "$mount_point" ] && sudo umount -f "$mount_point" 2>/dev/null || true
+                done
+            else
+                sudo umount -f "$NAS_MOUNT_POINT" 2>/dev/null || true
+            fi
+            
+            # Attempt remount
             if mount_nas; then
                 log "NAS remounted successfully"
                 NAS_OK=true
@@ -1066,15 +1284,62 @@ main() {
         set_hostname "$NEW_HOSTNAME"
     fi
     
-    mount_nas
+    # Attempt NAS mount (optional unless NAS_MOUNT_REQUIRED=true)
+    if ! mount_nas; then
+        if [ "$NAS_MOUNT_REQUIRED" = "true" ]; then
+            error "Setup failed: NAS mounting is required but failed"
+            error "Fix NAS configuration or set NAS_MOUNT_REQUIRED=false"
+            exit 1
+        fi
+    fi
+    
     install_docker
     install_dockge
     start_dockge
     
-    log "Setup complete!"
+    echo ""
+    log "═══════════════════════════════════════════════════════"
+    log "            Setup Complete!"
+    log "═══════════════════════════════════════════════════════"
     log "Current hostname: $(hostname)"
     log "Dockge: http://localhost:$DOCKGE_PORT"
-    log "NAS: $NAS_MOUNT_POINT"
+    
+    # Display mounted NAS shares
+    local mounted_count=0
+    if [ ${#NAS_ARRAY[@]} -gt 0 ]; then
+        log ""
+        log "NAS Shares Status:"
+        for nas_config in "${NAS_ARRAY[@]}"; do
+            IFS=':' read -r nas_ip nas_share mount_point username password <<< "$nas_config"
+            if [ -n "$mount_point" ]; then
+                if mountpoint -q "$mount_point" 2>/dev/null; then
+                    log "  ✓ $mount_point (//$nas_ip/$nas_share) - MOUNTED"
+                    mounted_count=$((mounted_count + 1))
+                else
+                    warning "  ✗ $mount_point (//$nas_ip/$nas_share) - NOT MOUNTED"
+                fi
+            fi
+        done
+    else
+        if mountpoint -q "$NAS_MOUNT_POINT" 2>/dev/null; then
+            log "NAS: $NAS_MOUNT_POINT - MOUNTED"
+            mounted_count=1
+        else
+            warning "NAS: $NAS_MOUNT_POINT - NOT MOUNTED"
+        fi
+    fi
+    
+    if [ $mounted_count -eq 0 ]; then
+        echo ""
+        warning "╔════════════════════════════════════════════════════╗"
+        warning "║  No NAS shares mounted - backups will be local!    ║"
+        warning "║  Fix NAS config and run: ./script.sh mount-nas     ║"
+        warning "╚════════════════════════════════════════════════════╝"
+    fi
+    
+    echo ""
+    log "═══════════════════════════════════════════════════════"
+    
     echo ""
     
     read -p "Enable auto-start on boot? (y/n) " -n 1 -r
@@ -1127,5 +1392,32 @@ case "$1" in
     edit-config) edit_config ;;
     show-config) show_config ;;
     validate-config) validate_config ;;
+    list-nas) 
+        log "Configured NAS shares:"
+        if [ ${#NAS_ARRAY[@]} -gt 0 ]; then
+            for i in "${!NAS_ARRAY[@]}"; do
+                IFS=':' read -r nas_ip nas_share mount_point username password <<< "${NAS_ARRAY[$i]}"
+                local status="not mounted"
+                local symbol="✗"
+                if mountpoint -q "$mount_point" 2>/dev/null; then
+                    status="MOUNTED"
+                    symbol="✓"
+                fi
+                echo "$((i+1)). $symbol //$nas_ip/$nas_share -> $mount_point ($status)"
+            done
+        else
+            local status="not mounted"
+            local symbol="✗"
+            if mountpoint -q "$NAS_MOUNT_POINT" 2>/dev/null; then
+                status="MOUNTED"
+                symbol="✓"
+            fi
+            echo "1. $symbol //$NAS_IP/$NAS_SHARE -> $NAS_MOUNT_POINT ($status)"
+        fi
+        ;;
+    mount-nas)
+        log "Attempting to mount all configured NAS shares..."
+        mount_nas
+        ;;
     *) main ;;
 esac
