@@ -134,65 +134,65 @@ Here's the complete command reference for the NAS & Dockge Management Script:
 
 ### **🔧 Configuration Management**
 ```bash
-sudo ./nas-dockge.sh edit-config            # Edit configuration file
-sudo ./nas-dockge.sh show-config            # Show config (secrets masked)
-sudo ./nas-dockge.sh validate-config        # Validate configuration
+sudo ./server_helper_setup.sh edit-config            # Edit configuration file
+sudo ./server_helper_setup.sh show-config            # Show config (secrets masked)
+sudo ./server_helper_setup.sh validate-config        # Validate configuration
 ```
 
 ### **🚀 Setup & Monitoring**
 ```bash
-sudo ./nas-dockge.sh                        # Full setup (interactive)
-sudo ./nas-dockge.sh monitor                # Run monitoring manually (foreground)
+sudo ./server_helper_setup.sh                        # Full setup (interactive)
+sudo ./server_helper_setup.sh monitor                # Run monitoring manually (foreground)
 ```
 
 ### **⚙️ Auto-Start Management**
 ```bash
-sudo ./nas-dockge.sh enable-autostart       # Create systemd service for boot
-sudo ./nas-dockge.sh disable-autostart      # Remove systemd service
-sudo ./nas-dockge.sh service-status         # Check service status
-sudo ./nas-dockge.sh start                  # Start service
-sudo ./nas-dockge.sh stop                   # Stop service
-sudo ./nas-dockge.sh restart                # Restart service
-sudo ./nas-dockge.sh logs                   # View live service logs
+sudo ./server_helper_setup.sh enable-autostart       # Create systemd service for boot
+sudo ./server_helper_setup.sh disable-autostart      # Remove systemd service
+sudo ./server_helper_setup.sh service-status         # Check service status
+sudo ./server_helper_setup.sh start                  # Start service
+sudo ./server_helper_setup.sh stop                   # Stop service
+sudo ./server_helper_setup.sh restart                # Restart service
+sudo ./server_helper_setup.sh logs                   # View live service logs
 ```
 
 ### **💾 Backup & Restore**
 ```bash
-sudo ./nas-dockge.sh backup                 # Create manual backup
-sudo ./nas-dockge.sh restore                # Restore from backup (interactive)
-sudo ./nas-dockge.sh list-backups           # List all available backups
+sudo ./server_helper_setup.sh backup                 # Create manual backup
+sudo ./server_helper_setup.sh restore                # Restore from backup (interactive)
+sudo ./server_helper_setup.sh list-backups           # List all available backups
 ```
 
 ### **🖥️ System Management**
 ```bash
-sudo ./nas-dockge.sh set-hostname <name>    # Set system hostname
-sudo ./nas-dockge.sh show-hostname          # Show current hostname
+sudo ./server_helper_setup.sh set-hostname <name>    # Set system hostname
+sudo ./server_helper_setup.sh show-hostname          # Show current hostname
 ```
 
 ### **🧹 Disk Management**
 ```bash
-sudo ./nas-dockge.sh clean-disk             # Run disk cleanup manually
-sudo ./nas-dockge.sh disk-space             # Show disk usage information
+sudo ./server_helper_setup.sh clean-disk             # Run disk cleanup manually
+sudo ./server_helper_setup.sh disk-space             # Show disk usage information
 ```
 
 ### **🔄 System Updates**
 ```bash
-sudo ./nas-dockge.sh update                 # Update system packages
-sudo ./nas-dockge.sh full-upgrade           # Full system upgrade (interactive)
-sudo ./nas-dockge.sh check-updates          # Check for available updates
-sudo ./nas-dockge.sh update-status          # Show update status
-sudo ./nas-dockge.sh schedule-reboot        # Schedule reboot (uses config time)
-sudo ./nas-dockge.sh schedule-reboot 02:30  # Schedule reboot at specific time
+sudo ./server_helper_setup.sh update                 # Update system packages
+sudo ./server_helper_setup.sh full-upgrade           # Full system upgrade (interactive)
+sudo ./server_helper_setup.sh check-updates          # Check for available updates
+sudo ./server_helper_setup.sh update-status          # Show update status
+sudo ./server_helper_setup.sh schedule-reboot        # Schedule reboot (uses config time)
+sudo ./server_helper_setup.sh schedule-reboot 02:30  # Schedule reboot at specific time
 ```
 
 ### **🔒 Security & Compliance**
 ```bash
-sudo ./nas-dockge.sh security-audit         # Run complete security audit
-sudo ./nas-dockge.sh security-status        # Show detailed security status
-sudo ./nas-dockge.sh security-harden        # Apply all security hardening
-sudo ./nas-dockge.sh setup-fail2ban         # Install/configure fail2ban
-sudo ./nas-dockge.sh setup-ufw              # Setup UFW firewall
-sudo ./nas-dockge.sh harden-ssh             # Harden SSH configuration
+sudo ./server_helper_setup.sh security-audit         # Run complete security audit
+sudo ./server_helper_setup.sh security-status        # Show detailed security status
+sudo ./server_helper_setup.sh security-harden        # Apply all security hardening
+sudo ./server_helper_setup.sh setup-fail2ban         # Install/configure fail2ban
+sudo ./server_helper_setup.sh setup-ufw              # Setup UFW firewall
+sudo ./server_helper_setup.sh harden-ssh             # Harden SSH configuration
 ```
 
 ---
@@ -216,18 +216,18 @@ sudo ./nas-dockge.sh harden-ssh             # Harden SSH configuration
 
 ```bash
 # 1. Initial Setup
-sudo ./nas-dockge.sh                    # Creates config file
-sudo ./nas-dockge.sh edit-config        # Edit with your settings
-sudo ./nas-dockge.sh validate-config    # Verify config
-sudo ./nas-dockge.sh                    # Run full setup
+sudo ./server_helper_setup.sh                    # Creates config file
+sudo ./server_helper_setup.sh edit-config        # Edit with your settings
+sudo ./server_helper_setup.sh validate-config    # Verify config
+sudo ./server_helper_setup.sh                    # Run full setup
 
 # 2. Enable Auto-Start
-sudo ./nas-dockge.sh enable-autostart   # Start on boot
+sudo ./server_helper_setup.sh enable-autostart   # Start on boot
 
 # 3. Daily Operations
-sudo ./nas-dockge.sh service-status     # Check status
-sudo ./nas-dockge.sh logs               # View logs
-sudo ./nas-dockge.sh backup             # Manual backup
+sudo ./server_helper_setup.sh service-status     # Check status
+sudo ./server_helper_setup.sh logs               # View logs
+sudo ./server_helper_setup.sh backup             # Manual backup
 ```
 
 ---
@@ -236,22 +236,22 @@ sudo ./nas-dockge.sh backup             # Manual backup
 
 ```bash
 # Check everything is running
-sudo ./nas-dockge.sh service-status
+sudo ./server_helper_setup.sh service-status
 
 # View live logs
-sudo ./nas-dockge.sh logs
+sudo ./server_helper_setup.sh logs
 
 # Manual backup
-sudo ./nas-dockge.sh backup
+sudo ./server_helper_setup.sh backup
 
 # Check for updates
-sudo ./nas-dockge.sh check-updates
+sudo ./server_helper_setup.sh check-updates
 
 # Run security audit
-sudo ./nas-dockge.sh security-audit
+sudo ./server_helper_setup.sh security-audit
 
 # Clean disk space
-sudo ./nas-dockge.sh clean-disk
+sudo ./server_helper_setup.sh clean-disk
 ```
 
 **Total: 31 commands** covering complete NAS, Dockge, monitoring, backup, security, and system management! 🎉
