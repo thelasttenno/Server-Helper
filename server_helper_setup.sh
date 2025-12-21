@@ -6,7 +6,7 @@
 set -e
 
 # Configuration file path
-CONFIG_FILE="${CONFIG_FILE:-$(dirname "$0")/nas-dockge.conf}"
+CONFIG_FILE="${CONFIG_FILE:-$(dirname "$0")/server_helper_setup.conf}"
 
 # Load configuration from file if it exists
 if [ -f "$CONFIG_FILE" ]; then
@@ -61,7 +61,7 @@ EOF
     exit 1
 fi
 
-# Configuration - EDIT THESE VALUES IN nas-dockge.conf FILE
+# Configuration - EDIT THESE VALUES IN server_helper_setup.conf FILE
 # The values below are defaults if not set in config file
 NAS_IP="${NAS_IP:-192.168.1.100}"
 NAS_SHARE="${NAS_SHARE:-share}"
@@ -1127,7 +1127,7 @@ elif [ "$1" == "restart" ]; then
     start_service_now
 elif [ "$1" == "logs" ]; then
     log "Showing service logs (Ctrl+C to exit)..."
-    sudo journalctl -u nas-dockge-monitor -f
+    sudo journalctl -u server-helper-monitor -f
 elif [ "$1" == "edit-config" ]; then
     edit_config
 elif [ "$1" == "show-config" ]; then
@@ -1583,7 +1583,7 @@ create_systemd_service() {
     log "Script path: $script_path"
     
     # Create systemd service file
-    local service_name="nas-dockge-monitor"
+    local service_name="server-helper-monitor"
     local service_file="/etc/systemd/system/${service_name}.service"
     
     log "Creating service file: $service_file"
@@ -1636,7 +1636,7 @@ EOF"
 
 # Function to remove systemd service
 remove_systemd_service() {
-    local service_name="nas-dockge-monitor"
+    local service_name="server-helper-monitor"
     local service_file="/etc/systemd/system/${service_name}.service"
     
     log "Removing systemd service..."
@@ -1667,7 +1667,7 @@ remove_systemd_service() {
 
 # Function to show service status
 show_service_status() {
-    local service_name="nas-dockge-monitor"
+    local service_name="server-helper-monitor"
     
     log "Service Status:"
     echo ""
@@ -1685,7 +1685,7 @@ show_service_status() {
 
 # Function to start service now
 start_service_now() {
-    local service_name="nas-dockge-monitor"
+    local service_name="server-helper-monitor"
     
     if ! sudo systemctl list-unit-files | grep -q "$service_name"; then
         error "Service is not installed. Run '$0 enable-autostart' first"
@@ -1703,7 +1703,7 @@ start_service_now() {
 
 # Function to stop service
 stop_service() {
-    local service_name="nas-dockge-monitor"
+    local service_name="server-helper-monitor"
     
     if ! sudo systemctl list-unit-files | grep -q "$service_name"; then
         error "Service is not installed"
