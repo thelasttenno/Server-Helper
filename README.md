@@ -21,19 +21,14 @@ A comprehensive server management script for Ubuntu 24.04.3 LTS that automates N
 ### Quick Install
 
 ```bash
-# 1. Create directory
-sudo mkdir -p /opt/Server-Helper
-cd /opt/Server-Helper
+# 1. Download/create the script
+sudo git clone https://github.com/thelasttenno/Server-Helper.git
 
-# 2. Download/create the script
-sudo nano server_helper_setup.sh
-# (Paste the script content and save)
-
-# 3. Make executable
+# 2. Make executable
 sudo chmod +x server_helper_setup.sh
 
-# 4. First run (creates config file)
-sudo ./server_helper_setup.sh
+# 3. First run (creates config file)
+sudo bash /opt/Server-Helper/server_helper_setup.sh
 ```
 
 ### Configure
@@ -56,7 +51,7 @@ sudo ./server_helper_setup.sh validate-config
 
 ```bash
 # Run full setup
-sudo ./server_helper_setup.sh
+sudo bash /opt/Server-Helper/server_helper_setup.sh
 
 # Script will:
 # - Mount NAS
@@ -73,9 +68,9 @@ sudo ./server_helper_setup.sh
 
 ```bash
 # 1. Create and configure
-sudo ./server_helper_setup.sh              # Creates config
+sudo bash /opt/Server-Helper/server_helper_setup.sh           # Creates config
 sudo ./server_helper_setup.sh edit-config  # Edit settings
-sudo ./server_helper_setup.sh              # Run setup
+sudo bash /opt/Server-Helper/server_helper_setup.sh             # Run setup
 
 # 2. Enable auto-start (recommended)
 sudo ./server_helper_setup.sh enable-autostart
