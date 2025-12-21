@@ -1003,11 +1003,30 @@ apply_security_hardening() {
 create_systemd_service() {
     log "Creating systemd service for auto-start on boot..."
     
-    local script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+    # Get the absolute path of this script - multiple methods for compatibility
+    local script_path=""
     
-    if [ ! -f "$script_path" ]; then
-        error "Cannot determine script path"
-        return 1
+    # Method 1: Use BASH_SOURCE
+    if [ -n "${BASH_SOURCE[0]}" ]; then
+        script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+    # Method 2: Use $0
+    elif [ -n "$0" ]; then
+        script_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+    # Method 3: Search for the script
+    else
+        script_path=$(find /opt -name "server_helper_setup.sh" 2>/dev/null | head -1)
+    fi
+    
+    # Validate script path
+    if [ -z "$script_path" ] || [ ! -f "$script_path" ]; then
+        error "Cannot determine script path automatically"
+        echo ""
+        read -p "Enter the full path to this script (e.g., /opt/Server-Helper/server_helper_setup.sh): " script_path
+        
+        if [ ! -f "$script_path" ]; then
+            error "File not found: $script_path"
+            return 1
+        fi
     fi
     
     log "Script path: $script_path"
