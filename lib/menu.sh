@@ -23,38 +23,58 @@ show_menu() {
         read -p "Choice [0-32]: " c
         
         case $c in
-            1) edit_config; read -p "Press Enter..." ;;
-            2) show_config; read -p "Press Enter..." ;;
-            3) validate_config; read -p "Press Enter..." ;;
-            4) main_setup ;;
-            5) monitor_services ;;
-            6) create_systemd_service; read -p "Press Enter..." ;;
-            7) remove_systemd_service; read -p "Press Enter..." ;;
-            8) start_service_now; read -p "Press Enter..." ;;
-            9) stop_service; read -p "Press Enter..." ;;
-            10) restart_service; read -p "Press Enter..." ;;
-            11) show_service_status; read -p "Press Enter..." ;;
-            12) show_logs ;;
-            13) backup_dockge; read -p "Press Enter..." ;;
-            14) restore_dockge; read -p "Press Enter..." ;;
-            15) list_backups; read -p "Press Enter..." ;;
-            16) list_nas_shares; read -p "Press Enter..." ;;
-            17) mount_nas; read -p "Press Enter..." ;;
-            18) read -p "New hostname: " h; set_hostname "$h"; read -p "Press Enter..." ;;
-            19) clean_disk; read -p "Press Enter..." ;;
-            20) show_disk_space; read -p "Press Enter..." ;;
-            21) update_system; read -p "Press Enter..." ;;
-            22) full_upgrade ;;
-            23) check_updates; show_update_status; read -p "Press Enter..." ;;
-            24) show_update_status; read -p "Press Enter..." ;;
-            25) read -p "Reboot time [${REBOOT_TIME}]: " t; schedule_reboot "${t:-$REBOOT_TIME}"; read -p "Press Enter..." ;;
-            26) security_audit; read -p "Press Enter..." ;;
-            27) show_security_status; read -p "Press Enter..." ;;
-            28) apply_security_hardening; read -p "Press Enter..." ;;
-            29) setup_fail2ban; read -p "Press Enter..." ;;
-            30) setup_ufw; read -p "Press Enter..." ;;
-            31) harden_ssh; read -p "Press Enter..." ;;
-            32) uninstall_server_helper; exit 0 ;;
+            1) edit_config; read -p "Press Enter to continue..." ;;
+            2) show_config; read -p "Press Enter to continue..." ;;
+            3) validate_config; read -p "Press Enter to continue..." ;;
+            4) main_setup; read -p "Press Enter to continue..." ;;
+            5) 
+                warning "Monitor service runs continuously. Press Ctrl+C to stop and return to menu."
+                read -p "Press Enter to start monitoring..." 
+                monitor_services
+                read -p "Press Enter to continue..." 
+                ;;
+            6) create_systemd_service; read -p "Press Enter to continue..." ;;
+            7) remove_systemd_service; read -p "Press Enter to continue..." ;;
+            8) start_service_now; read -p "Press Enter to continue..." ;;
+            9) stop_service; read -p "Press Enter to continue..." ;;
+            10) restart_service; read -p "Press Enter to continue..." ;;
+            11) show_service_status; read -p "Press Enter to continue..." ;;
+            12) 
+                warning "Log viewer runs continuously. Press Ctrl+C to stop and return to menu."
+                read -p "Press Enter to view logs..." 
+                show_logs
+                read -p "Press Enter to continue..." 
+                ;;
+            13) backup_dockge; read -p "Press Enter to continue..." ;;
+            14) restore_dockge; read -p "Press Enter to continue..." ;;
+            15) list_backups; read -p "Press Enter to continue..." ;;
+            16) list_nas_shares; read -p "Press Enter to continue..." ;;
+            17) mount_nas; read -p "Press Enter to continue..." ;;
+            18) read -p "New hostname: " h; set_hostname "$h"; read -p "Press Enter to continue..." ;;
+            19) clean_disk; read -p "Press Enter to continue..." ;;
+            20) show_disk_space; read -p "Press Enter to continue..." ;;
+            21) update_system; read -p "Press Enter to continue..." ;;
+            22) full_upgrade; read -p "Press Enter to continue..." ;;
+            23) check_updates; show_update_status; read -p "Press Enter to continue..." ;;
+            24) show_update_status; read -p "Press Enter to continue..." ;;
+            25) read -p "Reboot time [${REBOOT_TIME}]: " t; schedule_reboot "${t:-$REBOOT_TIME}"; read -p "Press Enter to continue..." ;;
+            26) security_audit; read -p "Press Enter to continue..." ;;
+            27) show_security_status; read -p "Press Enter to continue..." ;;
+            28) apply_security_hardening; read -p "Press Enter to continue..." ;;
+            29) setup_fail2ban; read -p "Press Enter to continue..." ;;
+            30) setup_ufw; read -p "Press Enter to continue..." ;;
+            31) harden_ssh; read -p "Press Enter to continue..." ;;
+            32) 
+                uninstall_server_helper
+                if [ $? -eq 0 ]; then
+                    log "Uninstallation completed. Exiting..."
+                    sleep 2
+                    exit 0
+                else
+                    warning "Uninstallation cancelled or incomplete."
+                    read -p "Press Enter to continue..."
+                fi
+                ;;
             0) log "Goodbye!"; exit 0 ;;
             *) error "Invalid choice"; sleep 2 ;;
         esac
