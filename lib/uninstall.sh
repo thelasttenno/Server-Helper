@@ -2,61 +2,95 @@
 # Uninstall Module
 
 uninstall_server_helper() {
+    debug "[uninstall_server_helper] Starting uninstallation process"
     warning "╔════════════════════════════════════╗"
     warning "║  This will remove Server Helper    ║"
     warning "╚════════════════════════════════════╝"
     
     confirm "Continue with uninstall?" || return 0
     
-    systemctl list-unit-files | grep -q server-helper && {
-        confirm "Remove systemd service?" && remove_systemd_service
-    }
+    if systemctl list-unit-files | grep -q server-helper; then
+        if confirm "Remove systemd service?"; then
+            debug "[uninstall_server_helper] Removing systemd service"
+            remove_systemd_service
+        fi
+    fi
     
-    confirm "Unmount NAS shares?" && {
+    if confirm "Unmount NAS shares?"; then
+        debug "[uninstall_server_helper] Unmounting NAS shares"
         # Ensure NAS_ARRAY exists and is an array
         if [ -n "${NAS_ARRAY+x}" ] && [ ${#NAS_ARRAY[@]} -gt 0 ]; then
             for cfg in "${NAS_ARRAY[@]}"; do
                 IFS=':' read -r _ _ mount _ _ <<< "$cfg"
-                mountpoint -q "$mount" && sudo umount "$mount"
+                if mountpoint -q "$mount"; then
+                    debug "[uninstall_server_helper] Unmounting: $mount"
+                    sudo umount "$mount"
+                fi
             done
         else
             sudo umount "$NAS_MOUNT_POINT" 2>/dev/null || true
         fi
         sudo sed -i.backup '/cifs.*_netdev/d' /etc/fstab
-    }
+    fi
     
-    [ -d "$DOCKGE_DATA_DIR" ] && confirm "Remove Dockge?" && {
+    if [ -d "$DOCKGE_DATA_DIR" ] && confirm "Remove Dockge?"; then
+        debug "[uninstall_server_helper] Removing Dockge"
         cd "$DOCKGE_DATA_DIR"
         sudo docker compose down 2>/dev/null || true
-        confirm "Delete Dockge data?" && {
-            confirm "Create final backup?" && sudo tar -czf "/root/dockge_final_$(timestamp).tar.gz" "$DOCKGE_DATA_DIR"
+        
+        if confirm "Delete Dockge data?"; then
+            if confirm "Create final backup?"; then
+                debug "[uninstall_server_helper] Creating final backup"
+                sudo tar -czf "/root/dockge_final_$(timestamp).tar.gz" "$DOCKGE_DATA_DIR"
+            fi
+            debug "[uninstall_server_helper] Deleting Dockge data"
             sudo rm -rf "$DOCKGE_DATA_DIR"
-        }
-    }
+        fi
+    fi
     
-    command_exists docker && confirm "Remove Docker?" && {
-        confirm "Type 'yes' to confirm Docker removal: " && [ "$REPLY" = "yes" ] && {
+    if command_exists docker && confirm "Remove Docker?"; then
+        if confirm "Type 'yes' to confirm Docker removal: " && [ "$REPLY" = "yes" ]; then
+            debug "[uninstall_server_helper] Removing Docker"
             sudo systemctl stop docker
             sudo apt-get purge -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-            confirm "Remove Docker data?" && sudo rm -rf /var/lib/docker /var/lib/containerd
-        }
-    }
+            
+            if confirm "Remove Docker data?"; then
+                debug "[uninstall_server_helper] Removing Docker data"
+                sudo rm -rf /var/lib/docker /var/lib/containerd
+            fi
+        fi
+    fi
     
-    [ -f "$CONFIG_FILE" ] && confirm "Remove config?" && sudo rm "$CONFIG_FILE"
+    if [ -f "$CONFIG_FILE" ] && confirm "Remove config?"; then
+        debug "[uninstall_server_helper] Removing config file"
+        sudo rm "$CONFIG_FILE"
+    fi
     
+    debug "[uninstall_server_helper] Removing NAS credentials"
     sudo rm -f /root/.nascreds* 2>/dev/null
     
-    [ -d "$BACKUP_DIR" ] && confirm "Remove backups?" && {
+    if [ -d "$BACKUP_DIR" ] && confirm "Remove backups?"; then
         read -p "Type 'DELETE' to confirm: " conf
-        [ "$conf" = "DELETE" ] && sudo rm -rf "$BACKUP_DIR"
-    }
+        if [ "$conf" = "DELETE" ]; then
+            debug "[uninstall_server_helper] Removing backups"
+            sudo rm -rf "$BACKUP_DIR"
+        fi
+    fi
     
-    confirm "Remove Server Helper script?" && {
+    if confirm "Remove Server Helper script?"; then
         local dir="$(dirname "$SCRIPT_DIR/server_helper_setup.sh")"
-        confirm "Remove entire directory $dir?" && { cd /tmp; sudo rm -rf "$dir"; } || sudo rm -f "$SCRIPT_DIR/server_helper_setup.sh"
-    }
+        if confirm "Remove entire directory $dir?"; then
+            debug "[uninstall_server_helper] Removing entire directory"
+            cd /tmp
+            sudo rm -rf "$dir"
+        else
+            debug "[uninstall_server_helper] Removing script only"
+            sudo rm -f "$SCRIPT_DIR/server_helper_setup.sh"
+        fi
+    fi
     
     log "═══════════════════════════════════════"
     log "      Uninstallation Complete"
     log "═══════════════════════════════════════"
+    debug "[uninstall_server_helper] Uninstallation process complete"
 }

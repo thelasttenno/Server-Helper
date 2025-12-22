@@ -1,298 +1,170 @@
-# Changelog
+# Server Helper Changelog
 
-All notable changes to Server Helper will be documented in this file.
+## Version 0.2.2 - Enhanced Debug Edition (2024-12-22)
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [2.2.0] - 2024-12-21
-
-### Added
-- **Pre-Installation Detection System** (`lib/preinstall.sh`)
-  - Automatic detection of existing systemd services
-  - Detection of existing NAS mounts and credentials
-  - Detection of existing Dockge installations
-  - Detection of existing Docker installations
-  - Detection of existing configuration files
-  - Detection of existing backup directories
-  - Interactive cleanup options with 4 modes:
-    1. Continue with existing (skip setup)
-    2. Complete removal (clean slate)
-    3. Selective cleanup (choose components)
-    4. Cancel and exit
-  - Emergency backups created before removal
-  - `check-install` command for manual pre-check
-  - `remove-install` command for component removal
-
-- **Comprehensive Debug Logging**
-  - Debug mode for all library functions
-  - Function entry/exit logging
-  - Variable state tracking
-  - Decision point logging
+### New Features
+- ✨ **Enhanced Debug Mode**: Added comprehensive debug logging to all functions
+  - Function entry/exit tracking
+  - Variable state logging
   - File operation tracking
-  - Network call monitoring
-  - Command execution visibility
-  - Enhanced error context
-  - Debug logs saved to `/var/log/server-helper/server-helper.log`
-  - `DEBUG=true` environment variable support
+  - Network operation monitoring
+  - Command execution details
+  
+### Improvements
+- 📝 All library modules now include detailed debug statements
+- 🔍 Improved troubleshooting capabilities with granular logging
+- 📚 Enhanced README with debug mode documentation and examples
+- 🏷️ Standardized version numbering using Semantic Versioning (SemVer)
+- 💡 Added debug mode examples to help documentation
 
-- **Configuration File Backup**
-  - Automatic backup of critical system files:
-    - `/etc/fstab`, `/etc/hosts`, `/etc/hostname`
-    - `/etc/ssh/sshd_config`
-    - `/etc/fail2ban/jail.local`
-    - `/etc/ufw/ufw.conf`
-    - `/etc/systemd/system/server-helper.service`
-  - Automatic backup of configuration directories:
-    - `/etc/docker/`
-    - `/etc/apt/sources.list.d/`
-  - NAS credential file backup
-  - Server Helper config file backup
-  - Backup manifest generation with file listing
-  - `backup-config` command for manual config backup
-  - `restore-config` command for config restoration
-  - Emergency backup creation before restoration
-  - Configuration backups stored in `$BACKUP_DIR/config/`
-  - Config backup automatically included with Dockge backups
+### Updated Modules
+- `core.sh`: Enhanced with debug logging for all utility functions
+- `config.sh`: Added debug tracking for configuration operations
+- `validation.sh`: Debug logging for validation checks
+- `nas.sh`: Detailed NAS mount operation debugging
+- `docker.sh`: Docker and Dockge operation tracking
+- `backup.sh`: Comprehensive backup/restore debugging
+- `disk.sh`: Disk operation monitoring
+- `updates.sh`: System update process tracking
+- `security.sh`: Security operation debugging
+- `service.sh`: Service management debugging
+- `menu.sh`: Menu operation tracking
+- `uninstall.sh`: Uninstallation process debugging
 
-- **Backup Manifest System**
-  - `show-manifest` command to view backup contents
-  - Manifest includes:
-    - Creation date and time
-    - Hostname and kernel version
-    - OS version
-    - File count
-    - Complete file listing
-  - Manifest embedded in config backups
+### Usage
+Enable debug mode by setting the DEBUG environment variable:
 
-- **Enhanced Commands**
-  - `backup-all` - Explicit command to backup everything
-  - `show-manifest <file>` - Show backup contents
-  - `check-install` - Check for existing installation
-  - `remove-install` - Remove existing components
+```bash
+DEBUG=true sudo ./server_helper_setup.sh <command>
+```
 
-### Changed
-- **Module Loading Order**
-  - Added `preinstall` module after `validation`
-  - Ensures proper dependency resolution
-  - Documented in ORDERING_ANALYSIS.md
+Or enable it permanently in the configuration file:
 
-- **main_setup() Function**
-  - Now calls `pre_installation_check()` first
-  - Only proceeds with setup after user confirmation
-  - Creates initial config backup after successful setup
-
-- **backup_dockge() Function**
-  - Now automatically calls `backup_config_files()`
-  - Ensures config is always backed up with Dockge data
-
-- **Enhanced Logging**
-  - All core functions now include debug logging
-  - Function parameters logged in debug mode
-  - Return values and exit codes logged
-  - File size information in log output
-
-- **Version Information**
-  - Updated to v2.2.0
-  - Enhanced version display with feature list
-
-- **Help Documentation**
-  - Updated help text with new commands
-  - Added pre-installation detection section
-  - Added debug mode documentation
-  - Added examples for new features
-
-### Fixed
-- **Array Handling**
-  - `NAS_ARRAY` properly initialized as global array
-  - Prevents "unbound variable" errors
-  - Safe array checks: `[ -n "${NAS_ARRAY+x}" ] && [ ${#NAS_ARRAY[@]} -gt 0 ]`
-  - Applied to nas.sh, backup.sh, uninstall.sh
-
-- **Config Loading**
-  - Config loading skipped for help/version commands
-  - Prevents errors when no config file exists
-  - Safe fallback behavior
-
-- **Error Handling**
-  - Improved error context in debug mode
-  - Better error messages with line numbers
-  - Trap handler preserves error context
-
-### Security
-- **Configuration Backup**
-  - SSH configuration backed up
-  - Firewall rules backed up
-  - fail2ban configuration backed up
-  - NAS credentials backed up securely
-  - Emergency backups before restoration
+```bash
+DEBUG="true"
+```
 
 ### Documentation
-- **README.md** - Completely rewritten with:
-  - Pre-installation detection documentation
-  - Debug mode usage guide
-  - Configuration backup feature documentation
-  - Enhanced troubleshooting section
-  - Complete command reference update
-  - New examples and use cases
-  - Version 2.2 feature highlights
+- 📖 Comprehensive README update with debug mode section
+- 🔧 Added troubleshooting examples using debug mode
+- 📋 Updated command reference with debug examples
 
-- **ORDERING_ANALYSIS.md** - New document
-  - Module loading order analysis
-  - Dependency validation
-  - Function call chain documentation
-  - No critical issues found
-
-- **CHANGELOG.md** - This file
-  - Comprehensive version history
-  - Detailed change tracking
-
-## [2.1.0] - 2024-12-20
-
-### Added
-- Configuration file backup to Dockge backups
-- Backup manifest generation
-- Enhanced backup/restore documentation
-
-### Changed
-- Backup retention handling
-- Backup directory structure
-
-### Fixed
-- Backup reliability improvements
-- Error handling in backup operations
-
-## [2.0.0] - 2024-12-15
-
-### Added
-- Modular architecture with separate library files
-- Interactive menu system
-- Comprehensive monitoring system
-- Systemd service integration
-- Auto-recovery for NAS and Dockge
-- Disk cleanup automation
-- Security audit and hardening
-- Update management
-- Uptime Kuma integration
-
-### Changed
-- Complete rewrite from monolithic to modular
-- Enhanced error handling
-- Improved logging system
-
-## [1.0.0] - 2024-12-01
-
-### Added
-- Initial release
-- Basic NAS mounting
-- Docker and Dockge installation
-- Simple backup functionality
+### Version Numbering
+- Adopted Semantic Versioning (Major.Minor.Patch)
+- Current version: 0.2.2
+  - Major: 0 (Pre-release)
+  - Minor: 2 (Feature updates)
+  - Patch: 2 (Bug fixes and enhancements)
 
 ---
 
-## Version History Summary
+## Version 0.2.1 - Config Backup Edition
 
-- **v2.2.0** (Current) - Pre-installation detection, debug mode, config backups
-- **v2.1.0** - Configuration backup enhancements
-- **v2.0.0** - Modular rewrite with comprehensive features
-- **v1.0.0** - Initial release
+### Features
+- 💾 Added configuration file backup functionality
+- 📦 Enhanced backup manifest with detailed file listings
+- 🔄 Automatic config backup with Dockge backups
+- 📁 Separate config backup directory structure
+
+### Backup Files Included
+- System configuration (/etc/fstab, /etc/hosts, /etc/hostname)
+- SSH configuration (/etc/ssh/sshd_config)
+- Security configuration (fail2ban, UFW)
+- Server Helper configuration
+- NAS credentials
+- Docker configuration
+- systemd service files
 
 ---
 
-## Upgrade Notes
+## Version 0.2.0 - Modular Architecture
 
-### Upgrading to 2.2.0 from 2.1.0 or earlier
+### Major Changes
+- 🏗️ Restructured entire codebase into modular library system
+- 📁 Organized functionality into separate modules
+- 🔧 Improved maintainability and code organization
+- 📚 Enhanced documentation
 
-1. **Backup your current installation:**
-   ```bash
-   sudo ./server_helper_setup.sh backup-all
-   ```
+### Module Structure
+- Core utilities (`core.sh`)
+- Configuration management (`config.sh`)
+- Input validation (`validation.sh`)
+- NAS management (`nas.sh`)
+- Docker & Dockge (`docker.sh`)
+- Backup & restore (`backup.sh`)
+- Disk management (`disk.sh`)
+- System updates (`updates.sh`)
+- Security features (`security.sh`)
+- Service management (`service.sh`)
+- Interactive menu (`menu.sh`)
+- Uninstallation (`uninstall.sh`)
 
-2. **Stop the service if running:**
-   ```bash
-   sudo systemctl stop server-helper
-   ```
+---
 
-3. **Update the scripts:**
-   ```bash
-   cd /opt/Server-Helper
-   git pull origin main
-   # Or manually copy new files
-   ```
+## Installation & Upgrade
 
-4. **Verify module files:**
-   ```bash
-   ls lib/
-   # Should include: preinstall.sh and updated core.sh, backup.sh
-   ```
+### New Installation
+```bash
+sudo git clone https://github.com/thelasttenno/Server-Helper.git /opt/Server-Helper
+cd /opt/Server-Helper
+sudo chmod +x server_helper_setup.sh
+sudo ./server_helper_setup.sh
+```
 
-5. **Run pre-installation check:**
-   ```bash
-   sudo ./server_helper_setup.sh check-install
-   ```
+### Upgrading from Previous Version
+```bash
+# Backup your current configuration
+sudo cp /opt/Server-Helper/server-helper.conf /tmp/server-helper.conf.backup
 
-6. **Restart service:**
-   ```bash
-   sudo systemctl start server-helper
-   ```
+# Pull latest version
+cd /opt/Server-Helper
+sudo git pull
 
-7. **Test new features:**
-   ```bash
-   # Test debug mode
-   DEBUG=true sudo ./server_helper_setup.sh service-status
-   
-   # Test config backup
-   sudo ./server_helper_setup.sh backup-config
-   
-   # Test backup manifest
-   sudo ./server_helper_setup.sh list-backups
-   ```
+# Make scripts executable
+sudo chmod +x server_helper_setup.sh
+sudo chmod +x lib/*.sh
 
-### Breaking Changes
+# Restore your configuration
+sudo cp /tmp/server-helper.conf.backup /opt/Server-Helper/server-helper.conf
 
-**None.** Version 2.2.0 is fully backward compatible with 2.1.0 and 2.0.0.
+# Run setup to apply any updates
+sudo ./server_helper_setup.sh setup
+```
 
-### New Requirements
+---
 
-- **Module Files:** Ensure `lib/preinstall.sh` exists
-- **Enhanced Modules:** Updated `lib/core.sh` and `lib/backup.sh`
-- **No additional system packages required**
+## Breaking Changes
+None in this release. All updates are backward compatible.
+
+---
+
+## Known Issues
+None reported.
 
 ---
 
 ## Future Roadmap
 
-### Planned for 2.3.0
-- Web-based dashboard
-- Email notifications
-- Advanced monitoring metrics
-- Container health checks
-- Network monitoring
-- Custom backup schedules
+### Planned for v0.3.0 (Minor Version)
+- Enhanced multi-NAS support
+- Web-based configuration interface
+- Email notification system
+- Improved backup compression options
+- Additional security hardening options
 
-### Planned for 3.0.0
-- Multi-server management
-- Cluster support
-- Advanced security features
-- Plugin system
-- API access
+### Planned for v1.0.0 (Major Release)
+- Stable production release
+- Complete test coverage
+- Professional documentation
+- Enterprise features
 
 ---
 
-## Contributing
+## Support & Feedback
+For issues, suggestions, or contributions, please enable debug mode when reporting:
 
-When contributing, please:
-1. Update this CHANGELOG
-2. Follow semantic versioning
-3. Add debug logging to new functions
-4. Update README.md with new features
-5. Test with DEBUG=true mode
+```bash
+DEBUG=true sudo ./server_helper_setup.sh <failing-command>
+```
 
----
-
-## Links
-
-- [Repository](https://github.com/thelasttenno/Server-Helper)
-- [Documentation](README.md)
-- [Ordering Analysis](ORDERING_ANALYSIS.md)
-- [License](LICENSE)
+Include the debug output when seeking support.

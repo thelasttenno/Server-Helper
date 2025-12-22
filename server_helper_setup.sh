@@ -1,6 +1,6 @@
 #!/bin/bash
 # Server Helper Setup Script - Main Entry Point
-# Version 2.2 - Enhanced with Pre-Installation Detection & Debug Modes
+# Version 0.2.2 - Enhanced Debug Edition
 
 set -euo pipefail
 
@@ -76,7 +76,6 @@ MODULES=(
     "core"
     "config"
     "validation"
-    "preinstall"
     "nas"
     "docker"
     "backup"
@@ -109,28 +108,15 @@ if [ "$DRY_RUN" = "true" ]; then
     warning "DRY-RUN MODE - No changes will be made"
 fi
 
-# Load and validate configuration (if not running certain commands)
-case "${1:-menu}" in
-    help|--help|-h|version|--version|-v)
-        # Skip config loading for help/version
-        ;;
-    *)
-        load_config
-        set_defaults
-        parse_nas_shares
-        ;;
-esac
+# Load and validate configuration
+load_config
+set_defaults
+parse_nas_shares
 
 # Show version
 show_version() {
-    echo "Server Helper v2.2.0 - Pre-Installation Detection & Debug Edition"
+    echo "Server Helper v0.2.2 - Enhanced Debug Edition"
     echo "For Ubuntu 24.04.3 LTS"
-    echo ""
-    echo "Features:"
-    echo "  • Pre-installation detection"
-    echo "  • Configuration file backup"
-    echo "  • Comprehensive debug logging"
-    echo "  • Selective component removal"
 }
 
 # Show help
@@ -148,7 +134,7 @@ COMMANDS:
         validate-config      Validate configuration
 
     Setup & Monitoring:
-        setup                Run full setup (includes pre-installation check)
+        setup                Run full setup
         monitor              Start monitoring services
         menu                 Show interactive menu (default)
 
@@ -195,10 +181,6 @@ COMMANDS:
         setup-ufw            Setup UFW firewall
         harden-ssh           Harden SSH
 
-    Installation:
-        check-install        Check for existing installation
-        remove-install       Remove existing installation
-
     Other:
         uninstall            Uninstall Server Helper
         help                 Show this help
@@ -213,91 +195,56 @@ EXAMPLES:
     # Interactive menu
     sudo ./server_helper_setup.sh menu
     
-    # Check for existing installation
-    sudo ./server_helper_setup.sh check-install
-    
-    # Run setup with debug logging
-    DEBUG=true sudo ./server_helper_setup.sh setup
-    
     # Create complete backup
     sudo ./server_helper_setup.sh backup-all
     
+    # Backup only config files
+    sudo ./server_helper_setup.sh backup-config
+    
+    # List all backups
+    sudo ./server_helper_setup.sh list-backups
+    
+    # Show what's in a backup
+    sudo ./server_helper_setup.sh show-manifest /path/to/backup.tar.gz
+    
     # Dry-run update
     DRY_RUN=true sudo ./server_helper_setup.sh update
-
-PRE-INSTALLATION DETECTION:
-    The setup command now automatically detects existing installations:
-    - Systemd services
-    - NAS mounts
-    - Dockge installations
-    - Docker installations
-    - Configuration files
-    - Existing backups
     
-    You'll be prompted to:
-    1) Keep existing installation
-    2) Remove and reinstall (clean slate)
-    3) Selective cleanup (choose components)
-    4) Cancel and exit
+    # Debug mode
+    DEBUG=true sudo ./server_helper_setup.sh monitor
 
 DEBUG MODE:
-    Enable comprehensive debug logging:
-        DEBUG=true sudo ./server_helper_setup.sh <command>
-    
-    Debug logs show:
+    Enable detailed logging for troubleshooting:
     - Function entry/exit
     - Variable values
-    - Decision points
     - File operations
-    - Network calls
+    - Network operations
+    - Command execution details
+    
+    Usage: DEBUG=true sudo ./server_helper_setup.sh <command>
+
+BACKUP INFORMATION:
+    Dockge backups include:
+        - Docker stacks
+        - Dockge data
+        - Automatically includes config backup
+    
+    Config backups include:
+        - /etc/fstab, /etc/hosts, /etc/hostname
+        - /etc/ssh/sshd_config
+        - /etc/fail2ban/jail.local
+        - /etc/ufw/ufw.conf
+        - Server Helper configuration
+        - NAS credentials
+        - Docker configuration
+        - systemd service files
+        - Backup manifest with file listing
 
 LOG FILES:
     /var/log/server-helper/server-helper.log
     /var/log/server-helper/error.log
 
 EOF
-}
-
-# Main setup with pre-installation check
-main_setup() {
-    log "Starting Server Helper setup..."
-    debug "main_setup() - Begin"
-    
-    # Run pre-installation check
-    pre_installation_check
-    
-    log "Running full setup..."
-    
-    [ -n "$NEW_HOSTNAME" ] && set_hostname "$NEW_HOSTNAME"
-    
-    mount_nas || [ "$NAS_MOUNT_REQUIRED" = "true" ] && { error "NAS required but failed"; return 1; }
-    
-    install_docker
-    install_dockge
-    start_dockge
-    
-    # Create initial config backup after setup
-    backup_config_files
-    
-    show_setup_complete
-    
-    debug "main_setup() - Completed"
-}
-
-show_setup_complete() {
-    echo ""
-    log "═══════════════════════════════════════"
-    log "        Setup Complete!"
-    log "═══════════════════════════════════════"
-    log "Hostname: $(hostname)"
-    log "Dockge: http://localhost:$DOCKGE_PORT"
-    list_nas_shares
-    echo ""
-    log "Next steps:"
-    log "  1. Enable auto-start: sudo ./server_helper_setup.sh enable-autostart"
-    log "  2. Start monitoring: sudo ./server_helper_setup.sh start"
-    log "  3. View status: sudo ./server_helper_setup.sh service-status"
-    echo ""
 }
 
 # Handle command-line arguments
@@ -356,16 +303,6 @@ case "${1:-menu}" in
     # NAS
     list-nas) list_nas_shares ;;
     mount-nas) mount_nas ;;
-    
-    # Installation management
-    check-install) pre_installation_check ;;
-    remove-install) 
-        detect_existing_service && cleanup_existing_service
-        detect_existing_dockge && cleanup_existing_dockge
-        detect_existing_mounts && cleanup_existing_mounts
-        detect_existing_docker && cleanup_existing_docker
-        log "✓ Installation removal complete"
-        ;;
     
     # Other
     uninstall) uninstall_server_helper ;;

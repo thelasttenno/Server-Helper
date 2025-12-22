@@ -2,10 +2,11 @@
 # Interactive Menu Module - Enhanced with Config Backup Options
 
 show_menu() {
+    debug "[show_menu] Displaying interactive menu"
     while true; do
         clear
         echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
-        echo -e "${GREEN}║    Server Helper - v2.2 Enhanced      ║${NC}"
+        echo -e "${GREEN}║  Server Helper - v0.2.2 Debug Edition ║${NC}"
         echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
         echo ""
         echo "📋 Configuration: 1-Edit 2-Show 3-Validate"
@@ -21,6 +22,8 @@ show_menu() {
         echo -e "${GREEN}0) Exit${NC}"
         echo ""
         read -p "Choice [0-35]: " c
+        
+        debug "[show_menu] User selected: $c"
         
         case $c in
             1) edit_config; read -p "Press Enter..." ;;
@@ -65,6 +68,7 @@ show_menu() {
 }
 
 set_hostname() {
+    debug "[set_hostname] Setting hostname to: $1"
     [ -z "$1" ] && { error "Hostname required"; return 1; }
     validate_hostname "$1" || { error "Invalid hostname"; return 1; }
     
@@ -72,30 +76,42 @@ set_hostname() {
     sudo sed -i "s/127.0.1.1.*/127.0.1.1\t$1/g" /etc/hosts
     grep -q "127.0.1.1" /etc/hosts || echo "127.0.1.1	$1" | sudo tee -a /etc/hosts
     log "✓ Hostname set to: $1"
+    debug "[set_hostname] Hostname change complete"
 }
 
 show_hostname() {
+    debug "[show_hostname] Displaying hostname"
     log "Hostname: $(hostname)"
 }
 
 main_setup() {
+    debug "[main_setup] Starting full setup"
     log "Running full setup..."
     
-    [ -n "$NEW_HOSTNAME" ] && set_hostname "$NEW_HOSTNAME"
+    if [ -n "$NEW_HOSTNAME" ]; then
+        debug "[main_setup] Setting new hostname: $NEW_HOSTNAME"
+        set_hostname "$NEW_HOSTNAME"
+    fi
     
-    mount_nas || [ "$NAS_MOUNT_REQUIRED" = "true" ] && { error "NAS required but failed"; return 1; }
+    if ! mount_nas && [ "$NAS_MOUNT_REQUIRED" = "true" ]; then
+        error "NAS required but failed"
+        return 1
+    fi
     
     install_docker
     install_dockge
     start_dockge
     
     # Create initial config backup after setup
+    debug "[main_setup] Creating initial config backup"
     backup_config_files
     
     show_setup_complete
+    debug "[main_setup] Full setup complete"
 }
 
 show_setup_complete() {
+    debug "[show_setup_complete] Displaying setup summary"
     echo ""
     log "═══════════════════════════════════════"
     log "        Setup Complete!"
