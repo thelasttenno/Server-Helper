@@ -17,7 +17,7 @@ EOF"
     
     for vers in 3.0 2.1 1.0; do
         if sudo mount -t cifs "//$ip/$share" "$mount" -o "credentials=$creds,vers=$vers" 2>/dev/null; then
-            log "✓ Mounted: $mount (SMB $vers)"
+            log "âœ“ Mounted: $mount (SMB $vers)"
             grep -q "$mount" /etc/fstab || echo "//$ip/$share $mount cifs credentials=$creds,vers=$vers,_netdev,nofail 0 0" | sudo tee -a /etc/fstab
             return 0
         fi
@@ -34,7 +34,8 @@ mount_nas() {
     
     local count=0 failed=0
     
-    if [ ${#NAS_ARRAY[@]} -gt 0 ]; then
+    # Ensure NAS_ARRAY exists and is an array
+    if [ -n "${NAS_ARRAY+x}" ] && [ ${#NAS_ARRAY[@]} -gt 0 ]; then
         for cfg in "${NAS_ARRAY[@]}"; do
             IFS=':' read -r ip share mount user pass <<< "$cfg"
             mount_single_nas "$ip" "$share" "$mount" "$user" "$pass" && ((count++)) || ((failed++))
@@ -50,7 +51,8 @@ mount_nas() {
 
 check_nas_heartbeat() {
     local status=0
-    if [ ${#NAS_ARRAY[@]} -gt 0 ]; then
+    # Ensure NAS_ARRAY exists and is an array
+    if [ -n "${NAS_ARRAY+x}" ] && [ ${#NAS_ARRAY[@]} -gt 0 ]; then
         for cfg in "${NAS_ARRAY[@]}"; do
             IFS=':' read -r _ _ mount _ _ <<< "$cfg"
             mountpoint -q "$mount" || status=1
@@ -69,12 +71,13 @@ check_nas_heartbeat() {
 
 list_nas_shares() {
     log "NAS Shares:"
-    if [ ${#NAS_ARRAY[@]} -gt 0 ]; then
+    # Ensure NAS_ARRAY exists and is an array
+    if [ -n "${NAS_ARRAY+x}" ] && [ ${#NAS_ARRAY[@]} -gt 0 ]; then
         for i in "${!NAS_ARRAY[@]}"; do
             IFS=':' read -r ip share mount _ _ <<< "${NAS_ARRAY[$i]}"
-            mountpoint -q "$mount" 2>/dev/null && echo "$((i+1)). ✓ //$ip/$share -> $mount" || echo "$((i+1)). ✗ //$ip/$share -> $mount"
+            mountpoint -q "$mount" 2>/dev/null && echo "$((i+1)). âœ“ //$ip/$share -> $mount" || echo "$((i+1)). âœ— //$ip/$share -> $mount"
         done
     else
-        mountpoint -q "$NAS_MOUNT_POINT" && echo "1. ✓ //$NAS_IP/$NAS_SHARE -> $NAS_MOUNT_POINT" || echo "1. ✗ //$NAS_IP/$NAS_SHARE -> $NAS_MOUNT_POINT"
+        mountpoint -q "$NAS_MOUNT_POINT" && echo "1. âœ“ //$NAS_IP/$NAS_SHARE -> $NAS_MOUNT_POINT" || echo "1. âœ— //$NAS_IP/$NAS_SHARE -> $NAS_MOUNT_POINT"
     fi
 }

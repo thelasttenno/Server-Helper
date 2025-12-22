@@ -57,7 +57,8 @@ set_defaults() {
 }
 
 parse_nas_shares() {
-    declare -g -a NAS_ARRAY
+    # Declare as global array first to prevent unbound variable errors
+    declare -g -a NAS_ARRAY=()
     if [ -n "$NAS_SHARES" ]; then
         IFS=';' read -ra NAS_ARRAY <<< "$NAS_SHARES"
     fi

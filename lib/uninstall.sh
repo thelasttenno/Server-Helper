@@ -13,7 +13,8 @@ uninstall_server_helper() {
     }
     
     confirm "Unmount NAS shares?" && {
-        if [ ${#NAS_ARRAY[@]} -gt 0 ]; then
+        # Ensure NAS_ARRAY exists and is an array
+        if [ -n "${NAS_ARRAY+x}" ] && [ ${#NAS_ARRAY[@]} -gt 0 ]; then
             for cfg in "${NAS_ARRAY[@]}"; do
                 IFS=':' read -r _ _ mount _ _ <<< "$cfg"
                 mountpoint -q "$mount" && sudo umount "$mount"
