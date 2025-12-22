@@ -1,5 +1,114 @@
 #!/bin/bash
-# Backup & Restore Module
+# Backup & Restore Module - Enhanced with Config File Backup
+
+# Configuration files to backup
+declare -a CONFIG_FILES=(
+    "/etc/fstab"
+    "/etc/hosts"
+    "/etc/hostname"
+    "/etc/ssh/sshd_config"
+    "/etc/fail2ban/jail.local"
+    "/etc/ufw/ufw.conf"
+    "/etc/systemd/system/server-helper.service"
+    "$CONFIG_FILE"
+)
+
+# Additional directories to backup
+declare -a CONFIG_DIRS=(
+    "/etc/docker"
+    "/etc/apt/sources.list.d"
+)
+
+backup_config_files() {
+    log "Backing up configuration files..."
+    
+    local backup_dir="$BACKUP_DIR"
+    local config_backup_dir="$backup_dir/config"
+    
+    # Use local backup if NAS unavailable
+    [ ! -d "$backup_dir" ] && {
+        mountpoint -q "$NAS_MOUNT_POINT" 2>/dev/null || backup_dir="/opt/dockge_backups_local"
+        config_backup_dir="$backup_dir/config"
+        warning "Using local backup: $backup_dir"
+    }
+    
+    mkdir -p "$config_backup_dir"
+    
+    local ts=$(timestamp)
+    local config_backup_file="$config_backup_dir/config_backup_$ts.tar.gz"
+    local temp_dir="/tmp/server-helper-config-backup-$$"
+    
+    # Create temporary directory structure
+    mkdir -p "$temp_dir"
+    
+    local file_count=0
+    
+    # Backup individual config files
+    for file in "${CONFIG_FILES[@]}"; do
+        if [ -f "$file" ]; then
+            local dest_dir="$temp_dir$(dirname "$file")"
+            mkdir -p "$dest_dir"
+            sudo cp "$file" "$dest_dir/" 2>/dev/null && {
+                debug "Backed up: $file"
+                ((file_count++))
+            }
+        fi
+    done
+    
+    # Backup config directories
+    for dir in "${CONFIG_DIRS[@]}"; do
+        if [ -d "$dir" ]; then
+            local dest_dir="$temp_dir$(dirname "$dir")"
+            mkdir -p "$dest_dir"
+            sudo cp -r "$dir" "$dest_dir/" 2>/dev/null && {
+                debug "Backed up directory: $dir"
+                ((file_count++))
+            }
+        fi
+    done
+    
+    # Backup NAS credentials
+    sudo find /root -name ".nascreds_*" -type f 2>/dev/null | while read cred_file; do
+        local dest_dir="$temp_dir/root"
+        mkdir -p "$dest_dir"
+        sudo cp "$cred_file" "$dest_dir/" 2>/dev/null && {
+            debug "Backed up: $cred_file"
+            ((file_count++))
+        }
+    done
+    
+    # Create backup manifest
+    cat > "$temp_dir/backup_manifest.txt" << EOF
+Server Helper Configuration Backup
+Created: $(date)
+Hostname: $(hostname)
+Kernel: $(uname -r)
+Files backed up: $file_count
+
+Files included:
+EOF
+    
+    find "$temp_dir" -type f ! -name "backup_manifest.txt" | sed "s|$temp_dir||" >> "$temp_dir/backup_manifest.txt"
+    
+    # Create tarball
+    sudo tar -czf "$config_backup_file" -C "$temp_dir" . 2>/dev/null || {
+        error "Config backup failed"
+        rm -rf "$temp_dir"
+        return 1
+    }
+    
+    # Cleanup temp directory
+    rm -rf "$temp_dir"
+    
+    log "✓ Config backup created: $config_backup_file ($(get_file_size "$config_backup_file"), $file_count items)"
+    
+    # Clean old config backups
+    find "$config_backup_dir" -name "config_backup_*.tar.gz" -mtime +$BACKUP_RETENTION_DAYS -delete 2>/dev/null
+    local config_count=$(find "$config_backup_dir" -name "config_backup_*.tar.gz" 2>/dev/null | wc -l)
+    log "Config backups retained: $config_count"
+    
+    return 0
+}
 
 backup_dockge() {
     log "Starting backup..."
@@ -15,164 +124,170 @@ backup_dockge() {
     local ts=$(timestamp)
     local backup_file="$backup_dir/dockge_backup_$ts.tar.gz"
     
-    # Create temporary directory for backup staging
-    local temp_backup="/tmp/backup_staging_$$"
-    mkdir -p "$temp_backup"
-    
-    # Backup Dockge data and stacks
-    log "Backing up Dockge directories..."
-    if [ -d "$DOCKGE_DATA_DIR/stacks" ]; then
-        sudo cp -a "$DOCKGE_DATA_DIR/stacks" "$temp_backup/" 2>/dev/null || true
-        log "  ✓ $DOCKGE_DATA_DIR/stacks"
-    fi
-    if [ -d "$DOCKGE_DATA_DIR/data" ]; then
-        sudo cp -a "$DOCKGE_DATA_DIR/data" "$temp_backup/" 2>/dev/null || true
-        log "  ✓ $DOCKGE_DATA_DIR/data"
-    fi
-    
-    # Backup additional directories if configured
-    if [ -n "${BACKUP_DIRS_ARRAY+x}" ] && [ ${#BACKUP_DIRS_ARRAY[@]} -gt 0 ]; then
-        log "Backing up additional directories..."
-        for dir in "${BACKUP_DIRS_ARRAY[@]}"; do
-            if [ -d "$dir" ]; then
-                # Create safe directory name by replacing / with _
-                local safe_name="additional_$(echo "$dir" | sed 's|^/||' | tr '/' '_')"
-                sudo cp -a "$dir" "$temp_backup/$safe_name" 2>/dev/null || true
-                log "  ✓ $dir -> $safe_name"
-            else
-                warning "  ✗ $dir (not found, skipping)"
-            fi
-        done
-    fi
-    
-    # Create archive from staging directory
-    log "Creating archive..."
-    sudo tar -czf "$backup_file" -C "$temp_backup" . 2>/dev/null || { 
-        sudo rm -rf "$temp_backup"
-        error "Backup failed"
+    # Backup Dockge data
+    sudo tar -czf "$backup_file" -C "$DOCKGE_DATA_DIR" stacks data 2>/dev/null || { 
+        error "Dockge backup failed"
         return 1
     }
     
-    # Cleanup staging directory
-    sudo rm -rf "$temp_backup"
+    log "✓ Dockge backup created: $backup_file ($(get_file_size "$backup_file"))"
     
-    log "✓ Backup created: $backup_file ($(get_file_size "$backup_file"))"
+    # Automatically backup configuration files
+    backup_config_files
     
-    # Clean old backups
-    local old_count=$(find "$backup_dir" -name "dockge_backup_*.tar.gz" -mtime +$BACKUP_RETENTION_DAYS 2>/dev/null | wc -l)
-    if [ "$old_count" -gt 0 ]; then
-        find "$backup_dir" -name "dockge_backup_*.tar.gz" -mtime +$BACKUP_RETENTION_DAYS -delete 2>/dev/null
-        log "Cleaned $old_count old backup(s)"
-    fi
-    
-    log "Backups retained: $(find "$backup_dir" -name "dockge_backup_*.tar.gz" 2>/dev/null | wc -l)"
+    # Clean old Dockge backups
+    find "$backup_dir" -name "dockge_backup_*.tar.gz" -mtime +$BACKUP_RETENTION_DAYS -delete 2>/dev/null
+    local dockge_count=$(find "$backup_dir" -name "dockge_backup_*.tar.gz" 2>/dev/null | wc -l)
+    log "Dockge backups retained: $dockge_count"
 }
 
-restore_dockge() {
-    log "Available backups:"
-    ls -lh "$BACKUP_DIR"/dockge_backup_*.tar.gz 2>/dev/null || { error "No backups found"; return 1; }
+restore_config_files() {
+    log "Available config backups:"
+    local config_backup_dir="$BACKUP_DIR/config"
     
-    echo ""
+    ls -lh "$config_backup_dir"/config_backup_*.tar.gz 2>/dev/null || { 
+        error "No config backups found"
+        return 1
+    }
+    
     read -p "Enter filename or 'latest': " file
-    [ "$file" = "latest" ] && file=$(ls -t "$BACKUP_DIR"/dockge_backup_*.tar.gz 2>/dev/null | head -1)
+    [ "$file" = "latest" ] && file=$(ls -t "$config_backup_dir"/config_backup_*.tar.gz 2>/dev/null | head -1)
     
-    # Handle both full path and just filename
-    if [ ! -f "$file" ]; then
-        file="$BACKUP_DIR/$file"
+    if [ -z "$file" ]; then
+        file="$config_backup_dir/$file"
+    elif [ ! -f "$file" ]; then
+        [ -f "$config_backup_dir/$file" ] && file="$config_backup_dir/$file" || {
+            error "File not found"
+            return 1
+        }
     fi
     
-    [ -z "$file" ] || [ ! -f "$file" ] && { error "File not found: $file"; return 1; }
+    [ ! -f "$file" ] && { error "File not found: $file"; return 1; }
     
-    log "Selected backup: $file"
-    
-    # Show what's in the backup
+    # Show manifest
     log "Backup contents:"
-    sudo tar -tzf "$file" | grep -E '^[^/]+/$' | sed 's|/$||' | while read item; do
-        echo "  - $item"
-    done
-    
+    sudo tar -tzf "$file" backup_manifest.txt 2>/dev/null && sudo tar -xzOf "$file" backup_manifest.txt || true
     echo ""
-    confirm "Restore from this backup? This will overwrite current data" || return 1
+    
+    confirm "Restore from this config backup? This will overwrite current configuration files" || return 1
     
     # Create emergency backup
+    local emergency_backup="/root/emergency_config_backup_$(timestamp).tar.gz"
     log "Creating emergency backup..."
-    cd "$DOCKGE_DATA_DIR"
-    sudo docker compose down 2>/dev/null || true
-    local emergency_file="emergency_backup_$(timestamp).tar.gz"
-    sudo tar -czf "$emergency_file" stacks data 2>/dev/null || true
-    [ -f "$emergency_file" ] && log "Emergency backup: $DOCKGE_DATA_DIR/$emergency_file"
     
-    # Extract to temporary location first
-    local temp_restore="/tmp/restore_staging_$$"
-    mkdir -p "$temp_restore"
+    local temp_dir="/tmp/server-helper-emergency-$$"
+    mkdir -p "$temp_dir"
     
-    log "Extracting backup..."
-    sudo tar -xzf "$file" -C "$temp_restore"
-    
-    # Restore Dockge directories
-    log "Restoring Dockge directories..."
-    if [ -d "$temp_restore/stacks" ]; then
-        sudo rm -rf "$DOCKGE_DATA_DIR/stacks"
-        sudo mv "$temp_restore/stacks" "$DOCKGE_DATA_DIR/"
-        log "  ✓ Restored: $DOCKGE_DATA_DIR/stacks"
-    fi
-    
-    if [ -d "$temp_restore/data" ]; then
-        sudo rm -rf "$DOCKGE_DATA_DIR/data"
-        sudo mv "$temp_restore/data" "$DOCKGE_DATA_DIR/"
-        log "  ✓ Restored: $DOCKGE_DATA_DIR/data"
-    fi
-    
-    # Restore additional directories if they were in backup
-    log "Checking for additional directories in backup..."
-    for item in "$temp_restore"/additional_*; do
-        [ -d "$item" ] || continue
-        
-        local base_name=$(basename "$item")
-        # Convert safe name back to original path
-        local original_path="/$(echo "$base_name" | sed 's/^additional_//' | tr '_' '/')"
-        
-        echo ""
-        log "Found: $base_name -> $original_path"
-        confirm "Restore $original_path?" && {
-            sudo rm -rf "$original_path"
-            sudo mkdir -p "$(dirname "$original_path")"
-            sudo mv "$item" "$original_path"
-            log "  ✓ Restored: $original_path"
+    for cfg_file in "${CONFIG_FILES[@]}"; do
+        [ -f "$cfg_file" ] && {
+            local dest_dir="$temp_dir$(dirname "$cfg_file")"
+            mkdir -p "$dest_dir"
+            sudo cp "$cfg_file" "$dest_dir/" 2>/dev/null
         }
     done
     
-    # Cleanup
-    sudo rm -rf "$temp_restore"
+    sudo tar -czf "$emergency_backup" -C "$temp_dir" . 2>/dev/null
+    rm -rf "$temp_dir"
+    log "Emergency backup created: $emergency_backup"
     
-    # Restart Dockge
-    log "Restarting Dockge..."
+    # Restore configuration files
+    log "Restoring configuration files..."
+    sudo tar -xzf "$file" -C / 2>/dev/null || {
+        error "Restore failed"
+        return 1
+    }
+    
+    log "✓ Configuration restore complete"
+    warning "Please review restored files and reboot if necessary"
+    
+    # Show what was restored
+    log "Restored files:"
+    sudo tar -tzf "$file" | grep -v "/$" | head -20
+    
+    return 0
+}
+
+restore_dockge() {
+    log "Available Dockge backups:"
+    ls -lh "$BACKUP_DIR"/dockge_backup_*.tar.gz 2>/dev/null || { 
+        error "No Dockge backups found"
+        return 1
+    }
+    
+    read -p "Enter filename or 'latest': " file
+    [ "$file" = "latest" ] && file=$(ls -t "$BACKUP_DIR"/dockge_backup_*.tar.gz 2>/dev/null | head -1)
+    [ -z "$file" ] || [ ! -f "$BACKUP_DIR/$file" ] && { 
+        error "File not found"
+        return 1
+    }
+    
+    confirm "Restore from backup? This will overwrite current Dockge data" || return 1
+    
     cd "$DOCKGE_DATA_DIR"
+    sudo docker compose down
+    
+    # Create emergency backup
+    sudo tar -czf "emergency_dockge_backup_$(timestamp).tar.gz" stacks data 2>/dev/null
+    
+    # Restore
+    sudo rm -rf stacks data
+    sudo tar -xzf "$BACKUP_DIR/$file" -C "$DOCKGE_DATA_DIR"
     sudo docker compose up -d
     
-    log "✓ Restore complete"
+    log "✓ Dockge restore complete"
 }
 
 list_backups() {
-    local backup_dir="$BACKUP_DIR"
-    [ ! -d "$backup_dir" ] && backup_dir="/opt/dockge_backups_local"
+    log "=== Dockge Backups ==="
+    ls -lh "$BACKUP_DIR"/dockge_backup_*.tar.gz 2>/dev/null || echo "No Dockge backups found"
     
-    log "Backups in: $backup_dir"
+    echo ""
+    log "=== Configuration Backups ==="
+    ls -lh "$BACKUP_DIR/config"/config_backup_*.tar.gz 2>/dev/null || echo "No config backups found"
     
-    if ls "$backup_dir"/dockge_backup_*.tar.gz 1> /dev/null 2>&1; then
-        echo ""
-        ls -lh "$backup_dir"/dockge_backup_*.tar.gz 2>/dev/null
-        echo ""
-        
-        # Show what's in the latest backup
-        local latest=$(ls -t "$backup_dir"/dockge_backup_*.tar.gz 2>/dev/null | head -1)
-        if [ -n "$latest" ]; then
-            log "Latest backup contents:"
-            sudo tar -tzf "$latest" | grep -E '^[^/]+/$' | sed 's|/$||' | while read item; do
-                echo "  - $item"
-            done
-        fi
+    echo ""
+    log "=== Backup Statistics ==="
+    local total_size=$(du -sh "$BACKUP_DIR" 2>/dev/null | cut -f1)
+    local dockge_count=$(find "$BACKUP_DIR" -name "dockge_backup_*.tar.gz" 2>/dev/null | wc -l)
+    local config_count=$(find "$BACKUP_DIR/config" -name "config_backup_*.tar.gz" 2>/dev/null | wc -l)
+    
+    echo "Total backup size: ${total_size:-0}"
+    echo "Dockge backups: $dockge_count"
+    echo "Config backups: $config_count"
+    echo "Retention period: $BACKUP_RETENTION_DAYS days"
+}
+
+# Backup both Dockge and config files
+backup_all() {
+    log "Starting complete backup (Dockge + Config)..."
+    backup_dockge
+    # config is already called within backup_dockge
+    log "✓ Complete backup finished"
+}
+
+# Export manifest from a backup
+show_backup_manifest() {
+    local backup_file="$1"
+    
+    if [ -z "$backup_file" ]; then
+        read -p "Enter backup file path: " backup_file
+    fi
+    
+    [ ! -f "$backup_file" ] && { error "File not found: $backup_file"; return 1; }
+    
+    log "Backup manifest for: $(basename "$backup_file")"
+    echo "================================"
+    
+    if [[ "$backup_file" == *"config_backup"* ]]; then
+        sudo tar -xzOf "$backup_file" backup_manifest.txt 2>/dev/null || {
+            error "No manifest found in backup"
+            log "Backup contents:"
+            sudo tar -tzf "$backup_file" | head -50
+        }
     else
-        echo "No backups found"
+        log "Backup contents:"
+        sudo tar -tzf "$backup_file" | head -50
+        echo "..."
+        log "Total files: $(sudo tar -tzf "$backup_file" | wc -l)"
     fi
 }

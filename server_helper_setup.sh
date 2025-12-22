@@ -1,6 +1,6 @@
 #!/bin/bash
 # Server Helper Setup Script - Main Entry Point
-# Version 2.0 - Fully Modular Architecture
+# Version 2.1 - Enhanced with Config File Backups
 
 set -euo pipefail
 
@@ -115,7 +115,7 @@ parse_nas_shares
 
 # Show version
 show_version() {
-    echo "Server Helper v2.0.0 - Modular Edition"
+    echo "Server Helper v2.1.0 - Enhanced Config Backup Edition"
     echo "For Ubuntu 24.04.3 LTS"
 }
 
@@ -148,9 +148,13 @@ COMMANDS:
         logs                 View live logs
 
     Backup & Restore:
-        backup               Create backup
-        restore              Restore from backup
+        backup               Create Dockge backup (includes config backup)
+        backup-config        Backup configuration files only
+        backup-all           Backup everything (Dockge + config)
+        restore              Restore Dockge from backup
+        restore-config       Restore configuration files
         list-backups         List all backups
+        show-manifest <file> Show backup contents
 
     NAS Management:
         list-nas             List NAS shares
@@ -188,10 +192,43 @@ ENVIRONMENT VARIABLES:
     CONFIG_FILE=<path>   Use custom config file
 
 EXAMPLES:
+    # Interactive menu
     sudo ./server_helper_setup.sh menu
-    sudo ./server_helper_setup.sh backup
+    
+    # Create complete backup
+    sudo ./server_helper_setup.sh backup-all
+    
+    # Backup only config files
+    sudo ./server_helper_setup.sh backup-config
+    
+    # List all backups
+    sudo ./server_helper_setup.sh list-backups
+    
+    # Show what's in a backup
+    sudo ./server_helper_setup.sh show-manifest /path/to/backup.tar.gz
+    
+    # Dry-run update
     DRY_RUN=true sudo ./server_helper_setup.sh update
+    
+    # Debug mode
     DEBUG=true sudo ./server_helper_setup.sh monitor
+
+BACKUP INFORMATION:
+    Dockge backups include:
+        - Docker stacks
+        - Dockge data
+        - Automatically includes config backup
+    
+    Config backups include:
+        - /etc/fstab, /etc/hosts, /etc/hostname
+        - /etc/ssh/sshd_config
+        - /etc/fail2ban/jail.local
+        - /etc/ufw/ufw.conf
+        - Server Helper configuration
+        - NAS credentials
+        - Docker configuration
+        - systemd service files
+        - Backup manifest with file listing
 
 LOG FILES:
     /var/log/server-helper/server-helper.log
@@ -204,24 +241,42 @@ EOF
 case "${1:-menu}" in
     setup) main_setup ;;
     monitor) monitor_services ;;
+    
+    # Backup commands
     backup) backup_dockge ;;
+    backup-config) backup_config_files ;;
+    backup-all) backup_all ;;
+    
+    # Restore commands
     restore) restore_dockge ;;
+    restore-config) restore_config_files ;;
+    
+    # Backup utilities
     list-backups) list_backups ;;
+    show-manifest) show_backup_manifest "${2:-}" ;;
+    
+    # System management
     set-hostname) set_hostname "${2:-}" ;;
     show-hostname) show_hostname ;;
     clean-disk) clean_disk ;;
     disk-space) show_disk_space ;;
+    
+    # Updates
     update) update_system ;;
     full-upgrade) full_upgrade ;;
     check-updates) check_updates; show_update_status ;;
     update-status) show_update_status ;;
     schedule-reboot) schedule_reboot "${2:-}" ;;
+    
+    # Security
     security-audit) security_audit ;;
     security-status) show_security_status ;;
     security-harden) apply_security_hardening ;;
     setup-fail2ban) setup_fail2ban ;;
     setup-ufw) setup_ufw ;;
     harden-ssh) harden_ssh ;;
+    
+    # Service management
     enable-autostart) create_systemd_service ;;
     disable-autostart) remove_systemd_service ;;
     service-status) show_service_status ;;
@@ -229,14 +284,21 @@ case "${1:-menu}" in
     stop) stop_service ;;
     restart) restart_service ;;
     logs) show_logs ;;
+    
+    # Configuration
     edit-config) edit_config ;;
     show-config) show_config ;;
     validate-config) validate_config ;;
-    uninstall) uninstall_server_helper ;;
-    menu) show_menu ;;
+    
+    # NAS
     list-nas) list_nas_shares ;;
     mount-nas) mount_nas ;;
+    
+    # Other
+    uninstall) uninstall_server_helper ;;
+    menu) show_menu ;;
     help|--help|-h) show_help ;;
     version|--version|-v) show_version ;;
+    
     *) show_menu ;;
 esac
