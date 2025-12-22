@@ -65,13 +65,28 @@ load_config() {
 }
 
 set_defaults() {
+    # NAS defaults
     NAS_SHARES="${NAS_SHARES:-}"
     NAS_IP="${NAS_IP:-192.168.1.100}"
+    NAS_MOUNT_POINT="${NAS_MOUNT_POINT:-/mnt/nas}"
+    
+    # Dockge defaults
     DOCKGE_PORT="${DOCKGE_PORT:-5001}"
     DOCKGE_DATA_DIR="${DOCKGE_DATA_DIR:-/opt/dockge}"
-    NAS_MOUNT_REQUIRED="${NAS_MOUNT_REQUIRED:-false}"
+    
+    # Backup defaults - FIXED: Added BACKUP_DIR default
+    BACKUP_DIR="${BACKUP_DIR:-${NAS_MOUNT_POINT}/dockge_backups}"
+    BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
     BACKUP_ADDITIONAL_DIRS="${BACKUP_ADDITIONAL_DIRS:-}"
+    
+    # Other defaults
+    NAS_MOUNT_REQUIRED="${NAS_MOUNT_REQUIRED:-false}"
     DEBUG="${DEBUG:-false}"
+    DISK_CLEANUP_THRESHOLD="${DISK_CLEANUP_THRESHOLD:-80}"
+    
+    # If NAS_MOUNT_POINT is still empty, fallback to local backup
+    [ -z "$NAS_MOUNT_POINT" ] && NAS_MOUNT_POINT="/mnt/nas"
+    [ -z "$BACKUP_DIR" ] && BACKUP_DIR="/opt/dockge_backups_local"
 }
 
 parse_nas_shares() {

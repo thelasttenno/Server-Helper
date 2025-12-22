@@ -1,5 +1,5 @@
 #!/bin/bash
-# Uninstall Module - Fixed NAS Unmount
+# Uninstall Module
 
 uninstall_server_helper() {
     warning "╔════════════════════════════════════╗"
@@ -11,89 +11,52 @@ uninstall_server_helper() {
     systemctl list-unit-files | grep -q server-helper && {
         confirm "Remove systemd service?" && remove_systemd_service
     }
-
-    [ -d "$BACKUP_DIR" ] && confirm "Remove backups?" && {
-        read -p "Type 'DELETE' to confirm: " conf
-        [ "$conf" = "DELETE" ] && sudo rm -rf "$BACKUP_DIR"
-    }
     
+    # FIXED: Better handling of BACKUP_DIR
+    # Set default if not set, and handle both NAS and local backup locations
+    local backup_dir="${BACKUP_DIR}"
+    [ -z "$backup_dir" ] && backup_dir="${NAS_MOUNT_POINT}/dockge_backups"
+    [ -z "$backup_dir" ] || [ "$backup_dir" = "/dockge_backups" ] && backup_dir="/opt/dockge_backups_local"
+    
+    if [ -d "$backup_dir" ]; then
+        log "Found backup directory: $backup_dir"
+        confirm "Remove backups in $backup_dir?" && {
+            read -p "Type 'DELETE' to confirm: " conf
+            if [ "$conf" = "DELETE" ]; then
+                sudo rm -rf "$backup_dir"
+                log "✓ Backups removed"
+            else
+                log "Backup removal cancelled"
+            fi
+        }
+    else
+        log "No backup directory found at: $backup_dir"
+        # Check for alternative backup location
+        if [ -d "/opt/dockge_backups_local" ]; then
+            log "Found local backup directory: /opt/dockge_backups_local"
+            confirm "Remove local backups?" && {
+                read -p "Type 'DELETE' to confirm: " conf
+                if [ "$conf" = "DELETE" ]; then
+                    sudo rm -rf "/opt/dockge_backups_local"
+                    log "✓ Local backups removed"
+                else
+                    log "Backup removal cancelled"
+                fi
+            }
+        fi
+    fi
+
     confirm "Unmount NAS shares?" && {
-        # Change to safe directory to avoid "device is busy" errors
-        cd /tmp
-        
         # Ensure NAS_ARRAY exists and is an array
         if [ -n "${NAS_ARRAY+x}" ] && [ ${#NAS_ARRAY[@]} -gt 0 ]; then
             for cfg in "${NAS_ARRAY[@]}"; do
                 IFS=':' read -r _ _ mount _ _ <<< "$cfg"
-                if mountpoint -q "$mount" 2>/dev/null; then
-                    log "Unmounting: $mount"
-                    
-                    # Check for processes using the mount
-                    if command_exists lsof; then
-                        local procs=$(sudo lsof "$mount" 2>/dev/null | tail -n +2)
-                        if [ -n "$procs" ]; then
-                            warning "Processes using $mount:"
-                            echo "$procs"
-                            confirm "Kill processes and force unmount?" || continue
-                            sudo fuser -km "$mount" 2>/dev/null || true
-                            sleep 2  # Give processes time to die
-                        fi
-                    fi
-                    
-                    # Try normal unmount first
-                    if sudo umount "$mount" 2>/dev/null; then
-                        log "✓ Unmounted: $mount"
-                    else
-                        # Try lazy unmount
-                        warning "Normal unmount failed, trying lazy unmount..."
-                        if sudo umount -l "$mount" 2>/dev/null; then
-                            log "✓ Lazy unmounted: $mount"
-                        else
-                            # Try force unmount as last resort
-                            warning "Lazy unmount failed, trying force unmount..."
-                            if sudo umount -f "$mount" 2>/dev/null; then
-                                log "✓ Force unmounted: $mount"
-                            else
-                                error "Failed to unmount: $mount"
-                                warning "You may need to reboot to fully unmount"
-                            fi
-                        fi
-                    fi
-                fi
+                mountpoint -q "$mount" && sudo umount "$mount"
             done
         else
-            if mountpoint -q "$NAS_MOUNT_POINT" 2>/dev/null; then
-                log "Unmounting: $NAS_MOUNT_POINT"
-                
-                # Check for processes using the mount
-                if command_exists lsof; then
-                    local procs=$(sudo lsof "$NAS_MOUNT_POINT" 2>/dev/null | tail -n +2)
-                    if [ -n "$procs" ]; then
-                        warning "Processes using $NAS_MOUNT_POINT:"
-                        echo "$procs"
-                        confirm "Kill processes and force unmount?" || return 0
-                        sudo fuser -km "$NAS_MOUNT_POINT" 2>/dev/null || true
-                        sleep 2  # Give processes time to die
-                    fi
-                fi
-                
-                # Try normal unmount first
-                if sudo umount "$NAS_MOUNT_POINT" 2>/dev/null; then
-                    log "✓ Unmounted: $NAS_MOUNT_POINT"
-                elif sudo umount -l "$NAS_MOUNT_POINT" 2>/dev/null; then
-                    log "✓ Lazy unmounted: $NAS_MOUNT_POINT"
-                elif sudo umount -f "$NAS_MOUNT_POINT" 2>/dev/null; then
-                    log "✓ Force unmounted: $NAS_MOUNT_POINT"
-                else
-                    error "Failed to unmount: $NAS_MOUNT_POINT"
-                    warning "You may need to reboot to fully unmount"
-                fi
-            fi
+            sudo umount "$NAS_MOUNT_POINT" 2>/dev/null || true
         fi
-        
-        # Remove from fstab
         sudo sed -i.backup '/cifs.*_netdev/d' /etc/fstab
-        log "✓ Removed NAS entries from /etc/fstab"
     }
     
     [ -d "$DOCKGE_DATA_DIR" ] && confirm "Remove Dockge?" && {
