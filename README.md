@@ -1,1017 +1,933 @@
-# Server Helper v2.1
+# Server Helper Setup Script
 
-**Enhanced Config Backup Edition**
+A comprehensive server management script for Ubuntu 24.04.3 LTS that automates NAS mounting, Docker/Dockge installation, system monitoring, backups, updates, and security hardening.
 
-A comprehensive, modular server management toolkit for Ubuntu 24.04 LTS that simplifies Docker/Dockge deployment, NAS integration, automated backups, security hardening, and system maintenance.
+## 🌟 New in Version 2.2
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Ubuntu](https://img.shields.io/badge/Ubuntu-24.04%20LTS-orange.svg)](https://ubuntu.com/)
-[![Shell Script](https://img.shields.io/badge/Shell_Script-bash-green.svg)](https://www.gnu.org/software/bash/)
-
----
-
-## 📑 Table of Contents
-
-- [Features](#-features)
-- [Repository Structure](#-repository-structure)
-- [Requirements](#-requirements)
-- [Quick Start](#-quick-start)
-- [Configuration](#️-configuration)
-- [Usage](#-usage)
-- [Backup System](#-backup-system)
-- [Monitoring](#-monitoring)
-- [Security](#-security)
-- [Troubleshooting](#-troubleshooting)
-- [Uninstallation](#️-uninstallation)
-- [License](#-license)
+- **🔍 Pre-Installation Detection**: Automatically detects existing installations and offers cleanup options
+- **🐛 Debug Mode**: Comprehensive debug logging for troubleshooting
+- **💾 Configuration Backup**: Automatic backup of all system configuration files
+- **🧹 Selective Removal**: Choose which components to remove during reinstall
+- **📊 Enhanced Logging**: Detailed function-level debug output
 
 ---
 
 ## 🌟 Features
 
-### Core Functionality
-- ✅ **Docker & Dockge** - Automated installation and container management UI
-- ✅ **Multi-NAS Support** - SMB/CIFS mounting with auto-reconnection
-- ✅ **Enhanced Backups** - Dockge data + system configuration backups
-- ✅ **Security Suite** - fail2ban, UFW, SSH hardening, security audits
-- ✅ **24/7 Monitoring** - Health checks with Uptime Kuma integration
-- ✅ **Disk Management** - Auto-cleanup when thresholds exceeded
-- ✅ **Update Manager** - Automated updates with scheduled reboots
-- ✅ **Interactive Menu** - User-friendly TUI interface
-- ✅ **Systemd Service** - Auto-start monitoring on boot
-
-### What's New in v2.1
-- 🆕 **Configuration Backup** - Automatic backup of critical system configs
-- 🆕 **Backup Manifests** - Detailed file listings in all backups
-- 🆕 **Restore Config** - Separate config restoration functionality
-- 🆕 **Enhanced Help** - Comprehensive help system with examples
-
-### Configuration Files Backed Up
-- `/etc/fstab`, `/etc/hosts`, `/etc/hostname`
-- `/etc/ssh/sshd_config`
-- `/etc/fail2ban/jail.local`
-- `/etc/ufw/ufw.conf`
-- `/etc/docker/` directory
-- Server Helper configuration and credentials
-- Systemd service files
+- **NAS Management**: Automatic NAS mounting with credential management
+- **Docker & Dockge**: Automated installation and configuration
+- **Monitoring**: 24/7 service monitoring with auto-recovery
+- **Backups**: Scheduled Dockge + config backups to NAS with retention management
+- **System Updates**: Automated system updates with scheduled reboots
+- **Security**: Comprehensive security auditing and hardening (fail2ban, UFW, SSH)
+- **Disk Management**: Automatic disk cleanup and space monitoring
+- **Uptime Kuma Integration**: Push monitor heartbeats
+- **Auto-Start**: Systemd service for boot-time startup
+- **Pre-Install Check**: Detects and manages existing installations
 
 ---
 
-## 📁 Repository Structure
+## 📦 Installation
 
-```
-Server-Helper/
-├── server_helper_setup.sh          # Main entry point script
-├── lib/                            # Modular components
-│   ├── core.sh                     # Core utilities & helpers
-│   ├── config.sh                   # Configuration management
-│   ├── validation.sh               # Input validation functions
-│   ├── nas.sh                      # NAS mounting & management
-│   ├── docker.sh                   # Docker & Dockge setup
-│   ├── backup.sh                   # Backup & restore (enhanced v2.1)
-│   ├── disk.sh                     # Disk cleanup & monitoring
-│   ├── updates.sh                  # System update management
-│   ├── security.sh                 # Security hardening tools
-│   ├── service.sh                  # Systemd service management
-│   ├── menu.sh                     # Interactive menu interface
-│   └── uninstall.sh                # Clean uninstall procedures
-├── LICENSE                         # GNU GPL v3 license
-└── README.md                       # This file
-
-Generated at runtime:
-├── server-helper.conf              # User configuration (auto-created)
-├── /var/log/server-helper/         # Log directory
-│   ├── server-helper.log           # Main log file
-│   └── error.log                   # Error log
-├── /opt/dockge/                    # Dockge installation
-│   ├── docker-compose.yml
-│   ├── data/
-│   └── stacks/
-└── /etc/systemd/system/
-    └── server-helper.service       # Systemd service (when enabled)
-```
-
----
-
-## 📋 Requirements
-
-| Requirement | Details |
-|------------|---------|
-| **OS** | Ubuntu 24.04 LTS (24.04.3 recommended) |
-| **Privileges** | Root or sudo access |
-| **Network** | Internet connection for package installation |
-| **Optional** | NAS/SMB share for network backups |
-| **Disk Space** | ~1GB for Docker + Dockge |
-
----
-
-## 🚀 Quick Start
-
-### 1. Clone the Repository
+### Quick Install
 
 ```bash
-# Clone from GitHub
-git clone https://github.com/yourusername/Server-Helper.git
+# 1. Download/clone the script
+sudo git clone https://github.com/thelasttenno/Server-Helper.git
 cd Server-Helper
 
-# Verify file structure
-ls -la lib/
-```
+# 2. Make executable
+sudo chmod +x server_helper_setup.sh
 
-### 2. Make Executable
-
-```bash
-chmod +x server_helper_setup.sh
-```
-
-### 3. Initial Setup
-
-```bash
-# First run creates default configuration
+# 3. First run (creates config file)
 sudo ./server_helper_setup.sh
-
-# Edit configuration with your settings
-sudo ./server_helper_setup.sh edit-config
 ```
 
-### 4. Configure Your Settings
-
-Edit the auto-created `server-helper.conf` file:
+### Configure
 
 ```bash
+# Edit configuration file with your settings
 sudo nano server-helper.conf
+
+# Required settings:
+# - NAS_IP
+# - NAS_SHARE
+# - NAS_USERNAME
+# - NAS_PASSWORD
+
+# Validate configuration
+sudo ./server_helper_setup.sh validate-config
 ```
 
-**Minimum required settings:**
-```bash
-NAS_IP="192.168.1.100"
-NAS_SHARE="share"
-NAS_USERNAME="your_username"
-NAS_PASSWORD="your_password"
-```
-
-### 5. Run Full Setup
+### Run Setup (with Pre-Installation Check)
 
 ```bash
-# Automated setup
+# Run full setup
 sudo ./server_helper_setup.sh setup
 
-# Or use interactive menu
-sudo ./server_helper_setup.sh menu
-```
-
-### 6. Enable Auto-Start (Recommended)
-
-```bash
-sudo ./server_helper_setup.sh enable-autostart
-sudo ./server_helper_setup.sh start
-```
-
----
-
-## ⚙️ Configuration
-
-The `server-helper.conf` file is automatically created on first run. All settings are customizable:
-
-### NAS Configuration
-
-```bash
-# Single NAS share
-NAS_IP="192.168.1.100"
-NAS_SHARE="share"
-NAS_MOUNT_POINT="/mnt/nas"
-NAS_USERNAME="your_username"
-NAS_PASSWORD="your_password"
-NAS_MOUNT_REQUIRED="false"
-NAS_MOUNT_SKIP="false"
-
-# Multiple NAS shares (advanced)
-NAS_SHARES="192.168.1.100:share1:/mnt/nas1:user1:pass1;192.168.1.101:share2:/mnt/nas2:user2:pass2"
-```
-
-### Dockge Configuration
-
-```bash
-DOCKGE_PORT="5001"                  # Web UI port
-DOCKGE_DATA_DIR="/opt/dockge"       # Installation directory
-```
-
-### Backup Configuration
-
-```bash
-BACKUP_DIR="$NAS_MOUNT_POINT/dockge_backups"
-BACKUP_RETENTION_DAYS="30"          # Auto-delete backups older than this
-BACKUP_ADDITIONAL_DIRS=""           # Semicolon-separated additional paths
-```
-
-### System Configuration
-
-```bash
-NEW_HOSTNAME=""                      # Set on first setup
-DISK_CLEANUP_THRESHOLD="80"         # Percentage to trigger cleanup
-AUTO_CLEANUP_ENABLED="true"         # Enable automatic disk cleanup
-```
-
-### Update Management
-
-```bash
-AUTO_UPDATE_ENABLED="false"         # Enable automatic updates
-UPDATE_CHECK_INTERVAL="24"          # Hours between checks
-AUTO_REBOOT_ENABLED="false"         # Reboot after updates if needed
-REBOOT_TIME="03:00"                 # Scheduled reboot time (24h format)
-```
-
-### Security Configuration
-
-```bash
-SECURITY_CHECK_ENABLED="true"       # Enable security audits
-SECURITY_CHECK_INTERVAL="12"        # Hours between audits
-FAIL2BAN_ENABLED="false"           # Setup fail2ban on install
-UFW_ENABLED="false"                # Setup UFW firewall on install
-SSH_HARDENING_ENABLED="false"      # Harden SSH on install
-```
-
-### Uptime Kuma Integration
-
-```bash
-UPTIME_KUMA_NAS_URL=""             # Push monitor URL for NAS
-UPTIME_KUMA_DOCKGE_URL=""          # Push monitor URL for Dockge
-UPTIME_KUMA_SYSTEM_URL=""          # Push monitor URL for system
-```
-
-### Debug Options
-
-```bash
-DEBUG="false"                       # Enable verbose logging
+# The script will:
+# 1. Check for existing installations
+# 2. Offer cleanup options if found
+# 3. Mount NAS
+# 4. Install Docker & Dockge
+# 5. Create initial config backup
+# 6. Optionally enable auto-start
 ```
 
 ---
 
-## 📖 Usage
+## 🆕 Pre-Installation Detection
 
-### Command Reference
+### What Gets Detected
 
-#### Configuration Commands
-```bash
-sudo ./server_helper_setup.sh edit-config          # Edit configuration file
-sudo ./server_helper_setup.sh show-config          # Display config (passwords masked)
-sudo ./server_helper_setup.sh validate-config      # Validate configuration
+When you run `setup` or `check-install`, the script automatically checks for:
+
+1. **Systemd Service** - Existing server-helper.service
+2. **NAS Mounts** - CIFS mounts in fstab and currently mounted
+3. **Dockge Installation** - /opt/dockge directory and containers
+4. **Docker Installation** - Docker engine and running containers
+5. **Configuration Files** - Existing server-helper.conf
+6. **Backups** - Existing backup directories
+
+### Cleanup Options
+
+When an existing installation is detected, you'll see:
+
+```
+═══════════════════════════════════════════════════════
+         EXISTING INSTALLATION DETECTED
+═══════════════════════════════════════════════════════
+
+Installation Component Status:
+  ✓ Systemd Service
+  ✓ NAS Mounts
+  ✓ Dockge
+  ✓ Docker
+  ✓ Configuration File
+  ✓ Existing Backups
+
+What would you like to do?
+
+1) Continue with existing installation (skip setup)
+2) Remove and reinstall (clean slate)
+3) Selective cleanup (choose components)
+4) Cancel and exit
+
+Choice [1-4]:
 ```
 
-#### Setup & Monitoring
-```bash
-sudo ./server_helper_setup.sh setup                # Run full setup
-sudo ./server_helper_setup.sh monitor              # Start monitoring (foreground)
-sudo ./server_helper_setup.sh menu                 # Interactive menu (default)
-```
+#### Option 1: Continue
+- Keeps everything as-is
+- Useful for updates or configuration changes
 
-#### Service Management
-```bash
-sudo ./server_helper_setup.sh enable-autostart     # Create systemd service
-sudo ./server_helper_setup.sh disable-autostart    # Remove systemd service
-sudo ./server_helper_setup.sh start                # Start service
-sudo ./server_helper_setup.sh stop                 # Stop service
-sudo ./server_helper_setup.sh restart              # Restart service
-sudo ./server_helper_setup.sh service-status       # Show service status
-sudo ./server_helper_setup.sh logs                 # View live logs
-```
+#### Option 2: Complete Removal
+- Removes ALL components
+- Creates backups before removal (with confirmation)
+- Fresh installation
 
-#### Backup & Restore Commands (v2.1 Enhanced)
-```bash
-sudo ./server_helper_setup.sh backup               # Backup Dockge (includes config backup)
-sudo ./server_helper_setup.sh backup-config        # Backup configuration files only
-sudo ./server_helper_setup.sh backup-all           # Backup everything (Dockge + config)
-sudo ./server_helper_setup.sh restore              # Restore Dockge from backup
-sudo ./server_helper_setup.sh restore-config       # Restore configuration files
-sudo ./server_helper_setup.sh list-backups         # List all backups
-sudo ./server_helper_setup.sh show-manifest <file> # Show backup contents
-```
+#### Option 3: Selective Cleanup
+- Choose which components to remove:
+  - Remove systemd service?
+  - Remove Dockge installation?
+  - Cleanup NAS mounts?
+  - Remove Docker? (requires extra confirmation)
+- Keep what you want, remove what you don't
 
-#### NAS Management
-```bash
-sudo ./server_helper_setup.sh list-nas             # List NAS shares and status
-sudo ./server_helper_setup.sh mount-nas            # Mount all NAS shares
-```
+#### Option 4: Cancel
+- Exits without making any changes
 
-#### System Management
-```bash
-sudo ./server_helper_setup.sh set-hostname <name>  # Set system hostname
-sudo ./server_helper_setup.sh show-hostname        # Show current hostname
-sudo ./server_helper_setup.sh clean-disk           # Clean disk space
-sudo ./server_helper_setup.sh disk-space           # Show disk usage
-```
-
-#### Update Management
-```bash
-sudo ./server_helper_setup.sh update               # Update system packages
-sudo ./server_helper_setup.sh full-upgrade         # Full system upgrade (interactive)
-sudo ./server_helper_setup.sh check-updates        # Check for available updates
-sudo ./server_helper_setup.sh update-status        # Show update status
-sudo ./server_helper_setup.sh schedule-reboot      # Schedule system reboot
-```
-
-#### Security Commands
-```bash
-sudo ./server_helper_setup.sh security-audit       # Run security audit
-sudo ./server_helper_setup.sh security-status      # Show security status
-sudo ./server_helper_setup.sh security-harden      # Apply security hardening
-sudo ./server_helper_setup.sh setup-fail2ban       # Setup fail2ban
-sudo ./server_helper_setup.sh setup-ufw            # Setup UFW firewall
-sudo ./server_helper_setup.sh harden-ssh           # Harden SSH configuration
-```
-
-#### Other Commands
-```bash
-sudo ./server_helper_setup.sh uninstall            # Uninstall Server Helper
-sudo ./server_helper_setup.sh help                 # Show help message
-sudo ./server_helper_setup.sh version              # Show version
-```
-
-### Environment Variables
-
-Run any command with these environment variables:
+### Manual Pre-Check
 
 ```bash
-# Dry-run mode (show what would happen, make no changes)
-DRY_RUN=true sudo ./server_helper_setup.sh update
+# Check for existing installation without running setup
+sudo ./server_helper_setup.sh check-install
 
-# Debug mode (verbose logging)
-DEBUG=true sudo ./server_helper_setup.sh monitor
-
-# Custom config file location
-CONFIG_FILE=/path/to/custom.conf sudo ./server_helper_setup.sh setup
+# Remove existing installation components
+sudo ./server_helper_setup.sh remove-install
 ```
-
-### Interactive Menu
-
-The menu provides easy access to all features:
-
-```bash
-sudo ./server_helper_setup.sh menu
-```
-
-**Menu Options:**
-- **Configuration** (1-3): Edit, show, validate
-- **Setup** (4-5): Full setup, monitoring
-- **Service** (6-12): Enable, disable, start, stop, restart, status, logs
-- **Backup** (13-18): Dockge, config, all, restore-dockge, restore-config, list
-- **NAS** (19-20): List, mount
-- **System** (21-23): Hostname, clean disk, disk space
-- **Updates** (24-28): Update, full upgrade, check, status, reboot
-- **Security** (29-34): Audit, status, harden, fail2ban, UFW, SSH
-- **Other** (35): Uninstall
 
 ---
 
-## 💾 Backup System
+## 🐛 Debug Mode
 
-### Overview
+### Enable Debug Logging
 
-Version 2.1 includes an enhanced backup system that preserves both application data and critical system configurations.
-
-### Backup Types
-
-#### 1. Dockge Backup
-Includes Dockge stacks and data, **plus automatic config backup**:
 ```bash
-sudo ./server_helper_setup.sh backup
+# Run any command with debug output
+DEBUG=true sudo ./server_helper_setup.sh <command>
+
+# Examples:
+DEBUG=true sudo ./server_helper_setup.sh setup
+DEBUG=true sudo ./server_helper_setup.sh backup
+DEBUG=true sudo ./server_helper_setup.sh mount-nas
 ```
 
-#### 2. Configuration Backup
-System configuration files only:
-```bash
-sudo ./server_helper_setup.sh backup-config
+### What Debug Mode Shows
+
+Debug mode provides detailed logging for:
+
+- **Function Entry/Exit**: See when functions start and end
+- **Variable Values**: Track variable states and changes
+- **Decision Points**: See which code paths are taken
+- **File Operations**: Monitor file creation, copying, deletion
+- **Network Calls**: Track API calls and network operations
+- **Command Execution**: See exact commands being run
+- **Error Context**: More detailed error information
+
+### Debug Output Example
+
+```
+[2024-12-21 10:30:45] DEBUG: backup_dockge() - Starting Dockge backup
+[2024-12-21 10:30:45] DEBUG: backup_dockge() - Backup file: /mnt/nas/dockge_backups/dockge_backup_20241221_103045.tar.gz
+[2024-12-21 10:30:45] DEBUG: backup_dockge() - Source directory: /opt/dockge
+[2024-12-21 10:30:45] DEBUG: backup_dockge() - Creating Dockge tarball
+[2024-12-21 10:30:47] DEBUG: backup_dockge() - Dockge backup successful
+[2024-12-21 10:30:47] DEBUG: backup_dockge() - Triggering automatic config backup
+[2024-12-21 10:30:47] DEBUG: backup_config_files() - Starting configuration backup
 ```
 
-#### 3. Complete Backup
-Everything (Dockge + configs):
-```bash
-sudo ./server_helper_setup.sh backup-all
+### Debug Log File
+
+All debug output is also saved to:
 ```
+/var/log/server-helper/server-helper.log
+```
+
+---
+
+## 💾 Configuration Backup Feature
 
 ### What Gets Backed Up
 
-**Dockge Backups** (`dockge_backup_*.tar.gz`):
-- Docker stacks
-- Dockge data directory
-- Automatically includes config backup
+The script automatically backs up critical configuration files:
 
-**Configuration Backups** (`config_backup_*.tar.gz`):
+**System Files:**
 - `/etc/fstab` - Filesystem mounts
-- `/etc/hosts`, `/etc/hostname` - Network identity
+- `/etc/hosts` - Host file
+- `/etc/hostname` - System hostname
 - `/etc/ssh/sshd_config` - SSH configuration
 - `/etc/fail2ban/jail.local` - fail2ban rules
-- `/etc/ufw/ufw.conf` - Firewall configuration
+- `/etc/ufw/ufw.conf` - Firewall settings
+
+**Directories:**
 - `/etc/docker/` - Docker configuration
-- `/etc/systemd/system/server-helper.service` - Systemd service
-- `server-helper.conf` - Server Helper config
-- NAS credentials files
-- **Backup manifest** - Complete file listing
+- `/etc/apt/sources.list.d/` - APT sources
+- `/etc/systemd/system/server-helper.service` - Service file
+
+**Credentials:**
+- `/root/.nascreds_*` - NAS credentials
+- Server Helper configuration file
+
+### When Backups Occur
+
+1. **Automatic**: Every time you run `backup` (Dockge backup)
+2. **Manual**: Run `backup-config` command
+3. **During Setup**: After successful installation
+4. **Before Restore**: Emergency backup created automatically
+
+### Backup Commands
+
+```bash
+# Backup only configuration files
+sudo ./server_helper_setup.sh backup-config
+
+# Backup Dockge (includes config automatically)
+sudo ./server_helper_setup.sh backup
+
+# Backup everything explicitly
+sudo ./server_helper_setup.sh backup-all
+
+# List all backups (Dockge + Config)
+sudo ./server_helper_setup.sh list-backups
+
+# Show what's in a config backup
+sudo ./server_helper_setup.sh show-manifest /path/to/config_backup_xxx.tar.gz
+```
+
+### Restore Configuration
+
+```bash
+# Restore configuration from backup
+sudo ./server_helper_setup.sh restore-config
+
+# Select backup:
+# - Type filename
+# - Or type 'latest' for most recent
+
+# The script will:
+# 1. Show backup manifest
+# 2. Ask for confirmation
+# 3. Create emergency backup
+# 4. Restore files
+# 5. Show what was restored
+```
 
 ### Backup Locations
 
-```bash
-# Default (on NAS)
-$NAS_MOUNT_POINT/dockge_backups/
+```
+NAS (Primary):
+/mnt/nas/dockge_backups/
 ├── dockge_backup_20241221_120000.tar.gz
 ├── dockge_backup_20241221_180000.tar.gz
 └── config/
-    ├── config_backup_20241221_120000.tar.gz
-    └── config_backup_20241221_180000.tar.gz
+    ├── config_backup_20241221_120005.tar.gz
+    └── config_backup_20241221_180005.tar.gz
 
-# Fallback (if NAS unavailable)
+Local (Fallback):
 /opt/dockge_backups_local/
+└── config/
 ```
-
-### Backup Frequency
-
-**Automatic** (when monitoring is enabled):
-- Every 3 hours (180 minutes)
-- Includes both Dockge and configuration
-
-**Manual**:
-```bash
-sudo ./server_helper_setup.sh backup-all
-```
-
-### Retention Policy
-
-- Default: 30 days (configurable via `BACKUP_RETENTION_DAYS`)
-- Older backups automatically deleted
-- Override in config: `BACKUP_RETENTION_DAYS="60"`
-
-### Viewing Backup Contents
-
-```bash
-# List all backups
-sudo ./server_helper_setup.sh list-backups
-
-# Show what's in a specific backup
-sudo ./server_helper_setup.sh show-manifest /path/to/backup.tar.gz
-
-# Example output:
-# Backup manifest for: config_backup_20241221_120000.tar.gz
-# ================================
-# Server Helper Configuration Backup
-# Created: Sat Dec 21 12:00:00 PST 2024
-# Hostname: docker-server
-# Kernel: 6.8.0-51-generic
-# Files backed up: 15
-```
-
-### Restore Procedures
-
-#### Restore Dockge Data
-```bash
-sudo ./server_helper_setup.sh restore
-
-# Select backup:
-# - Type filename, or
-# - Type 'latest' for most recent
-```
-
-#### Restore Configuration Files
-```bash
-sudo ./server_helper_setup.sh restore-config
-
-# Emergency backup created automatically
-# Review changes after restore
-```
-
-**Important**: 
-- Emergency backups created before every restore
-- Review restored files, especially SSH config
-- Reboot may be required after config restore
 
 ---
 
-## 📊 Monitoring
+## 🚀 Usage
 
-### Monitoring Service
+### Initial Setup Workflow
 
-When enabled as a systemd service, monitors every **2 minutes**:
+```bash
+# 1. Create and configure
+sudo ./server_helper_setup.sh              # Creates config, runs pre-check
+sudo ./server_helper_setup.sh edit-config  # Edit settings
+sudo ./server_helper_setup.sh setup        # Run setup
 
-1. **NAS Health**
-   - Mount point availability
-   - Network connectivity
+# 2. Enable auto-start (recommended)
+sudo ./server_helper_setup.sh enable-autostart
+
+# 3. Start monitoring
+sudo ./server_helper_setup.sh start
+```
+
+### Daily Operations
+
+```bash
+# Check system status
+sudo ./server_helper_setup.sh service-status
+
+# View live logs
+sudo ./server_helper_setup.sh logs
+
+# Create manual backup
+sudo ./server_helper_setup.sh backup
+
+# Check for updates
+sudo ./server_helper_setup.sh check-updates
+
+# Run security audit
+sudo ./server_helper_setup.sh security-audit
+```
+
+---
+
+## 📋 Complete Command Reference
+
+### 🔧 Configuration Management
+
+| Command | Description |
+|---------|-------------|
+| `edit-config` | Edit configuration file with nano/vim |
+| `show-config` | Display config (passwords masked) |
+| `validate-config` | Validate configuration settings |
+
+**Examples:**
+```bash
+sudo ./server_helper_setup.sh edit-config
+sudo ./server_helper_setup.sh show-config
+sudo ./server_helper_setup.sh validate-config
+```
+
+---
+
+### 🚀 Setup & Monitoring
+
+| Command | Description |
+|---------|-------------|
+| `setup` | Run full setup with pre-installation check |
+| `monitor` | Start monitoring in foreground |
+
+**Examples:**
+```bash
+sudo ./server_helper_setup.sh setup       # Full setup with detection
+DEBUG=true sudo ./server_helper_setup.sh setup  # With debug logging
+sudo ./server_helper_setup.sh monitor     # Manual monitoring
+```
+
+---
+
+### 🔍 Installation Management (NEW)
+
+| Command | Description |
+|---------|-------------|
+| `check-install` | Check for existing installation |
+| `remove-install` | Remove all existing components |
+
+**Examples:**
+```bash
+# Check what's installed
+sudo ./server_helper_setup.sh check-install
+
+# Remove everything
+sudo ./server_helper_setup.sh remove-install
+```
+
+---
+
+### ⚙️ Service Management (Auto-Start)
+
+| Command | Description |
+|---------|-------------|
+| `enable-autostart` | Create systemd service for boot |
+| `disable-autostart` | Remove systemd service |
+| `start` | Start the service now |
+| `stop` | Stop the service |
+| `restart` | Restart the service |
+| `service-status` | Show service status |
+| `logs` | View live service logs |
+
+**Examples:**
+```bash
+sudo ./server_helper_setup.sh enable-autostart
+sudo ./server_helper_setup.sh start
+sudo ./server_helper_setup.sh service-status
+sudo ./server_helper_setup.sh logs
+
+# Or use systemctl directly:
+sudo systemctl status server-helper
+sudo journalctl -u server-helper -f
+```
+
+---
+
+### 💾 Backup & Restore
+
+| Command | Description |
+|---------|-------------|
+| `backup` | Create Dockge backup (includes config auto) |
+| `backup-config` | Backup configuration files only (NEW) |
+| `backup-all` | Backup everything explicitly |
+| `restore` | Restore Dockge from backup (interactive) |
+| `restore-config` | Restore configuration from backup (NEW) |
+| `list-backups` | List all available backups |
+| `show-manifest` | Show backup contents (NEW) |
+
+**Examples:**
+```bash
+# Backup operations
+sudo ./server_helper_setup.sh backup              # Dockge + Config
+sudo ./server_helper_setup.sh backup-config       # Config only
+sudo ./server_helper_setup.sh backup-all          # Explicit all
+
+# View backups
+sudo ./server_helper_setup.sh list-backups
+sudo ./server_helper_setup.sh show-manifest /path/to/backup.tar.gz
+
+# Restore operations
+sudo ./server_helper_setup.sh restore             # Restore Dockge
+sudo ./server_helper_setup.sh restore-config      # Restore config
+
+# Debug backup
+DEBUG=true sudo ./server_helper_setup.sh backup
+```
+
+**Automatic Backups:**
+- Runs every 6 hours during monitoring
+- Stored on NAS: `$NAS_MOUNT_POINT/dockge_backups/`
+- Config backups: `$NAS_MOUNT_POINT/dockge_backups/config/`
+- Auto-cleanup: Deletes backups older than 30 days (configurable)
+- Emergency backups created before any restore
+
+---
+
+### 🖥️ System Management
+
+| Command | Description |
+|---------|-------------|
+| `set-hostname <name>` | Set system hostname |
+| `show-hostname` | Display current hostname |
+
+**Examples:**
+```bash
+sudo ./server_helper_setup.sh set-hostname docker-server-01
+sudo ./server_helper_setup.sh show-hostname
+```
+
+---
+
+### 🧹 Disk Management
+
+| Command | Description |
+|---------|-------------|
+| `clean-disk` | Run disk cleanup manually |
+| `disk-space` | Show disk usage information |
+
+**Examples:**
+```bash
+sudo ./server_helper_setup.sh clean-disk
+sudo ./server_helper_setup.sh disk-space
+DEBUG=true sudo ./server_helper_setup.sh clean-disk  # With debug
+```
+
+**What Gets Cleaned:**
+- APT cache and old packages
+- Old kernel versions
+- Docker (stopped containers, dangling images, unused volumes)
+- System logs (keeps last 7 days)
+- Temporary files
+
+**Automatic Cleanup:**
+- Triggers when disk usage exceeds 80% (configurable)
+- Runs during monitoring checks
+
+---
+
+### 🔄 System Updates
+
+| Command | Description |
+|---------|-------------|
+| `update` | Update system packages |
+| `full-upgrade` | Full system upgrade (interactive) |
+| `check-updates` | Check for available updates |
+| `update-status` | Show detailed update status |
+| `schedule-reboot [time]` | Schedule system reboot |
+
+**Examples:**
+```bash
+sudo ./server_helper_setup.sh update
+sudo ./server_helper_setup.sh check-updates
+sudo ./server_helper_setup.sh schedule-reboot 03:00
+sudo ./server_helper_setup.sh full-upgrade
+DEBUG=true sudo ./server_helper_setup.sh update  # With debug
+```
+
+**Automatic Updates:**
+- Enable in config: `AUTO_UPDATE_ENABLED="true"`
+- Checks every 24 hours (configurable)
+- Auto-reboot option available
+
+---
+
+### 🔒 Security & Compliance
+
+| Command | Description |
+|---------|-------------|
+| `security-audit` | Run complete security audit |
+| `security-status` | Show detailed security status |
+| `security-harden` | Apply all security hardening |
+| `setup-fail2ban` | Install/configure fail2ban |
+| `setup-ufw` | Setup UFW firewall |
+| `harden-ssh` | Harden SSH configuration |
+
+**Examples:**
+```bash
+sudo ./server_helper_setup.sh security-audit
+sudo ./server_helper_setup.sh security-status
+sudo ./server_helper_setup.sh security-harden
+DEBUG=true sudo ./server_helper_setup.sh security-audit  # With debug
+```
+
+**Security Audit Checks:**
+- ✅ SSH configuration (root login, password auth)
+- ✅ Firewall status (UFW)
+- ✅ Intrusion prevention (fail2ban)
+- ✅ File permissions
+- ✅ User account security
+- ✅ Docker security
+- ✅ Automatic updates configured
+
+**Security Hardening Includes:**
+- **fail2ban**: Protects against brute force attacks
+- **UFW Firewall**: Default deny with specific allows
+- **SSH Hardening**: Disables password auth, root login
+- **Unattended Upgrades**: Automatic security patches
+
+---
+
+## 📁 Configuration File
+
+### Location
+`/opt/Server-Helper/server-helper.conf`
+
+### Required Settings
+
+```bash
+# NAS Configuration
+NAS_IP="192.168.1.100"              # Your NAS IP address
+NAS_SHARE="share"                    # Your NAS share name
+NAS_USERNAME="your_username"         # NAS username
+NAS_PASSWORD="your_password"         # NAS password
+```
+
+### Optional Settings
+
+```bash
+# Dockge
+DOCKGE_PORT="5001"
+DOCKGE_DATA_DIR="/opt/dockge"
+BACKUP_DIR="$NAS_MOUNT_POINT/dockge_backups"
+BACKUP_RETENTION_DAYS="30"
+
+# Uptime Kuma (leave empty to disable)
+UPTIME_KUMA_NAS_URL=""
+UPTIME_KUMA_DOCKGE_URL=""
+UPTIME_KUMA_SYSTEM_URL=""
+
+# Automatic Features
+DISK_CLEANUP_THRESHOLD="80"
+AUTO_CLEANUP_ENABLED="true"
+AUTO_UPDATE_ENABLED="false"
+UPDATE_CHECK_INTERVAL="24"
+AUTO_REBOOT_ENABLED="false"
+REBOOT_TIME="03:00"
+
+# Security
+SECURITY_CHECK_ENABLED="true"
+SECURITY_CHECK_INTERVAL="12"
+FAIL2BAN_ENABLED="false"
+UFW_ENABLED="false"
+SSH_HARDENING_ENABLED="false"
+
+# Debug
+DEBUG="false"
+```
+
+---
+
+## 🔄 Monitoring Features
+
+### What Gets Monitored (Every 2 Minutes)
+
+1. **NAS Connectivity**
+   - Mount point status
+   - Network accessibility
    - Auto-remount on failure
 
-2. **Dockge Status**
-   - Container running state
+2. **Dockge Service**
+   - Container running status
    - Web interface responsiveness
    - Auto-restart on failure
 
 3. **Disk Usage**
-   - Current usage percentage
-   - Auto-cleanup when > threshold
-   - Space-freed reporting
+   - Automatic cleanup at threshold
+   - Real-time usage reporting
 
-4. **System Updates** (configurable interval)
-   - Available updates check
-   - Automatic installation (if enabled)
-   - Scheduled reboot handling
+4. **System Updates**
+   - Periodic update checks
+   - Automatic installation (optional)
+   - Scheduled reboots (optional)
 
-5. **Security Checks** (configurable interval)
-   - Security audit execution
-   - Issue detection and logging
+5. **Security**
+   - Periodic security audits
+   - Issue detection and reporting
 
-### Heartbeat Monitoring
+### Uptime Kuma Integration
 
+Configure push monitor URLs in config file:
 ```bash
-# Configure in server-helper.conf
 UPTIME_KUMA_NAS_URL="http://uptime-kuma:3001/api/push/abc123"
 UPTIME_KUMA_DOCKGE_URL="http://uptime-kuma:3001/api/push/def456"
 UPTIME_KUMA_SYSTEM_URL="http://uptime-kuma:3001/api/push/ghi789"
 ```
 
-Sends status every 2 minutes:
-- `?status=up` - Service healthy
-- `?status=down` - Service failed
+Monitors send:
+- Status: `up` or `down`
+- Messages: Detailed error information
+- Heartbeat: Every 2 minutes
 
-### Log Monitoring
+---
 
-```bash
-# Real-time logs
-sudo ./server_helper_setup.sh logs
+## 📂 File Structure
 
-# Last 50 entries
-sudo journalctl -u server-helper -n 50
+```
+/opt/Server-Helper/
+├── server_helper_setup.sh    # Main script
+├── server-helper.conf         # Configuration (chmod 600)
+└── lib/                       # Library modules
+    ├── core.sh               # Core utilities (enhanced debug)
+    ├── config.sh             # Configuration management
+    ├── validation.sh         # Input validation
+    ├── preinstall.sh         # Pre-installation detection (NEW)
+    ├── nas.sh                # NAS management
+    ├── docker.sh             # Docker/Dockge
+    ├── backup.sh             # Backup/restore (enhanced)
+    ├── disk.sh               # Disk management
+    ├── updates.sh            # System updates
+    ├── security.sh           # Security features
+    ├── service.sh            # Systemd service
+    ├── menu.sh               # Interactive menu
+    └── uninstall.sh          # Uninstallation
 
-# All logs today
-sudo journalctl -u server-helper --since today
+/opt/dockge/
+├── docker-compose.yml
+├── data/
+└── stacks/
 
-# Error log
-sudo tail -f /var/log/server-helper/error.log
+/mnt/nas/dockge_backups/
+├── dockge_backup_20241221_120000.tar.gz
+├── dockge_backup_20241221_180000.tar.gz
+└── config/
+    ├── config_backup_20241221_120005.tar.gz
+    └── config_backup_20241221_180005.tar.gz
+
+/opt/dockge_backups_local/    # Fallback location
+└── config/
+
+/etc/systemd/system/
+└── server-helper.service      # Systemd service
+
+/var/log/server-helper/
+├── server-helper.log          # Main log (includes debug)
+└── error.log                  # Error log
+
+/root/
+├── .nascreds_*                # NAS credentials (chmod 600)
+└── emergency_*_backup_*.tar.gz  # Emergency backups
 ```
 
 ---
 
-## 🔒 Security
+## 🛡️ Security Best Practices
 
-### Security Features
-
-#### 1. fail2ban
-Protects against brute-force attacks:
+### 1. Protect Configuration File
 ```bash
-sudo ./server_helper_setup.sh setup-fail2ban
+sudo chmod 600 /opt/Server-Helper/server-helper.conf
 ```
 
-**Configuration**:
-- SSH: 3 failed attempts = 24-hour ban
-- Ban time: 1 hour (default services)
-- Find time: 10 minutes
-
-#### 2. UFW Firewall
-Simple firewall management:
+### 2. Use SSH Keys
+Before enabling SSH hardening:
 ```bash
-sudo ./server_helper_setup.sh setup-ufw
-```
+# On your local machine
+ssh-copy-id user@server
 
-**Default Rules**:
-- Deny all incoming
-- Allow all outgoing
-- Allow: SSH (22), HTTP (80), HTTPS (443), Dockge (5001)
+# Test SSH key login
+ssh user@server
 
-#### 3. SSH Hardening
-Secure SSH configuration:
-```bash
+# Then enable hardening
 sudo ./server_helper_setup.sh harden-ssh
 ```
 
-**Changes Applied**:
-- Disable root login
-- Disable password authentication
-- Enable public key authentication only
-- Disable empty passwords
-- Disable X11 forwarding
-- Limit authentication attempts to 3
-
-**⚠️ Warning**: Have SSH keys configured before hardening!
-
-#### 4. Security Audit
-Comprehensive security check:
+### 3. Enable Security Features
 ```bash
-sudo ./server_helper_setup.sh security-audit
-```
-
-**Checks**:
-- ✅ Root login status
-- ✅ UFW firewall active
-- ✅ fail2ban running
-- ✅ Password authentication status
-- ✅ Reports issues found
-
-### Applying All Security Hardening
-
-```bash
-# Interactive hardening (recommended)
-sudo ./server_helper_setup.sh security-harden
-
-# Or configure in server-helper.conf
+# Edit config
 FAIL2BAN_ENABLED="true"
 UFW_ENABLED="true"
 SSH_HARDENING_ENABLED="true"
+
+# Apply hardening
+sudo ./server_helper_setup.sh security-harden
 ```
 
-### Best Practices
+### 4. Regular Audits
+```bash
+# Run security audit regularly
+sudo ./server_helper_setup.sh security-audit
 
-1. **Before SSH Hardening**:
-   ```bash
-   # On your local machine
-   ssh-copy-id user@server
-   
-   # Test key-based login
-   ssh user@server
-   ```
-
-2. **After UFW Setup**:
-   - Ensure you have console access
-   - Test SSH connection
-   - Add custom rules as needed
-
-3. **Regular Audits**:
-   ```bash
-   # Run monthly
-   sudo ./server_helper_setup.sh security-audit
-   ```
-
-4. **Monitor Security Logs**:
-   ```bash
-   # fail2ban status
-   sudo fail2ban-client status sshd
-   
-   # UFW logs
-   sudo tail -f /var/log/ufw.log
-   ```
+# With debug for detailed info
+DEBUG=true sudo ./server_helper_setup.sh security-audit
+```
 
 ---
 
-## 🔍 Troubleshooting
+## 🔧 Troubleshooting
 
-### Common Issues
+### Enable Debug Mode First
 
-#### NAS Mount Failures
-
-**Symptoms**: 
-- "NAS required but failed" error
-- Mount point not accessible
-
-**Solutions**:
+For any issue, enable debug mode to see detailed information:
 ```bash
-# 1. Check NAS connectivity
-ping $NAS_IP
-
-# 2. Verify credentials in config
-sudo ./server_helper_setup.sh show-config
-
-# 3. Test manual mount
-sudo mount -t cifs //NAS_IP/SHARE /mnt/nas -o username=USER,password=PASS,vers=3.0
-
-# 4. Check SMB version support
-sudo mount -t cifs //NAS_IP/SHARE /mnt/nas -o username=USER,password=PASS,vers=2.1
-
-# 5. View detailed logs
-sudo ./server_helper_setup.sh logs
-
-# 6. If NAS is optional, set in config:
-NAS_MOUNT_REQUIRED="false"
+DEBUG=true sudo ./server_helper_setup.sh <command>
 ```
 
-#### Dockge Not Starting
+### NAS Not Mounting
 
-**Symptoms**:
-- Can't access http://server:5001
-- Container not running
-
-**Solutions**:
 ```bash
-# 1. Check Docker status
-sudo systemctl status docker
-sudo systemctl start docker
+# Check with debug
+DEBUG=true sudo ./server_helper_setup.sh mount-nas
 
-# 2. Check Dockge container
-sudo docker ps -a | grep dockge
+# Check NAS connectivity
+ping $NAS_IP
 
-# 3. View Dockge logs
+# Verify credentials
+sudo ./server_helper_setup.sh show-config
+
+# Check mount manually
+sudo mount -t cifs //$NAS_IP/$NAS_SHARE /mnt/nas -o username=xxx,password=xxx
+```
+
+### Service Not Starting
+
+```bash
+# Check service status with debug
+DEBUG=true sudo ./server_helper_setup.sh service-status
+
+# View detailed logs
+sudo journalctl -u server-helper -n 50
+
+# Check all logs
+tail -f /var/log/server-helper/server-helper.log
+```
+
+### Dockge Not Accessible
+
+```bash
+# Check with debug
+DEBUG=true sudo ./server_helper_setup.sh monitor
+
+# Check Docker status
+sudo docker ps
+
+# Check Dockge logs
 cd /opt/dockge
 sudo docker compose logs
 
-# 4. Restart Dockge
-cd /opt/dockge
+# Restart Dockge
 sudo docker compose restart
-
-# 5. Check port availability
-sudo ss -tulpn | grep :5001
-
-# 6. Rebuild if necessary
-cd /opt/dockge
-sudo docker compose down
-sudo docker compose up -d
 ```
 
-#### Service Won't Start
+### Pre-Installation Check Issues
 
-**Symptoms**:
-- systemd service fails
-- "Service not installed" error
-
-**Solutions**:
 ```bash
-# 1. Check service status
+# Run manual check
+sudo ./server_helper_setup.sh check-install
+
+# With debug output
+DEBUG=true sudo ./server_helper_setup.sh check-install
+
+# Remove all components
+sudo ./server_helper_setup.sh remove-install
+```
+
+### Backup/Restore Issues
+
+```bash
+# Check backups with debug
+DEBUG=true sudo ./server_helper_setup.sh list-backups
+
+# Show what's in a backup
+sudo ./server_helper_setup.sh show-manifest /path/to/backup.tar.gz
+
+# Restore with debug
+DEBUG=true sudo ./server_helper_setup.sh restore-config
+```
+
+---
+
+## 📊 Quick Reference Card
+
+### Most Common Commands
+
+```bash
+# Status & Logs
 sudo ./server_helper_setup.sh service-status
+sudo ./server_helper_setup.sh logs
+DEBUG=true sudo ./server_helper_setup.sh service-status  # With debug
 
-# 2. View systemd logs
-sudo journalctl -u server-helper -n 50 --no-pager
+# Installation
+sudo ./server_helper_setup.sh check-install    # Check existing
+sudo ./server_helper_setup.sh setup            # Install (with detection)
 
-# 3. Check script permissions
-ls -la server_helper_setup.sh
-chmod +x server_helper_setup.sh
+# Backups
+sudo ./server_helper_setup.sh backup           # Dockge + Config
+sudo ./server_helper_setup.sh backup-config    # Config only
+sudo ./server_helper_setup.sh list-backups     # List all
 
-# 4. Verify all modules exist
-ls -la lib/
-
-# 5. Recreate service
-sudo ./server_helper_setup.sh disable-autostart
-sudo ./server_helper_setup.sh enable-autostart
-
-# 6. Manual service control
-sudo systemctl daemon-reload
-sudo systemctl enable server-helper
-sudo systemctl start server-helper
-```
-
-#### Disk Space Issues
-
-**Symptoms**:
-- "No space left on device"
-- Backups failing
-- Docker errors
-
-**Solutions**:
-```bash
-# 1. Check disk usage
-sudo ./server_helper_setup.sh disk-space
-
-# 2. Run cleanup
+# Maintenance
+sudo ./server_helper_setup.sh check-updates
 sudo ./server_helper_setup.sh clean-disk
+sudo ./server_helper_setup.sh security-audit
 
-# 3. Check Docker space
-sudo docker system df
-
-# 4. Aggressive Docker cleanup
-sudo docker system prune -a --volumes
-
-# 5. Remove old backups
-find $BACKUP_DIR -name "*.tar.gz" -mtime +30 -delete
-
-# 6. Check for large files
-sudo du -h / | sort -rh | head -20
+# Service Control
+sudo systemctl start server-helper
+sudo systemctl stop server-helper
+sudo systemctl restart server-helper
 ```
 
-#### Module Loading Errors
+### Emergency Commands
 
-**Symptoms**:
-- "Module not found" error
-- "No such file or directory"
-
-**Solutions**:
 ```bash
-# 1. Verify file structure
-ls -la lib/
+# Stop monitoring immediately
+sudo ./server_helper_setup.sh stop
 
-# Required files:
-# lib/core.sh
-# lib/config.sh
-# lib/validation.sh
-# lib/nas.sh
-# lib/docker.sh
-# lib/backup.sh
-# lib/disk.sh
-# lib/updates.sh
-# lib/security.sh
-# lib/service.sh
-# lib/menu.sh
-# lib/uninstall.sh
+# Check what's installed
+sudo ./server_helper_setup.sh check-install
 
-# 2. Make all modules executable
-chmod +x lib/*.sh
+# Restore from latest backup
+sudo ./server_helper_setup.sh restore
+# Type: latest
 
-# 3. Check for syntax errors
-bash -n server_helper_setup.sh
-bash -n lib/*.sh
+# Restore config from latest
+sudo ./server_helper_setup.sh restore-config
+# Type: latest
 
-# 4. Run with debug mode
+# Complete removal
+sudo ./server_helper_setup.sh remove-install
+
+# Manual NAS unmount
+sudo umount -f /mnt/nas
+```
+
+### Debug Mode Examples
+
+```bash
+# Setup with debug
 DEBUG=true sudo ./server_helper_setup.sh setup
-```
 
-### Debug Mode
+# Backup with debug
+DEBUG=true sudo ./server_helper_setup.sh backup
 
-Enable detailed logging for troubleshooting:
+# Monitor with debug
+DEBUG=true sudo ./server_helper_setup.sh monitor
 
-```bash
-# Temporary (one command)
-DEBUG=true sudo ./server_helper_setup.sh [command]
-
-# Permanent (in config)
-sudo nano server-helper.conf
-# Set: DEBUG="true"
-
-# Then restart service
-sudo ./server_helper_setup.sh restart
-```
-
-### Getting Help
-
-1. **Check Logs**:
-   ```bash
-   # Main log
-   sudo tail -100 /var/log/server-helper/server-helper.log
-   
-   # Error log
-   sudo cat /var/log/server-helper/error.log
-   
-   # Systemd journal
-   sudo journalctl -u server-helper -n 100
-   ```
-
-2. **Run Validation**:
-   ```bash
-   sudo ./server_helper_setup.sh validate-config
-   ```
-
-3. **Create Issue on GitHub**:
-   - Include log output
-   - Include configuration (remove passwords!)
-   - Describe steps to reproduce
-
----
-
-## 🗑️ Uninstallation
-
-The uninstall process is interactive and safe:
-
-```bash
-sudo ./server_helper_setup.sh uninstall
-```
-
-### What Gets Removed (with confirmation)
-
-1. **Systemd Service**
-   - Stops service
-   - Disables auto-start
-   - Removes service file
-
-2. **NAS Mounts**
-   - Unmounts all NAS shares
-   - Removes fstab entries
-   - Keeps credentials (optional)
-
-3. **Dockge**
-   - Stops containers
-   - Option to delete data
-   - Creates final backup (optional)
-
-4. **Docker**
-   - Option to remove Docker completely
-   - Requires typing "yes" to confirm
-   - Option to keep Docker data
-
-5. **Configuration Files**
-   - server-helper.conf
-   - NAS credentials
-
-6. **Backups**
-   - Requires typing "DELETE" to confirm
-   - Creates list before deletion
-
-7. **Script Files**
-   - Server Helper directory
-   - Option to remove entirely
-
-### Safe Uninstall Steps
-
-1. **Create Final Backup**:
-   ```bash
-   sudo ./server_helper_setup.sh backup-all
-   ```
-
-2. **Copy Backups Off Server** (if needed):
-   ```bash
-   scp -r user@server:/mnt/nas/dockge_backups ./local-backups
-   ```
-
-3. **Run Uninstall**:
-   ```bash
-   sudo ./server_helper_setup.sh uninstall
-   ```
-
-4. **Answer Prompts Carefully**:
-   - Read each prompt
-   - Confirm destructive actions
-   - Keep backups unless certain
-
-### Selective Removal
-
-You can skip any step during uninstall by answering "no" to prompts.
-
----
-
-## 📜 License
-
-This project is licensed under the **GNU General Public License v3.0**.
-
-See the [LICENSE](LICENSE) file for details.
-
-### Summary of GPL v3.0
-
-- ✅ Free to use, modify, and distribute
-- ✅ Must keep source code available
-- ✅ Must license modifications under GPL v3.0
-- ✅ No warranty provided
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Here's how:
-
-1. **Fork the Repository**
-2. **Create Feature Branch**: `git checkout -b feature/AmazingFeature`
-3. **Commit Changes**: `git commit -m 'Add AmazingFeature'`
-4. **Push to Branch**: `git push origin feature/AmazingFeature`
-5. **Open Pull Request**
-
-### Areas for Contribution
-
-- 🔧 Additional backup targets (databases, configs)
-- 🌐 NFS and WebDAV support
-- 📧 Email notifications
-- 🎨 Web dashboard
-- ☁️ Cloud storage integration
-- 🔄 Multi-server orchestration
-- 📱 Mobile notifications
-- 🐳 Additional container platforms
-
----
-
-## 📞 Support & Contact
-
-### Issues & Bugs
-
-Open an issue on GitHub with:
-- Log output (from `/var/log/server-helper/`)
-- Steps to reproduce
-- Expected vs. actual behavior
-- Configuration (remove sensitive data!)
-
-### Documentation
-
-- **This README** - Complete user guide
-- **Help Command**: `sudo ./server_helper_setup.sh help`
-- **Comments in Scripts** - Inline documentation
-- **Config File** - Comments explain each setting
-
----
-
-## 🙏 Acknowledgments
-
-- **Dockge** by [Louis Lam](https://github.com/louislam)
-- **Docker** by Docker Inc.
-- **Ubuntu Community**
-- **GNU/Linux** developers and maintainers
-
----
-
-## 📊 Quick Reference
-
-### Installation
-```bash
-git clone https://github.com/yourusername/Server-Helper.git
-cd Server-Helper
-chmod +x server_helper_setup.sh
-sudo ./server_helper_setup.sh
-```
-
-### Daily Commands
-```bash
-sudo ./server_helper_setup.sh service-status    # Check status
-sudo ./server_helper_setup.sh logs              # View logs
-sudo ./server_helper_setup.sh backup-all        # Create backup
-sudo ./server_helper_setup.sh security-audit    # Security check
-```
-
-### Maintenance
-```bash
-sudo ./server_helper_setup.sh check-updates     # Check updates
-sudo ./server_helper_setup.sh clean-disk        # Clean disk
-sudo ./server_helper_setup.sh list-backups      # List backups
+# Any command with debug
+DEBUG=true sudo ./server_helper_setup.sh <command>
 ```
 
 ---
 
-**Version**: 2.1.0  
-**Release**: Enhanced Config Backup Edition  
-**Target**: Ubuntu 24.04 LTS  
-**License**: GPL v3.0  
+## 📝 Changelog
 
-**🌟 Star this repo if you find it useful!**
+### Version 2.2.0 (Current)
+- ✨ Added pre-installation detection system
+- ✨ Added comprehensive debug logging to all functions
+- ✨ Added configuration file backup feature
+- ✨ Added selective component removal
+- ✨ Added backup manifest viewing
+- ✨ Enhanced error handling and logging
+- 🐛 Fixed module loading order
+- 🐛 Fixed NAS array handling
+- 📚 Comprehensive README update
+
+### Version 2.1.0
+- ✨ Added configuration backup to Dockge backups
+- ✨ Added backup manifest generation
+- 🐛 Improved backup reliability
+
+### Version 2.0.0
+- ✨ Modular architecture
+- ✨ Interactive menu system
+- ✨ Comprehensive monitoring
+
+---
+
+## 📝 License
+
+GNU General Public License v3.0 - See LICENSE file for details
+
+## 🤝 Support
+
+For issues, questions, or contributions:
+- Check debug logs: `tail -f /var/log/server-helper/server-helper.log`
+- Run with debug: `DEBUG=true sudo ./server_helper_setup.sh <command>`
+- Check pre-installation status: `sudo ./server_helper_setup.sh check-install`
+
+---
+
+## ✨ Summary
+
+**Server Helper v2.2** is your all-in-one solution for:
+- 🔧 Automated server setup with installation detection
+- 📊 24/7 monitoring with comprehensive debug logging
+- 💾 Reliable backups (Dockge + Configuration)
+- 🔒 Security hardening and auditing
+- 🔄 Update management
+- 🧹 Disk maintenance
+- 🐛 Detailed troubleshooting capabilities
+
+**Total Commands: 35+** | **Auto-Start: ✅** | **Security: ✅** | **Monitoring: ✅** | **Debug Mode: ✅**

@@ -1,49 +1,44 @@
 #!/bin/bash
-# Core Library - Essential utility functions - Enhanced with Debug
+# Core Library - Essential utility functions with debug support
 
 # Execute command with dry-run support
 execute() {
     local cmd="$1"
-    debug "execute called with command: $cmd"
+    
+    debug "execute() called with: $cmd"
     
     if [ "$DRY_RUN" = "true" ]; then
         log "[DRY-RUN] Would execute: $cmd"
-        debug "DRY_RUN mode active, command not executed"
         return 0
     else
-        debug "Executing command: $cmd"
+        debug "Executing: $cmd"
         eval "$cmd"
-        local result=$?
-        debug "Command returned: $result"
-        return $result
+        local exit_code=$?
+        debug "Command exit code: $exit_code"
+        return $exit_code
     fi
 }
 
 # Check if running as root
 require_root() {
-    debug "require_root called"
-    debug "EUID: $EUID"
-    
+    debug "require_root() - Checking if running as root"
     if [ "$EUID" -ne 0 ]; then
         error "This operation requires root privileges"
         error "Please run with sudo"
-        debug "User is not root, exiting"
         exit 1
     fi
-    
-    debug "Root check passed"
+    debug "Root check passed (EUID: $EUID)"
 }
 
 # Check if command exists
 command_exists() {
     local cmd="$1"
-    debug "command_exists called for: $cmd"
-    
+    debug "command_exists() - Checking for: $cmd"
     if command -v "$cmd" &> /dev/null; then
-        debug "Command exists: $cmd"
+        debug "Command found: $cmd"
         return 0
     else
-        debug "Command does not exist: $cmd"
+        debug "Command not found: $cmd"
         return 1
     fi
 }
@@ -51,13 +46,12 @@ command_exists() {
 # Check if service is running
 service_running() {
     local service="$1"
-    debug "service_running called for: $service"
-    
+    debug "service_running() - Checking service: $service"
     if systemctl is-active --quiet "$service"; then
-        debug "Service is running: $service"
+        debug "Service is active: $service"
         return 0
     else
-        debug "Service is not running: $service"
+        debug "Service is not active: $service"
         return 1
     fi
 }
@@ -65,13 +59,12 @@ service_running() {
 # Check if port is in use
 port_in_use() {
     local port="$1"
-    debug "port_in_use called for port: $port"
-    
+    debug "port_in_use() - Checking port: $port"
     if ss -tulpn | grep -q ":$port "; then
-        debug "Port is in use: $port"
+        debug "Port $port is in use"
         return 0
     else
-        debug "Port is not in use: $port"
+        debug "Port $port is available"
         return 1
     fi
 }
@@ -83,22 +76,19 @@ wait_for() {
     local interval="${3:-2}"
     local elapsed=0
     
-    debug "wait_for called"
-    debug "  Condition: $condition"
-    debug "  Timeout: $timeout seconds"
-    debug "  Interval: $interval seconds"
+    debug "wait_for() - Condition: $condition, Timeout: ${timeout}s, Interval: ${interval}s"
     
     while [ $elapsed -lt $timeout ]; do
-        debug "Checking condition (elapsed: $elapsed/$timeout)"
+        debug "wait_for() - Elapsed: ${elapsed}s / ${timeout}s"
         if eval "$condition"; then
-            debug "Condition met after $elapsed seconds"
+            debug "wait_for() - Condition met after ${elapsed}s"
             return 0
         fi
         sleep $interval
         elapsed=$((elapsed + interval))
     done
     
-    debug "Timeout reached after $timeout seconds"
+    debug "wait_for() - Timeout reached after ${timeout}s"
     return 1
 }
 
@@ -109,26 +99,23 @@ retry() {
     local cmd="$@"
     local attempt=1
     
-    debug "retry called"
-    debug "  Max attempts: $max_attempts"
-    debug "  Command: $cmd"
+    debug "retry() - Max attempts: $max_attempts, Command: $cmd"
     
     while [ $attempt -le $max_attempts ]; do
-        debug "Attempt $attempt/$max_attempts"
+        debug "retry() - Attempt $attempt/$max_attempts"
         if eval "$cmd"; then
-            debug "Command succeeded on attempt $attempt"
+            debug "retry() - Command succeeded on attempt $attempt"
             return 0
         fi
         
-        warning "Attempt $attempt/$max_attempts failed, retrying..."
-        local wait_time=$((attempt * 2))
-        debug "Waiting $wait_time seconds before retry"
-        sleep $wait_time
+        local backoff=$((attempt * 2))
+        warning "Attempt $attempt/$max_attempts failed, retrying in ${backoff}s..."
+        sleep $backoff
         attempt=$((attempt + 1))
     done
     
     error "Command failed after $max_attempts attempts"
-    debug "All retry attempts exhausted"
+    debug "retry() - All attempts exhausted"
     return 1
 }
 
@@ -137,9 +124,7 @@ confirm() {
     local prompt="$1"
     local default="${2:-n}"
     
-    debug "confirm called"
-    debug "  Prompt: $prompt"
-    debug "  Default: $default"
+    debug "confirm() - Prompt: $prompt, Default: $default"
     
     if [ "$default" = "y" ]; then
         read -p "$prompt [Y/n]: " -n 1 -r
@@ -148,41 +133,31 @@ confirm() {
     fi
     
     echo
-    debug "User reply: ${REPLY:-<enter>}"
     
+    local result
     if [ "$default" = "y" ]; then
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            debug "User confirmed (default yes)"
-            return 0
-        else
-            debug "User declined"
-            return 1
-        fi
+        result=[[ ! $REPLY =~ ^[Nn]$ ]]
     else
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            debug "User confirmed"
-            return 0
-        else
-            debug "User declined (default no)"
-            return 1
-        fi
+        result=[[ $REPLY =~ ^[Yy]$ ]]
     fi
+    
+    debug "confirm() - User response: $REPLY, Result: $result"
+    return $result
 }
 
 # Progress indicator
 show_progress() {
     local msg="$1"
-    debug "show_progress called with message: $msg"
+    debug "show_progress() - Starting: $msg"
     echo -n "$msg"
     
-    debug "Waiting for background process $!"
     while kill -0 $! 2>/dev/null; do
         echo -n "."
         sleep 1
     done
     
     echo " Done"
-    debug "Progress complete"
+    debug "show_progress() - Completed"
 }
 
 # Get yes/no input
@@ -190,16 +165,14 @@ get_yes_no() {
     local prompt="$1"
     local default="${2:-n}"
     
-    debug "get_yes_no called"
-    debug "  Prompt: $prompt"
-    debug "  Default: $default"
+    debug "get_yes_no() - Prompt: $prompt, Default: $default"
     
     while true; do
         if confirm "$prompt" "$default"; then
-            debug "Returning yes (0)"
+            debug "get_yes_no() - User confirmed"
             return 0
         else
-            debug "Returning no (1)"
+            debug "get_yes_no() - User declined"
             return 1
         fi
     done
@@ -211,26 +184,22 @@ safe_copy() {
     local dest="$2"
     local backup="${3:-true}"
     
-    debug "safe_copy called"
-    debug "  Source: $src"
-    debug "  Destination: $dest"
-    debug "  Backup: $backup"
+    debug "safe_copy() - Source: $src, Dest: $dest, Backup: $backup"
     
     if [ ! -f "$src" ]; then
         error "Source file not found: $src"
-        debug "Source file does not exist"
         return 1
     fi
     
     if [ -f "$dest" ] && [ "$backup" = "true" ]; then
         local backup_file="${dest}.backup.$(date +%Y%m%d_%H%M%S)"
-        debug "Backing up existing file to: $backup_file"
+        debug "Backing up $dest to $backup_file"
         sudo cp "$dest" "$backup_file"
     fi
     
     debug "Copying $src to $dest"
     sudo cp "$src" "$dest"
-    debug "Copy completed"
+    debug "safe_copy() - Completed successfully"
 }
 
 # Create directory safely
@@ -238,17 +207,15 @@ safe_mkdir() {
     local dir="$1"
     local mode="${2:-755}"
     
-    debug "safe_mkdir called"
-    debug "  Directory: $dir"
-    debug "  Mode: $mode"
+    debug "safe_mkdir() - Directory: $dir, Mode: $mode"
     
     if [ ! -d "$dir" ]; then
-        debug "Directory does not exist, creating"
+        debug "Creating directory: $dir (mode: $mode)"
         sudo mkdir -p "$dir"
         sudo chmod "$mode" "$dir"
-        debug "Directory created with mode $mode"
+        debug "safe_mkdir() - Directory created"
     else
-        debug "Directory already exists"
+        debug "safe_mkdir() - Directory already exists: $dir"
     fi
 }
 
@@ -257,9 +224,7 @@ safe_rmdir() {
     local dir="$1"
     local force="${2:-false}"
     
-    debug "safe_rmdir called"
-    debug "  Directory: $dir"
-    debug "  Force: $force"
+    debug "safe_rmdir() - Directory: $dir, Force: $force"
     
     if [ ! -d "$dir" ]; then
         debug "Directory doesn't exist: $dir"
@@ -267,14 +232,14 @@ safe_rmdir() {
     fi
     
     if [ "$force" = "true" ]; then
-        debug "Force mode, removing without confirmation"
+        debug "Force removing directory: $dir"
         sudo rm -rf "$dir"
     else
         if confirm "Remove directory $dir?"; then
-            debug "User confirmed removal"
+            debug "User confirmed removal of: $dir"
             sudo rm -rf "$dir"
         else
-            debug "User declined removal"
+            debug "User cancelled removal of: $dir"
         fi
     fi
 }
@@ -282,14 +247,14 @@ safe_rmdir() {
 # Get file size in human readable format
 get_file_size() {
     local file="$1"
-    debug "get_file_size called for: $file"
+    debug "get_file_size() - File: $file"
     
     if [ -f "$file" ]; then
         local size=$(du -h "$file" | cut -f1)
-        debug "File size: $size"
+        debug "get_file_size() - Size: $size"
         echo "$size"
     else
-        debug "File does not exist"
+        debug "get_file_size() - File not found: $file"
         echo "0"
     fi
 }
@@ -299,27 +264,24 @@ check_disk_space() {
     local path="${1:-/}"
     local threshold="${2:-90}"
     
-    debug "check_disk_space called"
-    debug "  Path: $path"
-    debug "  Threshold: $threshold%"
+    debug "check_disk_space() - Path: $path, Threshold: $threshold%"
     
     local usage=$(df "$path" | awk 'NR==2 {print $5}' | sed 's/%//')
-    debug "Current usage: $usage%"
+    debug "check_disk_space() - Current usage: $usage%"
     
     if [ "$usage" -ge "$threshold" ]; then
         warning "Disk usage at $usage% (threshold: $threshold%)"
-        debug "Usage exceeds threshold"
         return 1
     fi
     
-    debug "Usage within threshold"
+    debug "check_disk_space() - Usage within threshold"
     return 0
 }
 
 # Timestamp function
 timestamp() {
     local ts=$(date '+%Y%m%d_%H%M%S')
-    debug "timestamp generated: $ts"
+    debug "timestamp() - Generated: $ts"
     echo "$ts"
 }
 
@@ -329,7 +291,7 @@ format_bytes() {
     local units=("B" "KB" "MB" "GB" "TB")
     local unit=0
     
-    debug "format_bytes called with: $bytes"
+    debug "format_bytes() - Input: $bytes bytes"
     
     while [ $bytes -ge 1024 ] && [ $unit -lt 4 ]; do
         bytes=$((bytes / 1024))
@@ -337,6 +299,6 @@ format_bytes() {
     done
     
     local result="${bytes}${units[$unit]}"
-    debug "Formatted result: $result"
+    debug "format_bytes() - Output: $result"
     echo "$result"
 }
