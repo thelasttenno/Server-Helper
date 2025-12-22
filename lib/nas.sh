@@ -113,3 +113,156 @@ list_nas_shares() {
         mountpoint -q "$NAS_MOUNT_POINT" && echo "1. ✓ //$NAS_IP/$NAS_SHARE -> $NAS_MOUNT_POINT" || echo "1. ✗ //$NAS_IP/$NAS_SHARE -> $NAS_MOUNT_POINT"
     fi
 }
+
+emergency_unmount_nas() {
+    debug "[emergency_unmount_nas] Starting emergency unmount procedure"
+    local mount_point="${1:-$NAS_MOUNT_POINT}"
+
+    log ""
+    log "═══════════════════════════════════════════════════════"
+    log "         Emergency NAS Unmount Procedure"
+    log "═══════════════════════════════════════════════════════"
+    log ""
+    log "Target: $mount_point"
+
+    # Check if mount point exists
+    if [ ! -d "$mount_point" ]; then
+        error "Mount point does not exist: $mount_point"
+        return 1
+    fi
+
+    # Check if actually mounted
+    if ! mountpoint -q "$mount_point" 2>/dev/null; then
+        log "✓ $mount_point is not mounted"
+        log "Cleaning up fstab anyway..."
+        sudo sed -i.backup '/cifs.*_netdev/d' /etc/fstab 2>/dev/null || true
+        log "✓ Done"
+        return 0
+    fi
+
+    # Change to safe directory
+    debug "[emergency_unmount_nas] Changing to safe directory"
+    cd /tmp || cd /
+
+    # Show what's using the mount
+    log ""
+    warning "Checking for processes using $mount_point..."
+    if command_exists lsof; then
+        local procs=$(sudo lsof "$mount_point" 2>/dev/null | tail -n +2)
+        if [ -n "$procs" ]; then
+            warning "Processes found:"
+            echo "$procs"
+            echo ""
+            if confirm "Kill these processes?"; then
+                log "Killing processes..."
+                sudo fuser -km "$mount_point" 2>/dev/null || true
+                sleep 2
+                log "✓ Processes killed"
+            else
+                warning "Unmount may fail with active processes"
+            fi
+        else
+            log "✓ No processes found"
+        fi
+    else
+        warning "lsof not available, skipping process check"
+        log "Installing lsof is recommended: sudo apt-get install lsof"
+    fi
+
+    # Try unmount methods
+    log ""
+    warning "Attempting to unmount $mount_point..."
+    log ""
+
+    local success=false
+
+    # Method 1: Normal unmount
+    debug "[emergency_unmount_nas] Method 1: Normal unmount"
+    if sudo umount "$mount_point" 2>/dev/null; then
+        log "✓ Method 1: Normal unmount - Success"
+        success=true
+    else
+        warning "✗ Method 1: Normal unmount - Failed"
+
+        # Method 2: Lazy unmount
+        debug "[emergency_unmount_nas] Method 2: Lazy unmount"
+        if sudo umount -l "$mount_point" 2>/dev/null; then
+            log "✓ Method 2: Lazy unmount (-l) - Success"
+            success=true
+        else
+            warning "✗ Method 2: Lazy unmount - Failed"
+
+            # Method 3: Force unmount
+            debug "[emergency_unmount_nas] Method 3: Force unmount"
+            if sudo umount -f "$mount_point" 2>/dev/null; then
+                log "✓ Method 3: Force unmount (-f) - Success"
+                success=true
+            else
+                warning "✗ Method 3: Force unmount - Failed"
+
+                # Method 4: Force + Lazy
+                debug "[emergency_unmount_nas] Method 4: Force + Lazy"
+                if sudo umount -fl "$mount_point" 2>/dev/null; then
+                    log "✓ Method 4: Force + Lazy (-fl) - Success"
+                    success=true
+                else
+                    error "✗ Method 4: Force + Lazy - Failed"
+                fi
+            fi
+        fi
+    fi
+
+    log ""
+
+    # Check result
+    if [ "$success" = true ]; then
+        log "═══════════════════════════════════════════════════════"
+        log "         Unmount Successful!"
+        log "═══════════════════════════════════════════════════════"
+
+        # Clean up fstab
+        log ""
+        log "Cleaning up /etc/fstab..."
+        sudo cp /etc/fstab "/etc/fstab.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+        sudo sed -i '/cifs.*_netdev/d' /etc/fstab 2>/dev/null || true
+        log "✓ Removed CIFS entries from fstab"
+
+        # Remove credential files
+        log ""
+        log "Removing NAS credential files..."
+        sudo find /root -name ".nascreds*" -type f -delete 2>/dev/null || true
+        log "✓ Credential files removed"
+
+        log ""
+        log "✓ Complete! NAS fully unmounted and cleaned up."
+        debug "[emergency_unmount_nas] Emergency unmount completed successfully"
+        return 0
+    else
+        error "═══════════════════════════════════════════════════════"
+        error "         All Unmount Methods Failed"
+        error "═══════════════════════════════════════════════════════"
+        log ""
+        warning "Remaining processes:"
+        sudo lsof "$mount_point" 2>/dev/null || log "Unable to check (lsof not available)"
+        log ""
+        warning "Recommendations:"
+        log "1. Manually kill remaining processes:"
+        log "   sudo lsof $mount_point"
+        log "   sudo kill -9 <PID>"
+        log ""
+        log "2. Stop Docker if running:"
+        log "   cd /opt/dockge && sudo docker compose down"
+        log "   sudo systemctl stop docker"
+        log ""
+        log "3. Stop server-helper service:"
+        log "   sudo systemctl stop server-helper"
+        log ""
+        log "4. Try this command again"
+        log ""
+        log "5. Last resort - reboot:"
+        log "   sudo reboot"
+        log ""
+        debug "[emergency_unmount_nas] Emergency unmount failed"
+        return 1
+    fi
+}

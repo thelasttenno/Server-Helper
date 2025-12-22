@@ -76,6 +76,7 @@ MODULES=(
     "core"
     "config"
     "validation"
+    "preinstall"
     "nas"
     "docker"
     "backup"
@@ -115,8 +116,13 @@ parse_nas_shares
 
 # Show version
 show_version() {
-    echo "Server Helper v0.2.2 - Enhanced Debug Edition"
+    echo "Server Helper v0.2.3 - Integration Update"
     echo "For Ubuntu 24.04.3 LTS"
+    echo ""
+    echo "New in 0.2.3:"
+    echo "  • Pre-installation detection integrated"
+    echo "  • Emergency NAS unmount functionality"
+    echo "  • Enhanced menu with installation management"
 }
 
 # Show help
@@ -134,7 +140,7 @@ COMMANDS:
         validate-config      Validate configuration
 
     Setup & Monitoring:
-        setup                Run full setup
+        setup                Run full setup (includes pre-check)
         monitor              Start monitoring services
         menu                 Show interactive menu (default)
 
@@ -159,6 +165,7 @@ COMMANDS:
     NAS Management:
         list-nas             List NAS shares
         mount-nas            Mount NAS shares
+        unmount-nas          Emergency unmount NAS (force if needed)
 
     System Management:
         set-hostname <name>  Set system hostname
@@ -181,6 +188,10 @@ COMMANDS:
         setup-ufw            Setup UFW firewall
         harden-ssh           Harden SSH
 
+    Installation Management:
+        check-install        Check for existing installation
+        clean-install        Remove existing installation components
+
     Other:
         uninstall            Uninstall Server Helper
         help                 Show this help
@@ -194,22 +205,28 @@ ENVIRONMENT VARIABLES:
 EXAMPLES:
     # Interactive menu
     sudo ./server_helper_setup.sh menu
-    
+
+    # Check for existing installation before setup
+    sudo ./server_helper_setup.sh check-install
+
+    # Emergency unmount stuck NAS
+    sudo ./server_helper_setup.sh unmount-nas
+
     # Create complete backup
     sudo ./server_helper_setup.sh backup-all
-    
+
     # Backup only config files
     sudo ./server_helper_setup.sh backup-config
-    
+
     # List all backups
     sudo ./server_helper_setup.sh list-backups
-    
+
     # Show what's in a backup
     sudo ./server_helper_setup.sh show-manifest /path/to/backup.tar.gz
-    
+
     # Dry-run update
     DRY_RUN=true sudo ./server_helper_setup.sh update
-    
+
     # Debug mode
     DEBUG=true sudo ./server_helper_setup.sh monitor
 
@@ -303,12 +320,23 @@ case "${1:-menu}" in
     # NAS
     list-nas) list_nas_shares ;;
     mount-nas) mount_nas ;;
-    
+    unmount-nas) emergency_unmount_nas "${2:-}" ;;
+
+    # Installation management
+    check-install) pre_installation_check ;;
+    clean-install)
+        detect_existing_service && cleanup_existing_service
+        detect_existing_dockge && cleanup_existing_dockge
+        detect_existing_mounts && cleanup_existing_mounts
+        detect_existing_docker && cleanup_existing_docker
+        log "✓ Installation cleanup complete"
+        ;;
+
     # Other
     uninstall) uninstall_server_helper ;;
     menu) show_menu ;;
     help|--help|-h) show_help ;;
     version|--version|-v) show_version ;;
-    
+
     *) show_menu ;;
 esac

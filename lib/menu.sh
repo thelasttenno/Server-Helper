@@ -6,22 +6,23 @@ show_menu() {
     while true; do
         clear
         echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
-        echo -e "${GREEN}║  Server Helper - v0.2.2 Debug Edition ║${NC}"
+        echo -e "${GREEN}║  Server Helper - v0.2.3 Integration   ║${NC}"
         echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
         echo ""
         echo "📋 Configuration: 1-Edit 2-Show 3-Validate"
         echo "🚀 Setup: 4-Full 5-Monitor"
         echo "⚙️  Service: 6-Enable 7-Disable 8-Start 9-Stop 10-Restart 11-Status 12-Logs"
         echo "💾 Backup: 13-Dockge 14-Config 15-All 16-Restore-Dockge 17-Restore-Config 18-List"
-        echo "💿 NAS: 19-List 20-Mount"
-        echo "🖥️  System: 21-Hostname 22-Clean 23-DiskSpace"
-        echo "🔄 Updates: 24-Update 25-FullUpgrade 26-Check 27-Status 28-Reboot"
-        echo "🔒 Security: 29-Audit 30-Status 31-Harden 32-fail2ban 33-UFW 34-SSH"
-        echo "🗑️  Other: 35-Uninstall"
+        echo "💿 NAS: 19-List 20-Mount 21-EmergencyUnmount"
+        echo "🖥️  System: 22-Hostname 23-Clean 24-DiskSpace"
+        echo "🔄 Updates: 25-Update 26-FullUpgrade 27-Check 28-Status 29-Reboot"
+        echo "🔒 Security: 30-Audit 31-Status 32-Harden 33-fail2ban 34-UFW 35-SSH"
+        echo "🔧 Install: 36-CheckInstall 37-CleanInstall"
+        echo "🗑️  Other: 38-Uninstall"
         echo ""
         echo -e "${GREEN}0) Exit${NC}"
         echo ""
-        read -p "Choice [0-35]: " c
+        read -p "Choice [0-38]: " c
         
         debug "[show_menu] User selected: $c"
         
@@ -46,21 +47,31 @@ show_menu() {
             18) list_backups; read -p "Press Enter..." ;;
             19) list_nas_shares; read -p "Press Enter..." ;;
             20) mount_nas; read -p "Press Enter..." ;;
-            21) read -p "New hostname: " h; set_hostname "$h"; read -p "Press Enter..." ;;
-            22) clean_disk; read -p "Press Enter..." ;;
-            23) show_disk_space; read -p "Press Enter..." ;;
-            24) update_system; read -p "Press Enter..." ;;
-            25) full_upgrade ;;
-            26) check_updates; show_update_status; read -p "Press Enter..." ;;
-            27) show_update_status; read -p "Press Enter..." ;;
-            28) read -p "Reboot time [${REBOOT_TIME}]: " t; schedule_reboot "${t:-$REBOOT_TIME}"; read -p "Press Enter..." ;;
-            29) security_audit; read -p "Press Enter..." ;;
-            30) show_security_status; read -p "Press Enter..." ;;
-            31) apply_security_hardening; read -p "Press Enter..." ;;
-            32) setup_fail2ban; read -p "Press Enter..." ;;
-            33) setup_ufw; read -p "Press Enter..." ;;
-            34) harden_ssh; read -p "Press Enter..." ;;
-            35) uninstall_server_helper; exit 0 ;;
+            21) emergency_unmount_nas; read -p "Press Enter..." ;;
+            22) read -p "New hostname: " h; set_hostname "$h"; read -p "Press Enter..." ;;
+            23) clean_disk; read -p "Press Enter..." ;;
+            24) show_disk_space; read -p "Press Enter..." ;;
+            25) update_system; read -p "Press Enter..." ;;
+            26) full_upgrade ;;
+            27) check_updates; show_update_status; read -p "Press Enter..." ;;
+            28) show_update_status; read -p "Press Enter..." ;;
+            29) read -p "Reboot time [${REBOOT_TIME}]: " t; schedule_reboot "${t:-$REBOOT_TIME}"; read -p "Press Enter..." ;;
+            30) security_audit; read -p "Press Enter..." ;;
+            31) show_security_status; read -p "Press Enter..." ;;
+            32) apply_security_hardening; read -p "Press Enter..." ;;
+            33) setup_fail2ban; read -p "Press Enter..." ;;
+            34) setup_ufw; read -p "Press Enter..." ;;
+            35) harden_ssh; read -p "Press Enter..." ;;
+            36) pre_installation_check; read -p "Press Enter..." ;;
+            37)
+                detect_existing_service && cleanup_existing_service
+                detect_existing_dockge && cleanup_existing_dockge
+                detect_existing_mounts && cleanup_existing_mounts
+                detect_existing_docker && cleanup_existing_docker
+                log "✓ Installation cleanup complete"
+                read -p "Press Enter..."
+                ;;
+            38) uninstall_server_helper; exit 0 ;;
             0) log "Goodbye!"; exit 0 ;;
             *) error "Invalid choice"; sleep 2 ;;
         esac
@@ -87,25 +98,29 @@ show_hostname() {
 main_setup() {
     debug "[main_setup] Starting full setup"
     log "Running full setup..."
-    
+
+    # Run pre-installation check
+    debug "[main_setup] Running pre-installation check"
+    pre_installation_check
+
     if [ -n "$NEW_HOSTNAME" ]; then
         debug "[main_setup] Setting new hostname: $NEW_HOSTNAME"
         set_hostname "$NEW_HOSTNAME"
     fi
-    
+
     if ! mount_nas && [ "$NAS_MOUNT_REQUIRED" = "true" ]; then
         error "NAS required but failed"
         return 1
     fi
-    
+
     install_docker
     install_dockge
     start_dockge
-    
+
     # Create initial config backup after setup
     debug "[main_setup] Creating initial config backup"
     backup_config_files
-    
+
     show_setup_complete
     debug "[main_setup] Full setup complete"
 }

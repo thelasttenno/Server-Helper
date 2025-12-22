@@ -1,2 +1,10 @@
 ORDERING_ANALYSIS.md
 UPDATE_SUMMARY.md
+test_all_commands.sh
+validate_commands.sh
+CLAUDE.md
+
+# Deprecated files (functionality now integrated or consolidated)
+# Kept for reference but not part of active codebase
+lib/emergency-unmount-nas.sh
+QUICK_START.md

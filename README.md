@@ -1,21 +1,24 @@
 # Server Helper Setup Script
 
-**Version 0.2.2 - Enhanced Debug Edition**
+**Version 0.2.3 - Integration Update**
 
 A comprehensive server management script for Ubuntu 24.04.3 LTS that automates NAS mounting, Docker/Dockge installation, system monitoring, backups, updates, and security hardening.
 
 ## 🌟 Features
 
 - **NAS Management**: Automatic NAS mounting with credential management
+- **🆕 Emergency Unmount**: Force unmount stuck NAS shares with 4 fallback methods
 - **Docker & Dockge**: Automated installation and configuration
+- **🆕 Pre-Installation Detection**: Detects and manages existing installations
 - **Monitoring**: 24/7 service monitoring with auto-recovery
-- **Backups**: Scheduled Dockge backups to NAS with retention management
+- **Backups**: Scheduled Dockge backups to NAS with retention management (includes config backup)
 - **System Updates**: Automated system updates with scheduled reboots
 - **Security**: Comprehensive security auditing and hardening (fail2ban, UFW, SSH)
 - **Disk Management**: Automatic disk cleanup and space monitoring
 - **Uptime Kuma Integration**: Push monitor heartbeats
 - **Auto-Start**: Systemd service for boot-time startup
-- **🆕 Debug Mode**: Enhanced debugging with detailed logging
+- **Debug Mode**: Enhanced debugging with detailed logging
+- **🆕 Installation Management**: Check and clean existing components
 
 ---
 
@@ -53,19 +56,86 @@ sudo ./server_helper_setup.sh validate-config
 ### Run Setup
 
 ```bash
-# Run full setup
+# Run full setup (includes pre-installation check)
 sudo bash /opt/Server-Helper/server_helper_setup.sh
 
 # Script will:
+# - Check for existing installations
+# - Offer cleanup options if found
 # - Mount NAS
 # - Install Docker & Dockge
+# - Create initial configuration backup
 # - Optionally enable auto-start
 # - Start monitoring
 ```
 
 ---
 
-## 🐛 Debug Mode (NEW in v0.2.2)
+## 🆕 What's New in v0.2.3
+
+### Pre-Installation Detection (Integrated)
+
+Automatically detects existing installations during setup to prevent conflicts:
+
+```bash
+# Run standalone check
+sudo ./server_helper_setup.sh check-install
+
+# Automatically runs during setup
+sudo ./server_helper_setup.sh setup
+```
+
+**Detects:**
+- Systemd services
+- NAS mounts and credentials
+- Dockge installations
+- Docker installations
+- Configuration files
+- Existing backups
+
+**Options when existing installation found:**
+1. Keep existing installation (skip setup)
+2. Remove and reinstall (clean slate)
+3. Selective cleanup (choose components)
+4. Cancel and exit
+
+### Emergency NAS Unmount (NEW)
+
+Force unmount stuck NAS shares when normal methods fail:
+
+```bash
+# Emergency unmount default mount point
+sudo ./server_helper_setup.sh unmount-nas
+
+# Specify custom mount point
+sudo ./server_helper_setup.sh unmount-nas /mnt/custom
+
+# Also available in menu as option 21
+```
+
+**Features:**
+- Detects processes using the mount
+- Optional process termination
+- 4 unmount methods (normal → lazy → force → force+lazy)
+- Automatic fstab cleanup
+- Credential file removal
+- Detailed troubleshooting output
+
+### Installation Management Commands
+
+```bash
+# Check what's installed
+sudo ./server_helper_setup.sh check-install
+
+# Clean existing components
+sudo ./server_helper_setup.sh clean-install
+```
+
+**Menu items 36-37** provide access to these features in the interactive menu.
+
+---
+
+## 🐛 Debug Mode
 
 ### Overview
 

@@ -1,5 +1,69 @@
 # Server Helper Changelog
 
+## Version 0.2.3 - Integration Update (2024-12-22)
+
+### New Features
+
+- ✨ **Pre-Installation Detection**: Integrated existing installation detection system
+  - Automatically detects existing Server Helper installations
+  - Detects systemd services, NAS mounts, Dockge, Docker, config files, and backups
+  - Interactive cleanup options (keep, remove all, selective, or cancel)
+  - Runs automatically during `setup` command
+  - Available as standalone `check-install` command
+
+- 🚨 **Emergency NAS Unmount**: Integrated emergency unmount functionality
+  - Force unmount stuck NAS shares with multiple fallback methods
+  - Automatic process detection and optional termination
+  - Cleans up fstab entries and credential files
+  - Available as `unmount-nas` command and menu option (21)
+  - Supports optional mount point parameter
+
+- 🔧 **Installation Management**: New commands and menu section
+  - `check-install` - Check for existing installations
+  - `clean-install` - Remove existing installation components
+  - Menu options 36-37 for installation management
+
+### Improvements
+
+- 📋 Enhanced interactive menu with 38 options (up from 35)
+- 🗂️ Reorganized menu with new "Install" section
+- 📝 Updated help text with new commands and examples
+- 🔍 Better integration of orphaned scripts (preinstall.sh, emergency-unmount-nas.sh)
+- 🏗️ Preinstall module now loaded in main script module order
+
+### Updated Modules
+
+- `nas.sh`: Added `emergency_unmount_nas()` function with 4 unmount methods
+- `menu.sh`: Updated to v0.2.3, added installation management options
+- `server_helper_setup.sh`: Integrated preinstall module, added new commands
+
+### New Commands
+
+- `unmount-nas [mount_point]` - Emergency unmount NAS with force options
+- `check-install` - Run pre-installation check
+- `clean-install` - Clean existing installation components
+
+### Menu Structure Changes
+
+- Menu item 21: Emergency NAS Unmount
+- Menu items 22-24: System (shifted from 21-23)
+- Menu items 25-29: Updates (shifted from 24-28)
+- Menu items 30-35: Security (shifted from 29-34)
+- Menu items 36-37: Installation Management (NEW)
+- Menu item 38: Uninstall (shifted from 35)
+
+### Integrated Files
+
+- `lib/preinstall.sh` - Now loaded as module
+- `lib/emergency-unmount-nas.sh` - Functionality integrated into nas.sh
+
+### Bug Fixes
+
+- Fixed orphaned preinstall.sh not being used in main script
+- Integrated standalone emergency unmount script into main program
+
+---
+
 ## Version 0.2.2 - Enhanced Debug Edition (2024-12-22)
 
 ### New Features
