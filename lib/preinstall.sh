@@ -197,14 +197,23 @@ cleanup_existing_service() {
 
 cleanup_existing_mounts() {
     debug "cleanup_existing_mounts() - Unmounting and cleaning up NAS mounts"
-    
+
     log "Unmounting CIFS shares..."
-    
+
     # Unmount all CIFS mounts
-    mount | grep "type cifs" | awk '{print $3}' | while read mount_point; do
-        log "Unmounting: $mount_point"
-        sudo umount -f "$mount_point" 2>/dev/null || sudo umount -l "$mount_point" 2>/dev/null || true
-    done
+    # Use process substitution instead of pipe to avoid subshell issues
+    local cifs_mounts
+    cifs_mounts=$(mount | grep "type cifs" | awk '{print $3}' || true)
+
+    if [ -n "$cifs_mounts" ]; then
+        while IFS= read -r mount_point; do
+            [ -n "$mount_point" ] || continue
+            log "Unmounting: $mount_point"
+            sudo umount -f "$mount_point" 2>/dev/null || sudo umount -l "$mount_point" 2>/dev/null || true
+        done <<< "$cifs_mounts"
+    else
+        debug "cleanup_existing_mounts() - No CIFS mounts found"
+    fi
     
     # Backup and clean fstab
     if grep -q "cifs.*_netdev" /etc/fstab 2>/dev/null; then
