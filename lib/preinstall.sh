@@ -23,7 +23,7 @@ detect_existing_service() {
 detect_existing_mounts() {
     debug "detect_existing_mounts() - Checking for existing NAS mounts"
     local found=0
-    
+
     # Check for CIFS mounts in /etc/fstab
     if grep -q "cifs.*_netdev" /etc/fstab 2>/dev/null; then
         warning "Found CIFS mount entries in /etc/fstab"
@@ -32,7 +32,7 @@ detect_existing_mounts() {
         done
         found=1
     fi
-    
+
     # Check for currently mounted shares
     if mount | grep -q "type cifs"; then
         warning "Found currently mounted CIFS shares:"
@@ -41,7 +41,7 @@ detect_existing_mounts() {
         done
         found=1
     fi
-    
+
     # Check for NAS credential files
     if sudo find /root -name ".nascreds_*" -type f 2>/dev/null | grep -q .; then
         warning "Found existing NAS credential files:"
@@ -50,19 +50,20 @@ detect_existing_mounts() {
         done
         found=1
     fi
-    
+
     debug "detect_existing_mounts() - Mount detection result: $found"
-    return $found
+    # Return 0 (success) if found, 1 (failure) if not found
+    [ $found -eq 1 ] && return 0 || return 1
 }
 
 detect_existing_dockge() {
     debug "detect_existing_dockge() - Checking for existing Dockge installation"
     local found=0
-    
+
     # Check for Dockge directory
     if [ -d "/opt/dockge" ]; then
         warning "Found existing Dockge directory: /opt/dockge"
-        
+
         # Check if Dockge container is running
         if sudo docker ps 2>/dev/null | grep -q dockge; then
             warning "Dockge container is RUNNING"
@@ -71,7 +72,7 @@ detect_existing_dockge() {
             warning "Dockge container exists but is STOPPED"
             found=1
         fi
-        
+
         # Check directory contents
         if [ -d "/opt/dockge/stacks" ] || [ -d "/opt/dockge/data" ]; then
             local stack_count=$(find /opt/dockge/stacks -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
@@ -79,12 +80,13 @@ detect_existing_dockge() {
                 warning "Found $stack_count stack(s) in /opt/dockge/stacks"
             fi
         fi
-        
+
         found=1
     fi
-    
+
     debug "detect_existing_dockge() - Dockge detection result: $found"
-    return $found
+    # Return 0 (success) if found, 1 (failure) if not found
+    [ $found -eq 1 ] && return 0 || return 1
 }
 
 detect_existing_docker() {
@@ -124,7 +126,7 @@ detect_existing_config() {
 detect_existing_backups() {
     debug "detect_existing_backups() - Checking for existing backups"
     local found=0
-    
+
     # Check local backup directory
     if [ -d "/opt/dockge_backups_local" ]; then
         local backup_count=$(find /opt/dockge_backups_local -name "dockge_backup_*.tar.gz" 2>/dev/null | wc -l)
@@ -133,7 +135,7 @@ detect_existing_backups() {
             found=1
         fi
     fi
-    
+
     # Check if NAS mount point exists and has backups
     if [ -d "/mnt/nas/dockge_backups" ]; then
         local nas_backup_count=$(find /mnt/nas/dockge_backups -name "dockge_backup_*.tar.gz" 2>/dev/null | wc -l)
@@ -142,9 +144,10 @@ detect_existing_backups() {
             found=1
         fi
     fi
-    
+
     debug "detect_existing_backups() - Backup detection result: $found"
-    return $found
+    # Return 0 (success) if found, 1 (failure) if not found
+    [ $found -eq 1 ] && return 0 || return 1
 }
 
 show_installation_summary() {
@@ -329,9 +332,10 @@ pre_installation_check() {
     
     case $choice in
         1)
-            log "Continuing with existing installation..."
+            log "Continuing with existing installation (skipping setup)..."
             debug "pre_installation_check() - User chose to keep existing installation"
-            return 0
+            log "Returning to menu..."
+            exit 0
             ;;
         2)
             warning "═══════════════════════════════════════════════════════"
@@ -357,27 +361,34 @@ pre_installation_check() {
             ;;
         3)
             debug "pre_installation_check() - User chose selective cleanup"
-            
+
             detect_existing_service && {
                 confirm "Remove systemd service?" && cleanup_existing_service
             }
-            
+
             detect_existing_dockge && {
                 confirm "Remove Dockge installation?" && cleanup_existing_dockge
             }
-            
+
             detect_existing_mounts && {
                 confirm "Cleanup NAS mounts?" && cleanup_existing_mounts
             }
-            
+
             detect_existing_docker && {
                 confirm "Remove Docker?" && cleanup_existing_docker
             }
-            
+
             log ""
             log "✓ Selective cleanup finished"
-            log "Proceeding with installation..."
-            return 0
+            log ""
+
+            if confirm "Continue with installation?"; then
+                log "Proceeding with installation..."
+                return 0
+            else
+                log "Installation cancelled. Returning to menu..."
+                exit 0
+            fi
             ;;
         4)
             log "Installation cancelled by user"

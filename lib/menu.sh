@@ -108,21 +108,37 @@ main_setup() {
     debug "[main_setup] Running pre-installation check"
     pre_installation_check
 
+    log ""
+    log "Pre-installation check complete. Starting installation..."
+    log ""
+
     if [ -n "$NEW_HOSTNAME" ]; then
         debug "[main_setup] Setting new hostname: $NEW_HOSTNAME"
+        log "Setting hostname..."
         set_hostname "$NEW_HOSTNAME"
     fi
 
+    log "Mounting NAS shares..."
     if ! mount_nas && [ "$NAS_MOUNT_REQUIRED" = "true" ]; then
         error "NAS required but failed"
         return 1
     fi
 
+    log ""
+    log "Installing Docker..."
     install_docker
+
+    log ""
+    log "Installing Dockge..."
     install_dockge
+
+    log ""
+    log "Starting Dockge..."
     start_dockge
 
     # Create initial config backup after setup
+    log ""
+    log "Creating initial configuration backup..."
     debug "[main_setup] Creating initial config backup"
     backup_config_files
 

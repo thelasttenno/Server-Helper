@@ -40,10 +40,13 @@ EOF"
 mount_nas() {
     debug "[mount_nas] Starting NAS mount process"
     [ "$NAS_MOUNT_SKIP" = "true" ] && { log "NAS mounting disabled"; return 0; }
-    
+
     if ! command_exists mount.cifs; then
+        log "Installing cifs-utils package (required for NAS mounting)..."
         debug "[mount_nas] Installing cifs-utils"
+        sudo apt-get update -qq
         sudo apt-get install -y cifs-utils
+        log "✓ cifs-utils installed"
     fi
     
     local count=0 failed=0
