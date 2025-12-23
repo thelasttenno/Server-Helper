@@ -111,20 +111,22 @@ monitor_services() {
     log "Starting monitoring (2-min intervals)..."
     
     backup_dockge
-    
+
     local BACKUP_INT=180
     local UPDATE_INT=$((UPDATE_CHECK_INTERVAL * 30))
     local SEC_INT=$((SECURITY_CHECK_INTERVAL * 30))
-    local bc=0 uc=0 sc=0
-    
+    local SCRIPT_UPDATE_INT=360  # Check for script updates every 12 hours (360 * 2min)
+    local bc=0 uc=0 sc=0 suc=0
+
     debug "[monitor_services] Backup interval: $BACKUP_INT cycles"
     debug "[monitor_services] Update interval: $UPDATE_INT cycles"
     debug "[monitor_services] Security interval: $SEC_INT cycles"
+    debug "[monitor_services] Script update interval: $SCRIPT_UPDATE_INT cycles"
     
     while true; do
         sleep 120
-        ((bc++)); ((uc++)); ((sc++))
-        debug "[monitor_services] Cycle: Backup=$bc, Update=$uc, Security=$sc"
+        ((bc++)); ((uc++)); ((sc++)); ((suc++))
+        debug "[monitor_services] Cycle: Backup=$bc, Update=$uc, Security=$sc, ScriptUpdate=$suc"
         
         local disk=$(check_disk_usage)
         debug "[monitor_services] Disk usage: $disk%"
@@ -170,7 +172,13 @@ monitor_services() {
             backup_dockge
             bc=0
         fi
-        
+
+        if [ $suc -ge $SCRIPT_UPDATE_INT ]; then
+            debug "[monitor_services] Running script update check"
+            auto_update_check
+            suc=0
+        fi
+
         log "✓ Heartbeat | Disk:${disk}% | Backup:$((BACKUP_INT-bc)) | Updates:$((UPDATE_INT-uc)) | Security:$((SEC_INT-sc))"
     done
 }

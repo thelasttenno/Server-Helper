@@ -143,19 +143,98 @@ confirm() {
     return $result
 }
 
-# Progress indicator
+# Progress indicator (dots)
 show_progress() {
     local msg="$1"
     debug "[show_progress] Starting: $msg"
     echo -n "$msg"
-    
+
     while kill -0 $! 2>/dev/null; do
         echo -n "."
         sleep 1
     done
-    
+
     echo " Done"
     debug "[show_progress] Completed: $msg"
+}
+
+# Spinner loading indicator
+show_spinner() {
+    local pid=$1
+    local msg="${2:-Processing}"
+    local delay=0.1
+    local spinstr='|/-\'
+
+    debug "[show_spinner] Starting spinner for PID: $pid, Message: $msg"
+
+    while kill -0 $pid 2>/dev/null; do
+        local temp=${spinstr#?}
+        printf " [%c] %s\r" "$spinstr" "$msg"
+        local spinstr=$temp${spinstr%"$temp"}
+        sleep $delay
+    done
+
+    printf "    \r"
+    debug "[show_spinner] Spinner stopped"
+}
+
+# Progress bar indicator
+show_progress_bar() {
+    local current=$1
+    local total=$2
+    local msg="${3:-Progress}"
+    local width=50
+
+    debug "[show_progress_bar] Current: $current, Total: $total"
+
+    local percent=$((current * 100 / total))
+    local completed=$((width * current / total))
+    local remaining=$((width - completed))
+
+    printf "\r%s: [" "$msg"
+    printf "%${completed}s" | tr ' ' '='
+    printf "%${remaining}s" | tr ' ' '-'
+    printf "] %3d%%" $percent
+
+    if [ $current -eq $total ]; then
+        echo ""
+        debug "[show_progress_bar] Progress complete"
+    fi
+}
+
+# Execute with spinner
+execute_with_spinner() {
+    local msg="$1"
+    shift
+    local cmd="$@"
+
+    debug "[execute_with_spinner] Message: $msg, Command: $cmd"
+
+    if [ "$DRY_RUN" = "true" ]; then
+        log "[DRY-RUN] Would execute: $cmd"
+        return 0
+    fi
+
+    # Execute command in background
+    eval "$cmd" &> /tmp/spinner_output_$$ &
+    local pid=$!
+
+    # Show spinner while command runs
+    show_spinner $pid "$msg"
+
+    # Wait for command to finish and get exit code
+    wait $pid
+    local exit_code=$?
+
+    # Show output if command failed
+    if [ $exit_code -ne 0 ]; then
+        cat /tmp/spinner_output_$$
+    fi
+
+    rm -f /tmp/spinner_output_$$
+
+    debug "[execute_with_spinner] Exit code: $exit_code"
+    return $exit_code
 }
 
 # Get yes/no input

@@ -6,7 +6,7 @@ show_menu() {
     while true; do
         clear
         echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
-        echo -e "${GREEN}║  Server Helper - v0.2.3 Integration   ║${NC}"
+        echo -e "${GREEN}║  Server Helper - v0.3.0 Self-Update   ║${NC}"
         echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
         echo ""
         echo "📋 Configuration: 1-Edit 2-Show 3-Validate"
@@ -18,11 +18,12 @@ show_menu() {
         echo "🔄 Updates: 25-Update 26-FullUpgrade 27-Check 28-Status 29-Reboot"
         echo "🔒 Security: 30-Audit 31-Status 32-Harden 33-fail2ban 34-UFW 35-SSH"
         echo "🔧 Install: 36-CheckInstall 37-CleanInstall"
-        echo "🗑️  Other: 38-Uninstall"
+        echo "🆙 Self-Update: 39-CheckUpdate 40-Update 41-Rollback 42-Changelog"
+        echo "🗑️  Other: 43-Uninstall"
         echo ""
         echo -e "${GREEN}0) Exit${NC}"
         echo ""
-        read -p "Choice [0-38]: " c
+        read -p "Choice [0-43]: " c
         
         debug "[show_menu] User selected: $c"
         
@@ -71,7 +72,11 @@ show_menu() {
                 log "✓ Installation cleanup complete"
                 read -p "Press Enter..."
                 ;;
-            38) uninstall_server_helper; exit 0 ;;
+            39) check_for_script_updates; read -p "Press Enter..." ;;
+            40) self_update; read -p "Press Enter..." ;;
+            41) rollback_update; read -p "Press Enter..." ;;
+            42) show_update_changelog ;;
+            43) uninstall_server_helper; exit 0 ;;
             0) log "Goodbye!"; exit 0 ;;
             *) error "Invalid choice"; sleep 2 ;;
         esac

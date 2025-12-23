@@ -5,7 +5,7 @@ create_default_config() {
     debug "[create_default_config] Creating default configuration file"
     cat > "$CONFIG_FILE" << 'EOF'
 # Server Helper Configuration
-# Version 0.2.2
+# Version 0.3.0
 
 # NAS Configuration
 NAS_SHARES=""
@@ -36,6 +36,10 @@ AUTO_UPDATE_ENABLED="false"
 UPDATE_CHECK_INTERVAL="24"
 AUTO_REBOOT_ENABLED="false"
 REBOOT_TIME="03:00"
+
+# Self-Update Configuration (NEW in 0.3.0)
+AUTO_UPDATE_CHECK="false"  # Check for script updates during monitoring
+UPTIME_KUMA_UPDATE_URL=""  # Optional: Uptime Kuma URL for update notifications
 
 # Security Configuration
 SECURITY_CHECK_ENABLED="true"

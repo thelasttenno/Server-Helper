@@ -84,6 +84,7 @@ MODULES=(
     "updates"
     "security"
     "service"
+    "selfupdate"
     "menu"
     "uninstall"
 )
@@ -116,13 +117,14 @@ parse_nas_shares
 
 # Show version
 show_version() {
-    echo "Server Helper v0.2.3 - Integration Update"
+    echo "Server Helper v0.3.0 - Self-Update & Loading Indicators"
     echo "For Ubuntu 24.04.3 LTS"
     echo ""
-    echo "New in 0.2.3:"
-    echo "  • Pre-installation detection integrated"
-    echo "  • Emergency NAS unmount functionality"
-    echo "  • Enhanced menu with installation management"
+    echo "New in 0.3.0:"
+    echo "  • Self-updater - Update script from GitHub"
+    echo "  • Loading indicators - Spinners and progress bars"
+    echo "  • Auto-update check - Optional scheduled update checking"
+    echo "  • Rollback support - Revert to previous version"
 }
 
 # Show help
@@ -191,6 +193,12 @@ COMMANDS:
     Installation Management:
         check-install        Check for existing installation
         clean-install        Remove existing installation components
+
+    Self-Update (NEW in 0.3.0):
+        check-updates-script Check for Server Helper script updates
+        self-update          Update Server Helper to latest version
+        rollback             Rollback to previous version
+        changelog            View latest changelog
 
     Other:
         uninstall            Uninstall Server Helper
@@ -331,6 +339,12 @@ case "${1:-menu}" in
         detect_existing_docker && cleanup_existing_docker
         log "✓ Installation cleanup complete"
         ;;
+
+    # Self-update commands
+    check-updates-script) check_for_script_updates ;;
+    self-update) self_update ;;
+    rollback) rollback_update ;;
+    changelog) show_update_changelog ;;
 
     # Other
     uninstall) uninstall_server_helper ;;

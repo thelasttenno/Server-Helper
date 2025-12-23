@@ -1,4 +1,4 @@
-# Server Helper v0.2.3 - Quick Start Guide
+# Server Helper v0.3.0 - Quick Start Guide
 
 ## 🚀 Installation (5 minutes)
 
@@ -77,11 +77,26 @@ sudo ./server_helper_setup.sh backup-all
 # View logs
 sudo ./server_helper_setup.sh logs
 
-# Check for updates
+# Check for system updates
 sudo ./server_helper_setup.sh check-updates
 ```
 
-### Installation Management (NEW in 0.2.3)
+### Self-Update (NEW in 0.3.0)
+```bash
+# Check for Server Helper script updates
+sudo ./server_helper_setup.sh check-updates-script
+
+# Update to latest version (auto-backup + config preserved)
+sudo ./server_helper_setup.sh self-update
+
+# Rollback to previous version if needed
+sudo ./server_helper_setup.sh rollback
+
+# View update changelog from GitHub
+sudo ./server_helper_setup.sh changelog
+```
+
+### Installation Management
 ```bash
 # Check for existing installation
 sudo ./server_helper_setup.sh check-install
@@ -107,62 +122,65 @@ DEBUG=true sudo ./server_helper_setup.sh unmount-nas
 
 ---
 
-## 🆕 New in v0.2.3 - Integration Update
+## 🆕 New in v0.3.0 - Self-Update & Loading Indicators
 
-### Pre-Installation Detection (Integrated)
-Automatically detects and manages existing installations:
+### Self-Updater System
+Keep Server Helper automatically updated from GitHub:
+
 ```bash
-# Check what's installed
-sudo ./server_helper_setup.sh check-install
+# Check for updates
+sudo ./server_helper_setup.sh check-updates-script
 
-# The setup command now runs this automatically!
-sudo ./server_helper_setup.sh setup
-```
+# Update to latest version (with automatic backup)
+sudo ./server_helper_setup.sh self-update
 
-**What it detects:**
-- Systemd services
-- NAS mounts and credentials
-- Dockge installations
-- Docker installations
-- Configuration files
-- Existing backups
+# View what's new
+sudo ./server_helper_setup.sh changelog
 
-**Cleanup options:**
-1. Keep existing installation
-2. Remove and reinstall (clean slate)
-3. Selective cleanup (choose components)
-4. Cancel and exit
-
-### Emergency NAS Unmount (NEW)
-Force unmount stuck NAS shares with 4 fallback methods:
-```bash
-# Emergency unmount default mount point
-sudo ./server_helper_setup.sh unmount-nas
-
-# Specify custom mount point
-sudo ./server_helper_setup.sh unmount-nas /mnt/custom
-
-# Also available in menu as option 21
+# Rollback if needed
+sudo ./server_helper_setup.sh rollback
 ```
 
 **Features:**
-- Detects and optionally kills blocking processes
-- 4 unmount methods (normal → lazy → force → force+lazy)
-- Cleans up fstab entries
-- Removes credential files
-- Comprehensive troubleshooting output
+- One-command update from GitHub
+- Automatic backup before updating
+- Configuration file preservation
+- Service state management (auto stop/restart)
+- Rollback capability to previous version
+- Optional auto-update checking (every 12 hours)
+- Uptime Kuma integration for notifications
+
+**Enable auto-update checking:**
+```bash
+sudo ./server_helper_setup.sh edit-config
+# Set: AUTO_UPDATE_CHECK="true"
+# Optional: UPTIME_KUMA_UPDATE_URL="http://uptime-kuma:3001/api/push/xyz"
+```
+
+### Loading Indicators
+Visual feedback for operations:
+
+**Built-in indicators:**
+- **Spinner animation** - Background processes show rotating spinner (|/-\)
+- **Progress bars** - Multi-step operations display percentage
+- **Execute with spinner** - Commands run with visual feedback
+
+No additional tools needed - pure bash implementation that works with DEBUG mode.
 
 ### Enhanced Interactive Menu
-Now with 38 options (up from 35):
+Now with **43 options** (up from 38):
+
 ```bash
 # Access interactive menu
 sudo ./server_helper_setup.sh menu
 ```
 
 **New menu items:**
-- **21**: Emergency NAS Unmount
-- **36**: Check Installation
-- **37**: Clean Installation
+- **39**: Check for Server Helper updates
+- **40**: Update to latest version
+- **41**: Rollback to previous version
+- **42**: View changelog
+- **43**: Uninstall (shifted from 38)
 
 ---
 
@@ -228,20 +246,21 @@ sudo ./server_helper_setup.sh clean-install
 Server-Helper/
 ├── server_helper_setup.sh          # Main entry point
 ├── server-helper.conf              # Configuration file (auto-created)
-├── VERSION                         # Version number (0.2.3)
+├── VERSION                         # Version number (0.3.0)
 ├── lib/                            # Library modules
-│   ├── core.sh                    # Core utilities
+│   ├── core.sh                    # Core utilities + loading indicators
 │   ├── config.sh                  # Configuration management
 │   ├── validation.sh              # Input validation
-│   ├── preinstall.sh              # Pre-installation detection (INTEGRATED)
+│   ├── preinstall.sh              # Pre-installation detection
 │   ├── nas.sh                     # NAS management + emergency unmount
 │   ├── docker.sh                  # Docker/Dockge installation
 │   ├── backup.sh                  # Backup/restore system
 │   ├── disk.sh                    # Disk management
 │   ├── updates.sh                 # System updates
 │   ├── security.sh                # Security hardening
-│   ├── service.sh                 # Systemd service
-│   ├── menu.sh                    # Interactive menu (38 options)
+│   ├── service.sh                 # Systemd service + monitoring
+│   ├── selfupdate.sh              # Self-update system (NEW in v0.3.0)
+│   ├── menu.sh                    # Interactive menu (43 options)
 │   └── uninstall.sh               # Uninstallation
 ├── README.md                       # Complete documentation
 ├── CHANGELOG.md                    # Version history
@@ -279,11 +298,19 @@ For complete documentation, see:
 - ✅ Update management
 - ✅ Disk cleanup
 
-### v0.2.3 Additions
+### v0.3.0 Additions
+- ✅ **Self-updater** - GitHub integration with one-command updates
+- ✅ **Loading indicators** - Spinners and progress bars for visual feedback
+- ✅ **Auto-update checking** - Optional 12-hour update monitoring
+- ✅ **Rollback capability** - Revert to previous version if needed
+- ✅ **Enhanced menu** - 43 options with self-update section
+- ✅ **Configuration preservation** - Auto-saved during updates
+- ✅ **Update notifications** - Uptime Kuma integration
+
+### Previous Additions
 - ✅ **Pre-installation detection** - Prevents conflicts
 - ✅ **Emergency NAS unmount** - Force unmount stuck shares
 - ✅ **Installation management** - Check and clean components
-- ✅ **Enhanced menu** - 38 options organized by category
 - ✅ **Configuration backup** - System-wide config preservation
 - ✅ **Debug mode** - Comprehensive troubleshooting
 
@@ -304,6 +331,12 @@ sudo ./server_helper_setup.sh backup-all
 
 # View live logs
 sudo ./server_helper_setup.sh logs
+
+# Check for script updates
+sudo ./server_helper_setup.sh check-updates-script
+
+# Update Server Helper
+sudo ./server_helper_setup.sh self-update
 
 # Emergency NAS unmount
 sudo ./server_helper_setup.sh unmount-nas
@@ -336,12 +369,19 @@ sudo ./server_helper_setup.sh restart
 
 ## 🎉 You're Ready!
 
-**Version:** 0.2.3 - Integration Update
+**Version:** 0.3.0 - Self-Update & Loading Indicators
 **Target:** Ubuntu 24.04.3 LTS
 **License:** GPL v3
 
 Server Helper is now fully configured and ready to manage your server!
 
 Access Dockge: `http://localhost:5001` (default)
+
+**Pro Tip:** Enable auto-update checking in your config to stay current with the latest features!
+
+```bash
+sudo ./server_helper_setup.sh edit-config
+# Set: AUTO_UPDATE_CHECK="true"
+```
 
 **Happy Server Managing! 🚀**

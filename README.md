@@ -1,15 +1,17 @@
 # Server Helper Setup Script
 
-**Version 0.2.3 - Integration Update**
+**Version 0.3.0 - Self-Update & Loading Indicators**
 
-A comprehensive server management script for Ubuntu 24.04.3 LTS that automates NAS mounting, Docker/Dockge installation, system monitoring, backups, updates, and security hardening.
+A comprehensive server management script for Ubuntu 24.04.3 LTS that automates NAS mounting, Docker/Dockge installation, system monitoring, backups, updates, and security hardening with built-in self-update capabilities.
 
 ## 🌟 Features
 
+- **🆕 Self-Updater**: Automatic script updates from GitHub with rollback support
+- **🆕 Loading Indicators**: Spinners and progress bars for visual feedback
 - **NAS Management**: Automatic NAS mounting with credential management
-- **🆕 Emergency Unmount**: Force unmount stuck NAS shares with 4 fallback methods
+- **Emergency Unmount**: Force unmount stuck NAS shares with 4 fallback methods
 - **Docker & Dockge**: Automated installation and configuration
-- **🆕 Pre-Installation Detection**: Detects and manages existing installations
+- **Pre-Installation Detection**: Detects and manages existing installations
 - **Monitoring**: 24/7 service monitoring with auto-recovery
 - **Backups**: Scheduled Dockge backups to NAS with retention management (includes config backup)
 - **System Updates**: Automated system updates with scheduled reboots
@@ -18,7 +20,7 @@ A comprehensive server management script for Ubuntu 24.04.3 LTS that automates N
 - **Uptime Kuma Integration**: Push monitor heartbeats
 - **Auto-Start**: Systemd service for boot-time startup
 - **Debug Mode**: Enhanced debugging with detailed logging
-- **🆕 Installation Management**: Check and clean existing components
+- **Installation Management**: Check and clean existing components
 
 ---
 
@@ -71,67 +73,75 @@ sudo bash /opt/Server-Helper/server_helper_setup.sh
 
 ---
 
-## 🆕 What's New in v0.2.3
+## 🆕 What's New in v0.3.0
 
-### Pre-Installation Detection (Integrated)
+### Self-Updater System
 
-Automatically detects existing installations during setup to prevent conflicts:
-
-```bash
-# Run standalone check
-sudo ./server_helper_setup.sh check-install
-
-# Automatically runs during setup
-sudo ./server_helper_setup.sh setup
-```
-
-**Detects:**
-- Systemd services
-- NAS mounts and credentials
-- Dockge installations
-- Docker installations
-- Configuration files
-- Existing backups
-
-**Options when existing installation found:**
-1. Keep existing installation (skip setup)
-2. Remove and reinstall (clean slate)
-3. Selective cleanup (choose components)
-4. Cancel and exit
-
-### Emergency NAS Unmount (NEW)
-
-Force unmount stuck NAS shares when normal methods fail:
+Automatic script updates directly from GitHub with full safety features:
 
 ```bash
-# Emergency unmount default mount point
-sudo ./server_helper_setup.sh unmount-nas
+# Check for available updates
+sudo ./server_helper_setup.sh check-updates-script
 
-# Specify custom mount point
-sudo ./server_helper_setup.sh unmount-nas /mnt/custom
+# Update to latest version (auto-backup + config preservation)
+sudo ./server_helper_setup.sh self-update
 
-# Also available in menu as option 21
+# Rollback to previous version if needed
+sudo ./server_helper_setup.sh rollback
+
+# View update changelog from GitHub
+sudo ./server_helper_setup.sh changelog
 ```
 
 **Features:**
-- Detects processes using the mount
-- Optional process termination
-- 4 unmount methods (normal → lazy → force → force+lazy)
-- Automatic fstab cleanup
-- Credential file removal
-- Detailed troubleshooting output
+- Automatic version checking against GitHub repository
+- One-command update with full backup
+- Configuration file preservation
+- Service state management (stops before update, restarts after)
+- Rollback capability to previous versions
+- Optional auto-update checking in monitoring loop (12-hour cycle)
+- Uptime Kuma integration for update notifications
 
-### Installation Management Commands
+**Menu items 39-42** provide access to self-update features.
+
+### Loading Indicators
+
+Visual feedback for long-running operations:
 
 ```bash
-# Check what's installed
-sudo ./server_helper_setup.sh check-install
+# Spinner animation for background processes
+show_spinner $pid "Processing..."
 
-# Clean existing components
-sudo ./server_helper_setup.sh clean-install
+# Progress bars for multi-step operations
+show_progress_bar 5 10 "Installing"
+
+# Execute commands with spinner feedback
+execute_with_spinner "Updating system" "apt-get update"
 ```
 
-**Menu items 36-37** provide access to these features in the interactive menu.
+**Features:**
+- Spinner animation (|/-\) for background processes
+- Progress bars with percentage display
+- No external dependencies (pure bash)
+- DEBUG mode compatible
+
+### Auto-Update Checking
+
+Optional scheduled update checking in monitoring service:
+
+```bash
+# Edit configuration
+sudo ./server_helper_setup.sh edit-config
+
+# Set AUTO_UPDATE_CHECK="true"
+# Set UPTIME_KUMA_UPDATE_URL="http://uptime-kuma:3001/api/push/xyz" (optional)
+```
+
+**Monitoring Integration:**
+- Checks for updates every 12 hours during monitoring
+- Non-intrusive - only logs when updates available
+- Optional Uptime Kuma notifications
+- Manual approval required for installation
 
 ---
 
@@ -424,6 +434,7 @@ DEBUG=true sudo ./server_helper_setup.sh security-audit
 ```
 
 **Security Audit Checks:**
+
 - ✅ SSH configuration (root login, password auth)
 - ✅ Firewall status (UFW)
 - ✅ Intrusion prevention (fail2ban)
@@ -433,10 +444,69 @@ DEBUG=true sudo ./server_helper_setup.sh security-audit
 - ✅ Automatic updates configured
 
 **Security Hardening Includes:**
+
 - **fail2ban**: Protects against brute force attacks
 - **UFW Firewall**: Default deny with specific allows
 - **SSH Hardening**: Disables password auth, root login
 - **Unattended Upgrades**: Automatic security patches
+
+---
+
+### 🆙 Self-Update Commands
+
+| Command | Description |
+|---------|-------------|
+| `check-updates-script` | Check for Server Helper updates |
+| `self-update` | Update to latest version from GitHub |
+| `rollback` | Rollback to previous version |
+| `changelog` | View update changelog from GitHub |
+
+**Examples:**
+```bash
+sudo ./server_helper_setup.sh check-updates-script
+sudo ./server_helper_setup.sh self-update
+sudo ./server_helper_setup.sh rollback
+sudo ./server_helper_setup.sh changelog
+
+# With debug mode
+DEBUG=true sudo ./server_helper_setup.sh self-update
+```
+
+**Update Process:**
+
+1. Fetches VERSION from GitHub
+2. Compares with local version
+3. Creates timestamped backup
+4. Preserves configuration
+5. Stops service if running
+6. Installs update
+7. Restarts service
+8. Cleans up temporary files
+
+**Requirements:**
+
+- `git` - For cloning updates
+- `curl` - For version checking
+- Internet connection to GitHub
+
+---
+
+### 🗑️ Installation & Cleanup
+
+| Command | Description |
+|---------|-------------|
+| `check-install` | Check for existing installations |
+| `clean-install` | Clean existing components |
+| `unmount-nas [path]` | Emergency NAS unmount |
+| `uninstall` | Complete uninstallation |
+
+**Examples:**
+```bash
+sudo ./server_helper_setup.sh check-install
+sudo ./server_helper_setup.sh clean-install
+sudo ./server_helper_setup.sh unmount-nas
+sudo ./server_helper_setup.sh uninstall
+```
 
 ---
 
@@ -468,6 +538,7 @@ BACKUP_RETENTION_DAYS="30"
 UPTIME_KUMA_NAS_URL=""
 UPTIME_KUMA_DOCKGE_URL=""
 UPTIME_KUMA_SYSTEM_URL=""
+UPTIME_KUMA_UPDATE_URL=""  # NEW in v0.3.0 - Update notifications
 
 # Automatic Features
 DISK_CLEANUP_THRESHOLD="80"
@@ -477,6 +548,9 @@ UPDATE_CHECK_INTERVAL="24"
 AUTO_REBOOT_ENABLED="false"
 REBOOT_TIME="03:00"
 
+# Self-Update (NEW in v0.3.0)
+AUTO_UPDATE_CHECK="false"  # Check for script updates during monitoring
+
 # Security
 SECURITY_CHECK_ENABLED="true"
 SECURITY_CHECK_INTERVAL="12"
@@ -484,7 +558,7 @@ FAIL2BAN_ENABLED="false"
 UFW_ENABLED="false"
 SSH_HARDENING_ENABLED="false"
 
-# Debug (NEW in v0.2.2)
+# Debug
 DEBUG="false"  # Set to "true" for detailed logging
 ```
 
@@ -517,6 +591,11 @@ DEBUG="false"  # Set to "true" for detailed logging
    - Periodic security audits
    - Issue detection and reporting
 
+6. **Script Updates** (NEW in v0.3.0)
+   - Checks for Server Helper updates every 12 hours (optional)
+   - Uptime Kuma notifications when updates available
+   - Manual approval required for installation
+
 ### Uptime Kuma Integration
 
 Configure push monitor URLs in config file:
@@ -524,12 +603,13 @@ Configure push monitor URLs in config file:
 UPTIME_KUMA_NAS_URL="http://uptime-kuma:3001/api/push/abc123"
 UPTIME_KUMA_DOCKGE_URL="http://uptime-kuma:3001/api/push/def456"
 UPTIME_KUMA_SYSTEM_URL="http://uptime-kuma:3001/api/push/ghi789"
+UPTIME_KUMA_UPDATE_URL="http://uptime-kuma:3001/api/push/jkl012"  # NEW in v0.3.0
 ```
 
 Monitors send:
 - Status: `up` or `down`
 - Messages: Detailed error information
-- Heartbeat: Every 2 minutes
+- Heartbeat: Every 2 minutes (script updates: every 12 hours)
 
 ---
 
@@ -537,20 +617,23 @@ Monitors send:
 
 ```
 /opt/Server-Helper/
-├── server_helper_setup.sh    # Main script (v0.2.2)
+├── server_helper_setup.sh    # Main script (v0.3.0)
 ├── server-helper.conf         # Configuration (chmod 600)
+├── VERSION                    # Version file
 └── lib/                       # Module library
-    ├── core.sh               # Core utilities
+    ├── core.sh               # Core utilities + loading indicators
     ├── config.sh             # Configuration management
     ├── validation.sh         # Input validation
+    ├── preinstall.sh         # Pre-installation checks
     ├── nas.sh                # NAS management
     ├── docker.sh             # Docker & Dockge
     ├── backup.sh             # Backup & restore
     ├── disk.sh               # Disk management
     ├── updates.sh            # System updates
     ├── security.sh           # Security features
-    ├── service.sh            # Systemd service
-    ├── menu.sh               # Interactive menu
+    ├── service.sh            # Systemd service + monitoring
+    ├── selfupdate.sh         # Self-update system (NEW in v0.3.0)
+    ├── menu.sh               # Interactive menu (43 options)
     └── uninstall.sh          # Uninstallation
 
 /opt/dockge/
@@ -741,7 +824,22 @@ DEBUG=true sudo ./server_helper_setup.sh monitor
 
 ## 📝 Version History
 
-### v0.2.2 - Enhanced Debug Edition (Current)
+### v0.3.0 - Self-Update & Loading Indicators (Current)
+- 🆙 Self-updater system with GitHub integration
+- ⏳ Loading indicators (spinners, progress bars)
+- 📡 Auto-update checking in monitoring loop (12-hour cycle)
+- 🔄 Rollback capability for safe updates
+- 📋 Menu expanded to 43 options
+- 💾 Automatic backup before updates
+- 🛡️ Configuration preservation during updates
+
+### v0.2.3 - Integration Update
+- ✨ Pre-installation detection system
+- 🚨 Emergency NAS unmount functionality
+- 🔧 Installation management commands
+- 📋 Enhanced interactive menu (38 options)
+
+### v0.2.2 - Enhanced Debug Edition
 - ✨ Added comprehensive debug mode to all functions
 - 📝 Enhanced logging with function-level tracing
 - 🔍 Improved troubleshooting capabilities
@@ -776,16 +874,18 @@ For issues, questions, or contributions:
 
 ## ✨ Summary
 
-**Server Helper v0.2.2** is your all-in-one solution for:
+**Server Helper v0.3.0** is your all-in-one solution for:
 - 🔧 Automated server setup
 - 📊 24/7 monitoring
 - 💾 Reliable backups
 - 🔒 Security hardening
 - 🔄 Update management
+- 🆙 Self-updating from GitHub
 - 🧹 Disk maintenance
+- ⏳ Visual loading feedback
 - 🐛 Advanced debugging
 
-**Total Commands: 31** | **Auto-Start: ✅** | **Security: ✅** | **Monitoring: ✅** | **Debug Mode: ✅**
+**Total Commands: 35+** | **Menu Options: 43** | **Auto-Start: ✅** | **Security: ✅** | **Monitoring: ✅** | **Self-Update: ✅**
 
 ---
 
