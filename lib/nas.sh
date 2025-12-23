@@ -41,16 +41,34 @@ mount_nas() {
     debug "[mount_nas] Starting NAS mount process"
     [ "$NAS_MOUNT_SKIP" = "true" ] && { log "NAS mounting disabled"; return 0; }
 
-    if ! command_exists mount.cifs; then
+    local count=0 failed=0 already_mounted=0
+
+    # First, check if any shares are already mounted
+    if [ -n "${NAS_ARRAY+x}" ] && [ ${#NAS_ARRAY[@]} -gt 0 ]; then
+        for cfg in "${NAS_ARRAY[@]}"; do
+            IFS=':' read -r _ _ mount _ _ <<< "$cfg"
+            mountpoint -q "$mount" 2>/dev/null && ((already_mounted++))
+        done
+    else
+        mountpoint -q "$NAS_MOUNT_POINT" 2>/dev/null && ((already_mounted++))
+    fi
+
+    # Only install cifs-utils if we have mounts to do and it's not installed
+    if [ $already_mounted -eq 0 ] && ! command_exists mount.cifs; then
         log "Installing cifs-utils package (required for NAS mounting)..."
         debug "[mount_nas] Installing cifs-utils"
-        sudo apt-get update -qq
-        sudo apt-get install -y cifs-utils
-        log "✓ cifs-utils installed"
+        # Add timeout to prevent indefinite hangs
+        if timeout 120 sudo apt-get update -qq 2>/dev/null; then
+            timeout 120 sudo apt-get install -y cifs-utils 2>/dev/null && log "✓ cifs-utils installed" || {
+                warning "Failed to install cifs-utils"
+                return 1
+            }
+        else
+            warning "apt-get update timed out or failed - check network connectivity"
+            return 1
+        fi
     fi
-    
-    local count=0 failed=0
-    
+
     # Ensure NAS_ARRAY exists and is an array
     if [ -n "${NAS_ARRAY+x}" ] && [ ${#NAS_ARRAY[@]} -gt 0 ]; then
         debug "[mount_nas] Processing ${#NAS_ARRAY[@]} NAS share(s)"
@@ -63,7 +81,7 @@ mount_nas() {
         debug "[mount_nas] Processing single NAS configuration"
         mount_single_nas "$NAS_IP" "$NAS_SHARE" "$NAS_MOUNT_POINT" "$NAS_USERNAME" "$NAS_PASSWORD" && ((count++)) || ((failed++))
     fi
-    
+
     log "NAS mounts: $count success, $failed failed"
     debug "[mount_nas] Mount process complete"
     [ $count -eq 0 ] && [ "$NAS_MOUNT_REQUIRED" = "true" ] && return 1
