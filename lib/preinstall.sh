@@ -153,15 +153,22 @@ show_installation_summary() {
     log "         EXISTING INSTALLATION DETECTED"
     log "═══════════════════════════════════════════════════════"
     log ""
-    
-    local has_service; detect_existing_service >/dev/null 2>&1; has_service=$?
-    local has_mounts; detect_existing_mounts >/dev/null 2>&1; has_mounts=$?
-    local has_dockge; detect_existing_dockge >/dev/null 2>&1; has_dockge=$?
-    local has_docker; detect_existing_docker >/dev/null 2>&1; has_docker=$?
-    local has_config; detect_existing_config >/dev/null 2>&1; has_config=$?
-    local has_backups; detect_existing_backups >/dev/null 2>&1; has_backups=$?
-    
-    log ""
+
+    # Silently check each component (output already shown by pre_installation_check)
+    local has_service=1
+    local has_mounts=1
+    local has_dockge=1
+    local has_docker=1
+    local has_config=1
+    local has_backups=1
+
+    detect_existing_service >/dev/null 2>&1 && has_service=0 || true
+    detect_existing_mounts >/dev/null 2>&1 && has_mounts=0 || true
+    detect_existing_dockge >/dev/null 2>&1 && has_dockge=0 || true
+    detect_existing_docker >/dev/null 2>&1 && has_docker=0 || true
+    detect_existing_config >/dev/null 2>&1 && has_config=0 || true
+    detect_existing_backups >/dev/null 2>&1 && has_backups=0 || true
+
     log "Installation Component Status:"
     [ "$has_service" -eq 0 ] && log "  ✓ Systemd Service" || log "  ✗ Systemd Service"
     [ "$has_mounts" -eq 0 ] && log "  ✓ NAS Mounts" || log "  ✗ NAS Mounts"
