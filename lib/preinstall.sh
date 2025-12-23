@@ -154,21 +154,21 @@ show_installation_summary() {
     log "═══════════════════════════════════════════════════════"
     log ""
     
-    local has_service=$(detect_existing_service; echo $?)
-    local has_mounts=$(detect_existing_mounts; echo $?)
-    local has_dockge=$(detect_existing_dockge; echo $?)
-    local has_docker=$(detect_existing_docker; echo $?)
-    local has_config=$(detect_existing_config; echo $?)
-    local has_backups=$(detect_existing_backups; echo $?)
+    local has_service; detect_existing_service >/dev/null 2>&1; has_service=$?
+    local has_mounts; detect_existing_mounts >/dev/null 2>&1; has_mounts=$?
+    local has_dockge; detect_existing_dockge >/dev/null 2>&1; has_dockge=$?
+    local has_docker; detect_existing_docker >/dev/null 2>&1; has_docker=$?
+    local has_config; detect_existing_config >/dev/null 2>&1; has_config=$?
+    local has_backups; detect_existing_backups >/dev/null 2>&1; has_backups=$?
     
     log ""
     log "Installation Component Status:"
-    [ $has_service -eq 0 ] && log "  ✓ Systemd Service" || log "  ✗ Systemd Service"
-    [ $has_mounts -eq 0 ] && log "  ✓ NAS Mounts" || log "  ✗ NAS Mounts"
-    [ $has_dockge -eq 0 ] && log "  ✓ Dockge" || log "  ✗ Dockge"
-    [ $has_docker -eq 0 ] && log "  ✓ Docker" || log "  ✗ Docker"
-    [ $has_config -eq 0 ] && log "  ✓ Configuration File" || log "  ✗ Configuration File"
-    [ $has_backups -eq 0 ] && log "  ✓ Existing Backups" || log "  ✗ Existing Backups"
+    [ "$has_service" -eq 0 ] && log "  ✓ Systemd Service" || log "  ✗ Systemd Service"
+    [ "$has_mounts" -eq 0 ] && log "  ✓ NAS Mounts" || log "  ✗ NAS Mounts"
+    [ "$has_dockge" -eq 0 ] && log "  ✓ Dockge" || log "  ✗ Dockge"
+    [ "$has_docker" -eq 0 ] && log "  ✓ Docker" || log "  ✗ Docker"
+    [ "$has_config" -eq 0 ] && log "  ✓ Configuration File" || log "  ✗ Configuration File"
+    [ "$has_backups" -eq 0 ] && log "  ✓ Existing Backups" || log "  ✗ Existing Backups"
     log ""
     log "═══════════════════════════════════════════════════════"
 }
