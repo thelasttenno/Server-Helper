@@ -1,10 +1,11 @@
 # Server Helper Changelog
 
-## Version 0.3.0 - Self-Update & Loading Indicators (2024-12-22)
+## Version 0.3.0 - Self-Update & Loading Indicators (2025-12-22)
 
 ### New Features
 
 - 🆙 **Self-Updater System**: Complete automated update functionality
+
   - Automatic version checking against GitHub repository
   - One-command update: `sudo ./server_helper_setup.sh self-update`
   - Automatic backup creation before updates
@@ -13,14 +14,14 @@
   - Rollback capability to previous versions
   - Changelog viewing: `sudo ./server_helper_setup.sh changelog`
   - Optional auto-update checking in monitoring loop (12-hour cycle)
-
 - ⏳ **Loading Indicators**: Visual feedback for long-running operations
+
   - Spinner animation for background processes
   - Progress bars for multi-step operations
   - Execute-with-spinner wrapper for commands
   - No external dependencies required (pure bash implementation)
-
 - 📡 **Uptime Kuma Integration**: Update notification support
+
   - Optional heartbeat URL for update notifications
   - Sends notifications when updates are available
   - Configurable via `UPTIME_KUMA_UPDATE_URL` in config
@@ -81,6 +82,7 @@ UPTIME_KUMA_UPDATE_URL=""  # Optional: Uptime Kuma URL for update notifications
 ### Technical Details
 
 **Self-Update Process**:
+
 1. Fetch VERSION file from GitHub raw content
 2. Compare with local VERSION file
 3. Create timestamped backup in `/opt/Server-Helper-backup-YYYYMMDD_HHMMSS/`
@@ -93,12 +95,14 @@ UPTIME_KUMA_UPDATE_URL=""  # Optional: Uptime Kuma URL for update notifications
 10. Clean up temporary files
 
 **Loading Indicators**:
+
 - `show_spinner()`: Animated spinner (|/-\) for background processes
 - `show_progress_bar()`: Visual progress bar with percentage
 - `execute_with_spinner()`: Wrapper to execute commands with spinner feedback
 - All indicators support DEBUG mode for troubleshooting
 
 **Monitoring Integration**:
+
 - Auto-update check runs every 360 cycles (720 minutes = 12 hours)
 - Non-intrusive - only logs when updates are available
 - Optional Uptime Kuma notifications
@@ -131,6 +135,7 @@ None. All updates are backward compatible with v0.2.x configurations.
 ### Upgrade Notes
 
 When upgrading from 0.2.x:
+
 - Use the new `self-update` command for automatic updates
 - Configuration file is automatically preserved
 - Systemd service is managed automatically (stops/restarts)
@@ -149,25 +154,26 @@ None reported.
 
 ---
 
-## Version 0.2.3 - Integration Update (2024-12-22)
+## Version 0.2.3 - Integration Update (2025-12-22)
 
 ### New Features
 
 - ✨ **Pre-Installation Detection**: Integrated existing installation detection system
+
   - Automatically detects existing Server Helper installations
   - Detects systemd services, NAS mounts, Dockge, Docker, config files, and backups
   - Interactive cleanup options (keep, remove all, selective, or cancel)
   - Runs automatically during `setup` command
   - Available as standalone `check-install` command
-
 - 🚨 **Emergency NAS Unmount**: Integrated emergency unmount functionality
+
   - Force unmount stuck NAS shares with multiple fallback methods
   - Automatic process detection and optional termination
   - Cleans up fstab entries and credential files
   - Available as `unmount-nas` command and menu option (21)
   - Supports optional mount point parameter
-
 - 🔧 **Installation Management**: New commands and menu section
+
   - `check-install` - Check for existing installations
   - `clean-install` - Remove existing installation components
   - Menu options 36-37 for installation management
@@ -213,17 +219,19 @@ None reported.
 
 ---
 
-## Version 0.2.2 - Enhanced Debug Edition (2024-12-22)
+## Version 0.2.2 - Enhanced Debug Edition (2025-12-22)
 
 ### New Features
+
 - ✨ **Enhanced Debug Mode**: Added comprehensive debug logging to all functions
   - Function entry/exit tracking
   - Variable state logging
   - File operation tracking
   - Network operation monitoring
   - Command execution details
-  
+
 ### Improvements
+
 - 📝 All library modules now include detailed debug statements
 - 🔍 Improved troubleshooting capabilities with granular logging
 - 📚 Enhanced README with debug mode documentation and examples
@@ -231,6 +239,7 @@ None reported.
 - 💡 Added debug mode examples to help documentation
 
 ### Updated Modules
+
 - `core.sh`: Enhanced with debug logging for all utility functions
 - `config.sh`: Added debug tracking for configuration operations
 - `validation.sh`: Debug logging for validation checks
@@ -245,6 +254,7 @@ None reported.
 - `uninstall.sh`: Uninstallation process debugging
 
 ### Usage
+
 Enable debug mode by setting the DEBUG environment variable:
 
 ```bash
@@ -258,11 +268,13 @@ DEBUG="true"
 ```
 
 ### Documentation
+
 - 📖 Comprehensive README update with debug mode section
 - 🔧 Added troubleshooting examples using debug mode
 - 📋 Updated command reference with debug examples
 
 ### Version Numbering
+
 - Adopted Semantic Versioning (Major.Minor.Patch)
 - Current version: 0.2.2
   - Major: 0 (Pre-release)
@@ -274,12 +286,14 @@ DEBUG="true"
 ## Version 0.2.1 - Config Backup Edition
 
 ### Features
+
 - 💾 Added configuration file backup functionality
 - 📦 Enhanced backup manifest with detailed file listings
 - 🔄 Automatic config backup with Dockge backups
 - 📁 Separate config backup directory structure
 
 ### Backup Files Included
+
 - System configuration (/etc/fstab, /etc/hosts, /etc/hostname)
 - SSH configuration (/etc/ssh/sshd_config)
 - Security configuration (fail2ban, UFW)
@@ -293,12 +307,14 @@ DEBUG="true"
 ## Version 0.2.0 - Modular Architecture
 
 ### Major Changes
+
 - 🏗️ Restructured entire codebase into modular library system
 - 📁 Organized functionality into separate modules
 - 🔧 Improved maintainability and code organization
 - 📚 Enhanced documentation
 
 ### Module Structure
+
 - Core utilities (`core.sh`)
 - Configuration management (`config.sh`)
 - Input validation (`validation.sh`)
@@ -317,6 +333,7 @@ DEBUG="true"
 ## Installation & Upgrade
 
 ### New Installation
+
 ```bash
 sudo git clone https://github.com/thelasttenno/Server-Helper.git /opt/Server-Helper
 cd /opt/Server-Helper
@@ -325,6 +342,7 @@ sudo ./server_helper_setup.sh
 ```
 
 ### Upgrading from Previous Version
+
 ```bash
 # Backup your current configuration
 sudo cp /opt/Server-Helper/server-helper.conf /tmp/server-helper.conf.backup
@@ -347,11 +365,13 @@ sudo ./server_helper_setup.sh setup
 ---
 
 ## Breaking Changes
+
 None in this release. All updates are backward compatible.
 
 ---
 
 ## Known Issues
+
 None reported.
 
 ---
@@ -359,6 +379,7 @@ None reported.
 ## Future Roadmap
 
 ### Planned for v0.3.0 (Minor Version)
+
 - Enhanced multi-NAS support
 - Web-based configuration interface
 - Email notification system
@@ -366,6 +387,7 @@ None reported.
 - Additional security hardening options
 
 ### Planned for v1.0.0 (Major Release)
+
 - Stable production release
 - Complete test coverage
 - Professional documentation
@@ -374,6 +396,7 @@ None reported.
 ---
 
 ## Support & Feedback
+
 For issues, suggestions, or contributions, please enable debug mode when reporting:
 
 ```bash

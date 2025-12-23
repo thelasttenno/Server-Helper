@@ -191,12 +191,12 @@ Debug messages are displayed in blue and include:
 
 Example debug output:
 ```
-[2024-12-21 10:30:45] DEBUG: [mount_nas] Starting NAS mount process
-[2024-12-21 10:30:45] DEBUG: [mount_nas] Processing single NAS configuration
-[2024-12-21 10:30:46] DEBUG: [mount_single_nas] IP: 192.168.1.100, Share: share, Mount: /mnt/nas
-[2024-12-21 10:30:46] DEBUG: [mount_single_nas] Attempting mount with SMB 3.0
-[2024-12-21 10:30:47] DEBUG: [mount_single_nas] Mount successful with SMB 3.0
-[2024-12-21 10:30:47] DEBUG: [mount_nas] Mount process complete
+[2025-12-21 10:30:45] DEBUG: [mount_nas] Starting NAS mount process
+[2025-12-21 10:30:45] DEBUG: [mount_nas] Processing single NAS configuration
+[2025-12-21 10:30:46] DEBUG: [mount_single_nas] IP: 192.168.1.100, Share: share, Mount: /mnt/nas
+[2025-12-21 10:30:46] DEBUG: [mount_single_nas] Attempting mount with SMB 3.0
+[2025-12-21 10:30:47] DEBUG: [mount_single_nas] Mount successful with SMB 3.0
+[2025-12-21 10:30:47] DEBUG: [mount_nas] Mount process complete
 ```
 
 ### When to Use Debug Mode
@@ -643,11 +643,11 @@ Monitors send:
 
 /mnt/nas/
 └── dockge_backups/
-    ├── dockge_backup_20241220_120000.tar.gz
-    ├── dockge_backup_20241220_180000.tar.gz
+    ├── dockge_backup_20251220_120000.tar.gz
+    ├── dockge_backup_20251220_180000.tar.gz
     └── config/
-        ├── config_backup_20241220_120000.tar.gz
-        └── config_backup_20241220_180000.tar.gz
+        ├── config_backup_20251220_120000.tar.gz
+        └── config_backup_20251220_180000.tar.gz
 
 /etc/systemd/system/
 └── server-helper.service      # Systemd service
