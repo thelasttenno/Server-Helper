@@ -1,12 +1,33 @@
 ---
 # SSH Hardening Configuration
 
+- name: Install OpenSSH server
+  ansible.builtin.apt:
+    name: openssh-server
+    state: present
+    update_cache: yes
+  when: security.ssh_install_server | default(true)
+
+- name: Ensure SSH service is enabled and started
+  ansible.builtin.service:
+    name: ssh
+    state: started
+    enabled: yes
+
 - name: Backup original sshd_config
   ansible.builtin.copy:
     src: /etc/ssh/sshd_config
     dest: /etc/ssh/sshd_config.backup.{{ ansible_date_time.epoch }}
     remote_src: true
     mode: '0600'
+
+- name: Configure SSH port
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?Port '
+    line: 'Port {{ security.ssh_port | default(22) }}'
+    state: present
+  notify: Restart SSH
 
 - name: Configure SSH hardening settings
   ansible.builtin.lineinfile:
@@ -15,18 +36,35 @@
     line: "{{ item.line }}"
     state: present
   loop:
-    - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin {{ "yes" if security.ssh_hardening.permit_root_login else "no" }}' }
-    - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication {{ "yes" if security.ssh_hardening.password_authentication else "no" }}' }
-    - { regexp: '^#?PubkeyAuthentication', line: 'PubkeyAuthentication {{ "yes" if security.ssh_hardening.pubkey_authentication else "no" }}' }
-    - { regexp: '^#?MaxAuthTries', line: 'MaxAuthTries {{ security.ssh_hardening.max_auth_tries }}' }
+    - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin {{ "yes" if security.ssh_permit_root_login else "no" }}' }
+    - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication {{ "yes" if security.ssh_password_authentication else "no" }}' }
+    - { regexp: '^#?PubkeyAuthentication', line: 'PubkeyAuthentication yes' }
+    - { regexp: '^#?MaxAuthTries', line: 'MaxAuthTries {{ security.ssh_max_auth_tries | default(3) }}' }
+    - { regexp: '^#?ClientAliveInterval', line: 'ClientAliveInterval {{ security.ssh_client_alive_interval | default(300) }}' }
+    - { regexp: '^#?ClientAliveCountMax', line: 'ClientAliveCountMax 2' }
     - { regexp: '^#?X11Forwarding', line: 'X11Forwarding no' }
     - { regexp: '^#?PermitEmptyPasswords', line: 'PermitEmptyPasswords no' }
+    - { regexp: '^#?Protocol', line: 'Protocol 2' }
+    - { regexp: '^#?HostbasedAuthentication', line: 'HostbasedAuthentication no' }
+    - { regexp: '^#?IgnoreRhosts', line: 'IgnoreRhosts yes' }
+    - { regexp: '^#?PermitUserEnvironment', line: 'PermitUserEnvironment no' }
+    - { regexp: '^#?Ciphers', line: 'Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr' }
+    - { regexp: '^#?MACs', line: 'MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256' }
+    - { regexp: '^#?KexAlgorithms', line: 'KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256' }
   notify: Restart SSH
+
+- name: Allow SSH through UFW (before enabling)
+  community.general.ufw:
+    rule: allow
+    port: "{{ security.ssh_port | default(22) }}"
+    proto: tcp
+  when: security.ufw_enabled | default(true)
 
 - name: Warn about SSH key requirement
   ansible.builtin.debug:
     msg:
       - "⚠️  WARNING: SSH password authentication will be disabled!"
       - "Make sure you have SSH key authentication configured before restarting SSH."
+      - "Current ansible_user should have SSH key already configured."
       - "If you get locked out, use console access to re-enable password auth."
-  when: not security.ssh_hardening.password_authentication
+  when: not security.ssh_password_authentication

@@ -1,6 +1,6 @@
 ---
 # Ansible Vault - Secrets Template (EXAMPLE - NOT ENCRYPTED)
-# 
+#
 # IMPORTANT: This is an EXAMPLE file showing the structure.
 # To use this:
 #   1. Create vault password: openssl rand -base64 32 > .vault_password
@@ -10,6 +10,20 @@
 # Edit encrypted vault: ansible-vault edit group_vars/vault.yml
 
 # =============================================================================
+# SYSTEM USER CREDENTIALS
+# =============================================================================
+
+vault_system_users:
+  # Admin user password
+  admin_password: "change-me-strong-password"
+
+  # Admin user SSH public key (optional)
+  admin_ssh_key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC... user@host"
+
+  # Additional users
+  developer_password: "change-me-developer-password"
+
+# =============================================================================
 # NAS CREDENTIALS
 # =============================================================================
 
@@ -17,7 +31,7 @@ vault_nas_credentials:
   # Main NAS share
   - username: "your_nas_user"
     password: "your_nas_password"
-  
+
   # Additional shares (if needed)
   # - username: "another_user"
   #   password: "another_password"
