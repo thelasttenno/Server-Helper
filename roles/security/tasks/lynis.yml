@@ -1,0 +1,40 @@
+---
+# Lynis Security Auditing Configuration
+
+- name: Create Lynis audit script
+  ansible.builtin.template:
+    src: lynis_audit.sh.j2
+    dest: "{{ base_install_dir }}/scripts/lynis_audit.sh"
+    mode: '0755'
+
+- name: Create systemd service for Lynis audit
+  ansible.builtin.template:
+    src: lynis.service.j2
+    dest: /etc/systemd/system/server-helper-lynis.service
+    mode: '0644'
+
+- name: Create systemd timer for Lynis audit
+  ansible.builtin.template:
+    src: lynis.timer.j2
+    dest: /etc/systemd/system/server-helper-lynis.timer
+    mode: '0644'
+
+- name: Enable and start Lynis timer
+  ansible.builtin.systemd:
+    name: server-helper-lynis.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Run initial Lynis audit
+  ansible.builtin.command: "{{ base_install_dir }}/scripts/lynis_audit.sh"
+  register: lynis_audit
+  changed_when: false
+
+- name: Display Lynis audit summary
+  ansible.builtin.debug:
+    msg:
+      - "Lynis audit configured!"
+      - "Schedule: {{ security.lynis.schedule }}"
+      - "Reports: {{ base_install_dir }}/reports/"
+      - "Run manually: sudo {{ base_install_dir }}/scripts/lynis_audit.sh"

@@ -1,0 +1,37 @@
+# Ansible Galaxy Requirements
+# Install with: ansible-galaxy install -r requirements.yml
+
+---
+collections:
+  - name: community.general
+    version: ">=8.0.0"
+  - name: community.docker
+    version: ">=3.0.0"
+  - name: ansible.posix
+    version: ">=1.5.0"
+
+roles:
+  # Docker installation and management
+  - name: geerlingguy.docker
+    version: "7.4.1"
+    src: https://github.com/geerlingguy/ansible-role-docker
+
+  # System security hardening
+  - name: geerlingguy.security
+    version: "3.2.0"
+    src: https://github.com/geerlingguy/ansible-role-security
+
+  # Python pip installation
+  - name: geerlingguy.pip
+    version: "3.0.0"
+    src: https://github.com/geerlingguy/ansible-role-pip
+
+  # Firewall management (UFW)
+  - name: weareinteractive.ufw
+    version: "2.0.0"
+    src: https://github.com/weareinteractive/ansible-ufw
+
+  # fail2ban installation and configuration
+  - name: robertdebock.fail2ban
+    version: "5.1.0"
+    src: https://github.com/robertdebock/ansible-role-fail2ban

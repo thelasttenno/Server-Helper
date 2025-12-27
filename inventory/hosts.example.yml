@@ -1,0 +1,25 @@
+# Server Helper Inventory - Example
+# Copy this file to hosts.yml and edit with your server details
+
+---
+all:
+  hosts:
+    server01:
+      ansible_host: 192.168.1.100
+      ansible_user: ubuntu
+      ansible_become: yes
+      ansible_python_interpreter: /usr/bin/python3
+      
+      # Optional: Override variables per host
+      # hostname: "docker-server-01"
+      # dockge_port: 5001
+      # netdata_port: 19999
+
+  children:
+    servers:
+      hosts:
+        server01:
+
+  vars:
+    # Global variables for all hosts
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'

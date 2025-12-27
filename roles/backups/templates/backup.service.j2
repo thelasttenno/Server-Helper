@@ -1,0 +1,14 @@
+[Unit]
+Description=Server Helper Backup Service (Restic)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={{ base_install_dir }}/scripts/backup.sh
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,406 +1,403 @@
 # Server Helper Changelog
 
-## Version 0.3.0 - Self-Update & Loading Indicators (2025-12-22)
+## Version 1.0.0 - Complete Rewrite: Ansible Edition (2025-12-23)
 
-### New Features
+### 🎉 Major Release - Complete Architectural Overhaul
 
-- 🆙 **Self-Updater System**: Complete automated update functionality
-
-  - Automatic version checking against GitHub repository
-  - One-command update: `sudo ./server_helper_setup.sh self-update`
-  - Automatic backup creation before updates
-  - Configuration file preservation during updates
-  - Service state management (stops before update, restarts after)
-  - Rollback capability to previous versions
-  - Changelog viewing: `sudo ./server_helper_setup.sh changelog`
-  - Optional auto-update checking in monitoring loop (12-hour cycle)
-- ⏳ **Loading Indicators**: Visual feedback for long-running operations
-
-  - Spinner animation for background processes
-  - Progress bars for multi-step operations
-  - Execute-with-spinner wrapper for commands
-  - No external dependencies required (pure bash implementation)
-- 📡 **Uptime Kuma Integration**: Update notification support
-
-  - Optional heartbeat URL for update notifications
-  - Sends notifications when updates are available
-  - Configurable via `UPTIME_KUMA_UPDATE_URL` in config
-
-### New Commands
-
-- `check-updates-script` - Check for Server Helper script updates
-- `self-update` - Update Server Helper to latest version from GitHub
-- `rollback` - Rollback to previous version
-- `changelog` - View update changelog from GitHub
-
-### New Module
-
-- `lib/selfupdate.sh` - Complete self-update system
-  - `check_for_script_updates()` - Compare local vs GitHub versions
-  - `self_update()` - Full 5-step update process with safety checks
-  - `rollback_update()` - Restore previous version from backup
-  - `auto_update_check()` - Non-intrusive background update checking
-  - `show_update_changelog()` - Fetch and display GitHub changelog
-
-### Improvements
-
-- 📋 Enhanced interactive menu with 43 options (up from 38)
-- 🎨 New menu section: "Self-Update" with options 39-42
-- 🔄 Auto-update check integrated into monitoring service
-- 💾 Automatic configuration backup before updates
-- 🛡️ Safe update process with rollback capability
-- 📦 Backup system creates timestamped backups before updates
-- 🔍 Version comparison using curl to GitHub raw content
-
-### Updated Modules
-
-- `core.sh`: Added `show_spinner()`, `show_progress_bar()`, `show_progress()`, `execute_with_spinner()`
-- `config.sh`: Added `AUTO_UPDATE_CHECK` and `UPTIME_KUMA_UPDATE_URL` configuration options
-- `service.sh`: Integrated auto-update check into monitoring loop (360 cycles = 12 hours)
-- `menu.sh`: Updated to v0.3.0, added self-update menu section (options 39-42)
-- `server_helper_setup.sh`: Added selfupdate module to loading order, new commands
-
-### Configuration Options
-
-New options added to `server-helper.conf`:
-
-```bash
-# Self-Update Configuration (NEW in 0.3.0)
-AUTO_UPDATE_CHECK="false"  # Check for script updates during monitoring
-UPTIME_KUMA_UPDATE_URL=""  # Optional: Uptime Kuma URL for update notifications
-```
-
-### Menu Structure Changes
-
-- Menu items 39-42: Self-Update (NEW)
-  - 39: Check for updates
-  - 40: Update to latest version
-  - 41: Rollback to previous version
-  - 42: View changelog
-- Menu item 43: Uninstall (shifted from 38)
-
-### Technical Details
-
-**Self-Update Process**:
-
-1. Fetch VERSION file from GitHub raw content
-2. Compare with local VERSION file
-3. Create timestamped backup in `/opt/Server-Helper-backup-YYYYMMDD_HHMMSS/`
-4. Backup current configuration file
-5. Clone latest version from GitHub
-6. Stop systemd service if running
-7. Install update (copy files from temp directory)
-8. Restore configuration file
-9. Restart service if it was running
-10. Clean up temporary files
-
-**Loading Indicators**:
-
-- `show_spinner()`: Animated spinner (|/-\) for background processes
-- `show_progress_bar()`: Visual progress bar with percentage
-- `execute_with_spinner()`: Wrapper to execute commands with spinner feedback
-- All indicators support DEBUG mode for troubleshooting
-
-**Monitoring Integration**:
-
-- Auto-update check runs every 360 cycles (720 minutes = 12 hours)
-- Non-intrusive - only logs when updates are available
-- Optional Uptime Kuma notifications
-- Does not automatically install updates (manual approval required)
-
-### Usage Examples
-
-```bash
-# Check for script updates
-sudo ./server_helper_setup.sh check-updates-script
-
-# Update to latest version
-sudo ./server_helper_setup.sh self-update
-
-# Rollback to previous version
-sudo ./server_helper_setup.sh rollback
-
-# View update changelog
-sudo ./server_helper_setup.sh changelog
-
-# Enable auto-update checking (edit config)
-sudo ./server_helper_setup.sh edit-config
-# Set AUTO_UPDATE_CHECK="true"
-```
-
-### Breaking Changes
-
-None. All updates are backward compatible with v0.2.x configurations.
-
-### Upgrade Notes
-
-When upgrading from 0.2.x:
-
-- Use the new `self-update` command for automatic updates
-- Configuration file is automatically preserved
-- Systemd service is managed automatically (stops/restarts)
-- Previous manual git pull method still works but not recommended
-- New config options are optional with safe defaults
-
-### Known Issues
-
-None reported.
-
-### Dependencies
-
-- `git` - Required for cloning updates from GitHub
-- `curl` - Required for fetching VERSION file
-- Both are standard on Ubuntu 24.04.3 LTS
+This is a **complete rewrite** from bash scripts to Ansible playbooks. This is a **breaking change** requiring migration from v0.3.0.
 
 ---
 
-## Version 0.2.3 - Integration Update (2025-12-22)
+### 🌟 New Architecture
 
-### New Features
+**Technology Stack:**
+- **Infrastructure as Code**: Ansible playbooks (declarative, idempotent)
+- **Monitoring**: Netdata (metrics) + Uptime Kuma (alerting)
+- **Container Management**: Dockge (web UI for docker-compose stacks)
+- **Backups**: Restic (encrypted, deduplicated, incremental)
+- **Security**: Lynis (automated auditing) + fail2ban + UFW
+- **Automation**: ansible-pull (self-updating) + systemd timers
 
-- ✨ **Pre-Installation Detection**: Integrated existing installation detection system
-
-  - Automatically detects existing Server Helper installations
-  - Detects systemd services, NAS mounts, Dockge, Docker, config files, and backups
-  - Interactive cleanup options (keep, remove all, selective, or cancel)
-  - Runs automatically during `setup` command
-  - Available as standalone `check-install` command
-- 🚨 **Emergency NAS Unmount**: Integrated emergency unmount functionality
-
-  - Force unmount stuck NAS shares with multiple fallback methods
-  - Automatic process detection and optional termination
-  - Cleans up fstab entries and credential files
-  - Available as `unmount-nas` command and menu option (21)
-  - Supports optional mount point parameter
-- 🔧 **Installation Management**: New commands and menu section
-
-  - `check-install` - Check for existing installations
-  - `clean-install` - Remove existing installation components
-  - Menu options 36-37 for installation management
-
-### Improvements
-
-- 📋 Enhanced interactive menu with 38 options (up from 35)
-- 🗂️ Reorganized menu with new "Install" section
-- 📝 Updated help text with new commands and examples
-- 🔍 Better integration of orphaned scripts (preinstall.sh, emergency-unmount-nas.sh)
-- 🏗️ Preinstall module now loaded in main script module order
-
-### Updated Modules
-
-- `nas.sh`: Added `emergency_unmount_nas()` function with 4 unmount methods
-- `menu.sh`: Updated to v0.2.3, added installation management options
-- `server_helper_setup.sh`: Integrated preinstall module, added new commands
-
-### New Commands
-
-- `unmount-nas [mount_point]` - Emergency unmount NAS with force options
-- `check-install` - Run pre-installation check
-- `clean-install` - Clean existing installation components
-
-### Menu Structure Changes
-
-- Menu item 21: Emergency NAS Unmount
-- Menu items 22-24: System (shifted from 21-23)
-- Menu items 25-29: Updates (shifted from 24-28)
-- Menu items 30-35: Security (shifted from 29-34)
-- Menu items 36-37: Installation Management (NEW)
-- Menu item 38: Uninstall (shifted from 35)
-
-### Integrated Files
-
-- `lib/preinstall.sh` - Now loaded as module
-- `lib/emergency-unmount-nas.sh` - Functionality integrated into nas.sh
-
-### Bug Fixes
-
-- Fixed orphaned preinstall.sh not being used in main script
-- Integrated standalone emergency unmount script into main program
+**Deployment Model:**
+- All services deployed as Docker containers via Dockge stacks
+- One stack per service in `/opt/dockge/stacks/`
+- Systemd timers for recurring tasks (backups, security scans)
+- Web-based management (no more CLI menu)
 
 ---
 
-## Version 0.2.2 - Enhanced Debug Edition (2025-12-22)
+### ✨ New Features
 
-### New Features
+#### Monitoring & Alerting
 
-- ✨ **Enhanced Debug Mode**: Added comprehensive debug logging to all functions
-  - Function entry/exit tracking
-  - Variable state logging
-  - File operation tracking
-  - Network operation monitoring
-  - Command execution details
+- **Netdata Integration**: 
+  - Real-time system and container metrics
+  - Pre-configured alarms for CPU, RAM, disk
+  - Push alerts to Uptime Kuma via webhooks
+  - Netdata Cloud integration (optional)
 
-### Improvements
+- **Uptime Kuma Integration**:
+  - Hybrid monitoring (pull + push)
+  - Pull: Monitors service HTTP endpoints every 60s
+  - Push: Receives critical alerts from Netdata/Restic/Lynis
+  - Multiple notification channels (Email, Discord, Telegram, etc.)
 
-- 📝 All library modules now include detailed debug statements
-- 🔍 Improved troubleshooting capabilities with granular logging
-- 📚 Enhanced README with debug mode documentation and examples
-- 🏷️ Standardized version numbering using Semantic Versioning (SemVer)
-- 💡 Added debug mode examples to help documentation
+- **Docker Network Isolation**:
+  - `monitoring` network for observability stack
+  - `proxy` network for reverse proxy (optional)
 
-### Updated Modules
+#### Backup System
 
-- `core.sh`: Enhanced with debug logging for all utility functions
-- `config.sh`: Added debug tracking for configuration operations
-- `validation.sh`: Debug logging for validation checks
-- `nas.sh`: Detailed NAS mount operation debugging
-- `docker.sh`: Docker and Dockge operation tracking
-- `backup.sh`: Comprehensive backup/restore debugging
-- `disk.sh`: Disk operation monitoring
-- `updates.sh`: System update process tracking
-- `security.sh`: Security operation debugging
-- `service.sh`: Service management debugging
-- `menu.sh`: Menu operation tracking
-- `uninstall.sh`: Uninstallation process debugging
+- **Restic Backups**:
+  - Encrypted, compressed, deduplicated
+  - Incremental backups (space-efficient)
+  - Multiple destinations (any combination):
+    - NAS (CIFS/SMB)
+    - AWS S3
+    - Backblaze B2
+    - Local storage
+  - Flexible retention policies:
+    - Daily, weekly, monthly, yearly
+  - Heartbeat notifications to Uptime Kuma
 
-### Usage
+- **Systemd Timer**:
+  - Scheduled backups via systemd (not cron)
+  - Configurable schedule
+  - Logs to journald
 
-Enable debug mode by setting the DEBUG environment variable:
+#### Security
 
-```bash
-DEBUG=true sudo ./server_helper_setup.sh <command>
+- **Lynis Integration**:
+  - Automated weekly security audits
+  - Systemd timer for scheduling
+  - Reports to `/var/log/lynis/`
+  - Optional Uptime Kuma notifications
+
+- **Automated Hardening**:
+  - fail2ban (intrusion prevention)
+  - UFW firewall (default deny)
+  - SSH hardening (disable password auth, root login)
+  - Unattended security updates (optional)
+
+#### Container Management
+
+- **Dockge Web UI**:
+  - Visual stack management
+  - Compose file editor
+  - Container logs viewer
+  - Stack health monitoring
+
+- **All Services in Stacks**:
+  ```
+  /opt/dockge/stacks/
+  ├── netdata/
+  ├── uptime-kuma/
+  ├── watchtower/ (optional)
+  └── reverse-proxy/ (optional)
+  ```
+
+#### Optional Services
+
+- **Watchtower**: Automatic container updates
+  - Configurable schedule
+  - Monitor-only mode
+  - Notifications via Shoutrrr
+
+- **Traefik Reverse Proxy**:
+  - Automatic Let's Encrypt certificates
+  - HTTP → HTTPS redirection
+  - Dashboard UI
+  - Docker integration
+
+- **Nginx Proxy Manager**:
+  - Alternative to Traefik
+  - Web-based configuration
+  - Let's Encrypt integration
+
+#### Self-Update
+
+- **ansible-pull Integration**:
+  - Pulls latest playbook from GitHub
+  - Runs setup playbook automatically
+  - Systemd timer (daily at 5 AM default)
+  - Idempotent (safe to re-run)
+  - Logs to `/var/log/ansible-pull.log`
+
+---
+
+### 🔄 Migration from v0.3.0
+
+**Breaking Changes:**
+- Complete rewrite - no upgrade path, requires fresh setup
+- Configuration format changed: bash → YAML
+- CLI menu removed → Web UIs
+- Bash commands → Ansible playbooks
+- Tar backups → Restic backups
+
+**Migration Path:**
+1. Export v0.3.0 configuration
+2. Map to Ansible variables
+3. Run new Ansible setup
+4. Migrate custom stacks
+5. Remove old installation
+
+**See**: [MIGRATION.md](MIGRATION.md) for detailed guide
+
+---
+
+### 📦 What's Included
+
+#### Ansible Playbooks
+
+- `playbooks/setup.yml` - Main setup playbook
+- `playbooks/backup.yml` - Manual backup trigger
+- `playbooks/security.yml` - Security audit
+- `playbooks/update.yml` - Self-update (via ansible-pull)
+
+#### Ansible Roles
+
+- `common` - Base system setup
+- `security` - Security hardening
+- `nas` - NAS share mounting
+- `dockge` - Container management
+- `netdata` - Metrics monitoring
+- `uptime-kuma` - Uptime monitoring
+- `restic` - Backup system
+- `lynis` - Security auditing
+- `reverse-proxy` - Traefik/Nginx (optional)
+- `watchtower` - Auto-updates (optional)
+- `self-update` - ansible-pull setup
+
+#### Community Roles
+
+- `geerlingguy.docker` - Docker installation
+- `geerlingguy.security` - Security baseline
+- `geerlingguy.pip` - Python pip
+- `weareinteractive.ufw` - UFW firewall
+- `robertdebock.fail2ban` - fail2ban IPS
+
+#### Docker Compose Stacks
+
+- Dockge (container management)
+- Netdata (monitoring)
+- Uptime Kuma (alerting)
+- Watchtower (auto-updates, optional)
+- Traefik (reverse proxy, optional)
+
+#### Configuration
+
+- Declarative YAML configuration
+- Inventory-based multi-host support
+- Group variables for global settings
+- Host variables for per-server customization
+
+---
+
+### 🎯 Key Improvements
+
+#### Developer Experience
+
+- **Idempotent**: Re-run playbooks safely
+- **Version Control**: Infrastructure as code in Git
+- **Modular**: Easy to add/remove components
+- **Testable**: Check mode for dry runs
+- **Documented**: Comprehensive README + migration guide
+
+#### Operations
+
+- **Web UIs**: All management via browser
+- **Automated**: Systemd timers for recurring tasks
+- **Monitored**: Real-time metrics and alerts
+- **Secure**: Automated hardening and audits
+- **Flexible**: Choose services à la carte
+
+#### Reliability
+
+- **Container Restart Policies**: Auto-recovery
+- **Health Checks**: Uptime Kuma monitors
+- **Backup Verification**: Restic check command
+- **Log Rotation**: Automatic cleanup
+- **Resource Limits**: Prevent runaway containers
+
+---
+
+### 📊 System Requirements
+
+**Minimum:**
+- Ubuntu 24.04 LTS
+- 2 GB RAM
+- 20 GB disk space
+- 1 CPU core
+- Ansible 2.15+ (on control node)
+
+**Recommended:**
+- 4 GB RAM
+- 50 GB disk space
+- 2 CPU cores
+- Ansible 2.16+
+
+**Resource Usage:**
+- Netdata: ~100-150 MB RAM
+- Uptime Kuma: ~50-80 MB RAM
+- Dockge: ~50 MB RAM
+- Docker: ~100 MB RAM
+- **Total**: ~300-400 MB RAM + containers
+
+---
+
+### 🔧 Configuration Highlights
+
+**Flexible NAS Support:**
+```yaml
+nas:
+  shares:
+    - ip: "192.168.1.100"
+      share: "backup"
+      mount: "/mnt/nas/backup"
+    - ip: "192.168.1.100"
+      share: "media"
+      mount: "/mnt/nas/media"
 ```
 
-Or enable it permanently in the configuration file:
-
-```bash
-DEBUG="true"
+**Multiple Backup Destinations:**
+```yaml
+restic:
+  destinations:
+    nas:
+      enabled: true
+    s3:
+      enabled: true
+    local:
+      enabled: true
 ```
 
-### Documentation
+**Hybrid Monitoring:**
+```yaml
+# Uptime Kuma monitors (pull)
+monitors:
+  - name: "Netdata Health"
+    type: "http"
+    url: "http://localhost:19999/api/v1/info"
 
-- 📖 Comprehensive README update with debug mode section
-- 🔧 Added troubleshooting examples using debug mode
-- 📋 Updated command reference with debug examples
-
-### Version Numbering
-
-- Adopted Semantic Versioning (Major.Minor.Patch)
-- Current version: 0.2.2
-  - Major: 0 (Pre-release)
-  - Minor: 2 (Feature updates)
-  - Patch: 2 (Bug fixes and enhancements)
-
----
-
-## Version 0.2.1 - Config Backup Edition
-
-### Features
-
-- 💾 Added configuration file backup functionality
-- 📦 Enhanced backup manifest with detailed file listings
-- 🔄 Automatic config backup with Dockge backups
-- 📁 Separate config backup directory structure
-
-### Backup Files Included
-
-- System configuration (/etc/fstab, /etc/hosts, /etc/hostname)
-- SSH configuration (/etc/ssh/sshd_config)
-- Security configuration (fail2ban, UFW)
-- Server Helper configuration
-- NAS credentials
-- Docker configuration
-- systemd service files
-
----
-
-## Version 0.2.0 - Modular Architecture
-
-### Major Changes
-
-- 🏗️ Restructured entire codebase into modular library system
-- 📁 Organized functionality into separate modules
-- 🔧 Improved maintainability and code organization
-- 📚 Enhanced documentation
-
-### Module Structure
-
-- Core utilities (`core.sh`)
-- Configuration management (`config.sh`)
-- Input validation (`validation.sh`)
-- NAS management (`nas.sh`)
-- Docker & Dockge (`docker.sh`)
-- Backup & restore (`backup.sh`)
-- Disk management (`disk.sh`)
-- System updates (`updates.sh`)
-- Security features (`security.sh`)
-- Service management (`service.sh`)
-- Interactive menu (`menu.sh`)
-- Uninstallation (`uninstall.sh`)
-
----
-
-## Installation & Upgrade
-
-### New Installation
-
-```bash
-sudo git clone https://github.com/thelasttenno/Server-Helper.git /opt/Server-Helper
-cd /opt/Server-Helper
-sudo chmod +x server_helper_setup.sh
-sudo ./server_helper_setup.sh
-```
-
-### Upgrading from Previous Version
-
-```bash
-# Backup your current configuration
-sudo cp /opt/Server-Helper/server-helper.conf /tmp/server-helper.conf.backup
-
-# Pull latest version
-cd /opt/Server-Helper
-sudo git pull
-
-# Make scripts executable
-sudo chmod +x server_helper_setup.sh
-sudo chmod +x lib/*.sh
-
-# Restore your configuration
-sudo cp /tmp/server-helper.conf.backup /opt/Server-Helper/server-helper.conf
-
-# Run setup to apply any updates
-sudo ./server_helper_setup.sh setup
+# Netdata alarms push to Uptime Kuma
+netdata:
+  alarms:
+    cpu_critical: 95
+    uptime_kuma_urls:
+      cpu: "http://localhost:3001/api/push/CPU123"
 ```
 
 ---
 
-## Breaking Changes
+### 📝 Usage Examples
 
-None in this release. All updates are backward compatible.
+#### Initial Setup
+```bash
+ansible-playbook playbooks/setup.yml
+```
+
+#### Run Backup
+```bash
+ansible-playbook playbooks/backup.yml
+```
+
+#### Security Audit
+```bash
+ansible-playbook playbooks/security.yml
+```
+
+#### Update Configuration
+```bash
+nano group_vars/all.yml
+ansible-playbook playbooks/setup.yml
+```
 
 ---
 
-## Known Issues
+### 🐛 Known Issues
 
-None reported.
+None at release. This is a fresh rewrite with no legacy code.
 
 ---
 
-## Future Roadmap
+### 🔮 Future Roadmap
 
-### Planned for v0.3.0 (Minor Version)
+**v1.1.0 (Minor):**
+- Additional backup destinations (SFTP, Dropbox)
+- Grafana integration for dashboards
+- Prometheus metrics collection
+- Email notification templates
 
-- Enhanced multi-NAS support
-- Web-based configuration interface
-- Email notification system
-- Improved backup compression options
-- Additional security hardening options
+**v1.2.0 (Minor):**
+- Multi-host deployment support
+- High availability configurations
+- Database backup support (MySQL, PostgreSQL)
+- Application-specific stacks (WordPress, Ghost, etc.)
 
-### Planned for v1.0.0 (Major Release)
-
-- Stable production release
-- Complete test coverage
-- Professional documentation
+**v2.0.0 (Major):**
+- Kubernetes support (Helm charts)
+- GitOps workflow (ArgoCD)
+- Multi-cloud deployment (AWS, GCP, Azure)
 - Enterprise features
 
 ---
 
-## Support & Feedback
+### 🙏 Credits
 
-For issues, suggestions, or contributions, please enable debug mode when reporting:
+**Community Roles:**
+- Jeff Geerling (geerlingguy) - Docker, Security, Pip roles
+- WeAreInteractive - UFW role
+- Robert de Bock - fail2ban role
 
-```bash
-DEBUG=true sudo ./server_helper_setup.sh <failing-command>
-```
+**Technology Stack:**
+- Ansible (Red Hat)
+- Docker (Docker Inc.)
+- Netdata (Netdata Inc.)
+- Uptime Kuma (Louis Lam)
+- Dockge (Louis Lam)
+- Restic (Restic Authors)
+- Lynis (CISOfy)
 
-Include the debug output when seeking support.
+---
+
+## Version 0.3.0 - Self-Update & Loading Indicators (2025-12-22)
+
+### New Features
+- Self-updater system with GitHub integration
+- Loading indicators (spinners, progress bars)
+- Auto-update checking in monitoring loop
+- Rollback capability
+- Enhanced menu (43 options)
+
+**See**: Previous CHANGELOG for full v0.3.0 details
+
+---
+
+## Version 0.2.x - Enhanced Features (2025-12-22)
+
+### v0.2.3
+- Pre-installation detection
+- Emergency NAS unmount
+- Installation management commands
+
+### v0.2.2
+- Enhanced debug mode
+- Comprehensive logging
+
+### v0.2.1
+- Configuration file backup
+- Enhanced backup manifests
+
+### v0.2.0
+- Modular architecture
+- Library system
+
+---
+
+## Version 0.1.x - Initial Releases
+
+Initial bash-based implementation.
+
+---
+
+**Note**: For migration from v0.3.0 to v1.0.0, see [MIGRATION.md](MIGRATION.md)

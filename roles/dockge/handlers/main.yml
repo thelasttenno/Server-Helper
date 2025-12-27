@@ -1,0 +1,7 @@
+---
+# Dockge Handlers
+- name: Restart Dockge
+  community.docker.docker_compose:
+    project_src: "{{ dockge_base_dir }}"
+    state: present
+    restarted: true

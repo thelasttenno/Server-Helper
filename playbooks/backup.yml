@@ -1,0 +1,66 @@
+# Server Helper v1.0.0 - Backup Playbook
+# Run manual backups: ansible-playbook playbooks/backup.yml
+
+---
+- name: Run Manual Backup
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  pre_tasks:
+    - name: Display backup banner
+      debug:
+        msg: |
+          ╔════════════════════════════════════════╗
+          ║    Server Helper - Manual Backup       ║
+          ╚════════════════════════════════════════╝
+    
+    - name: Check if Restic is enabled
+      fail:
+        msg: "Restic backups are not enabled in configuration"
+      when: not restic.enabled
+  
+  tasks:
+    - name: Run Restic backup
+      include_role:
+        name: restic
+        tasks_from: backup.yml
+      tags: [backup]
+    
+    - name: Verify backup completed
+      stat:
+        path: /var/log/restic-backup.log
+      register: backup_log
+    
+    - name: Display backup status
+      shell: tail -n 20 /var/log/restic-backup.log
+      register: backup_output
+      changed_when: false
+    
+    - name: Show backup summary
+      debug:
+        msg: "{{ backup_output.stdout_lines }}"
+  
+  post_tasks:
+    - name: Send backup heartbeat to Uptime Kuma
+      uri:
+        url: "{{ restic.uptime_kuma_push_url }}?status=up&msg=manual-backup-complete"
+        method: POST
+        status_code: [200, 201]
+      when: restic.uptime_kuma_push_url | default('') | length > 0
+      ignore_errors: yes
+    
+    - name: Display completion message
+      debug:
+        msg: |
+          ╔════════════════════════════════════════╗
+          ║    Backup Complete!                    ║
+          ╚════════════════════════════════════════╝
+          
+          📊 Check backup status:
+          - Log file: /var/log/restic-backup.log
+          - List snapshots: restic -r /path/to/repo snapshots
+          
+          💡 Restore instructions:
+          1. List snapshots: restic -r <repo> snapshots
+          2. Restore: restic -r <repo> restore <snapshot-id> --target /tmp/restore

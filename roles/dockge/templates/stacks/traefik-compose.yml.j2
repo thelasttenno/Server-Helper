@@ -1,0 +1,77 @@
+# Traefik Stack - Reverse Proxy with Let's Encrypt
+# Deployed via Dockge
+
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+{% if reverse_proxy.traefik.dashboard_enabled %}
+      - "{{ reverse_proxy.traefik.dashboard_port }}:8080"
+{% endif %}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certs:/letsencrypt
+    command:
+      # Enable Docker provider
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      
+      # Entrypoints
+      - --entrypoints.web.address=:80
+{% if reverse_proxy.traefik.entrypoints | selectattr('redirect_to_https') | list | length > 0 %}
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+{% endif %}
+      - --entrypoints.websecure.address=:443
+      
+      # Let's Encrypt
+{% if reverse_proxy.ssl_enabled %}
+      - --certificatesresolvers.letsencrypt.acme.email={{ reverse_proxy.email }}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+{% endif %}
+      
+      # Dashboard
+{% if reverse_proxy.traefik.dashboard_enabled %}
+      - --api.dashboard=true
+      - --api.insecure=true
+{% endif %}
+      
+      # Logging
+      - --log.level=INFO
+      - --accesslog=true
+    
+    labels:
+      - "traefik.enable=true"
+{% if reverse_proxy.traefik.dashboard_enabled %}
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.{{ reverse_proxy.domain }}`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+{% if reverse_proxy.ssl_enabled %}
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+{% endif %}
+{% endif %}
+    
+    networks:
+      - proxy
+      - monitoring
+    
+    environment:
+      - TZ={{ timezone | default('UTC') }}
+
+volumes:
+  traefik-certs:
+
+networks:
+  proxy:
+    external: true
+    name: proxy
+  monitoring:
+    external: true
+    name: monitoring

@@ -1,0 +1,14 @@
+[Unit]
+Description=Server Helper Lynis Security Audit
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={{ base_install_dir }}/scripts/lynis_audit.sh
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

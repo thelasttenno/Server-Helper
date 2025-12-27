@@ -1,0 +1,10 @@
+[Unit]
+Description=Server Helper Lynis Audit Timer
+Requires=server-helper-lynis.service
+
+[Timer]
+OnCalendar={{ security.lynis.schedule }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

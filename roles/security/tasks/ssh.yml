@@ -1,0 +1,32 @@
+---
+# SSH Hardening Configuration
+
+- name: Backup original sshd_config
+  ansible.builtin.copy:
+    src: /etc/ssh/sshd_config
+    dest: /etc/ssh/sshd_config.backup.{{ ansible_date_time.epoch }}
+    remote_src: true
+    mode: '0600'
+
+- name: Configure SSH hardening settings
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  loop:
+    - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin {{ "yes" if security.ssh_hardening.permit_root_login else "no" }}' }
+    - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication {{ "yes" if security.ssh_hardening.password_authentication else "no" }}' }
+    - { regexp: '^#?PubkeyAuthentication', line: 'PubkeyAuthentication {{ "yes" if security.ssh_hardening.pubkey_authentication else "no" }}' }
+    - { regexp: '^#?MaxAuthTries', line: 'MaxAuthTries {{ security.ssh_hardening.max_auth_tries }}' }
+    - { regexp: '^#?X11Forwarding', line: 'X11Forwarding no' }
+    - { regexp: '^#?PermitEmptyPasswords', line: 'PermitEmptyPasswords no' }
+  notify: Restart SSH
+
+- name: Warn about SSH key requirement
+  ansible.builtin.debug:
+    msg:
+      - "⚠️  WARNING: SSH password authentication will be disabled!"
+      - "Make sure you have SSH key authentication configured before restarting SSH."
+      - "If you get locked out, use console access to re-enable password auth."
+  when: not security.ssh_hardening.password_authentication

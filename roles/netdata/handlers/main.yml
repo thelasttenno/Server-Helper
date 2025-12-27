@@ -1,0 +1,18 @@
+---
+# Netdata Role Handlers
+
+- name: restart netdata
+  community.docker.docker_container:
+    name: netdata
+    restart: yes
+  ignore_errors: yes
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: enable netdata health check timer
+  systemd:
+    name: netdata-health-check.timer
+    enabled: yes
+    state: started

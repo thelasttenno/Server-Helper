@@ -1,892 +1,809 @@
-# Server Helper Setup Script
+# Server Helper v1.0.0 - Ansible Edition
 
-**Version 0.3.0 - Self-Update & Loading Indicators**
+**Complete rewrite using Ansible + Docker + Modern Monitoring Stack**
 
-A comprehensive server management script for Ubuntu 24.04.3 LTS that automates NAS mounting, Docker/Dockge installation, system monitoring, backups, updates, and security hardening with built-in self-update capabilities.
-
-## 🌟 Features
-
-- **🆕 Self-Updater**: Automatic script updates from GitHub with rollback support
-- **🆕 Loading Indicators**: Spinners and progress bars for visual feedback
-- **NAS Management**: Automatic NAS mounting with credential management
-- **Emergency Unmount**: Force unmount stuck NAS shares with 4 fallback methods
-- **Docker & Dockge**: Automated installation and configuration
-- **Pre-Installation Detection**: Detects and manages existing installations
-- **Monitoring**: 24/7 service monitoring with auto-recovery
-- **Backups**: Scheduled Dockge backups to NAS with retention management (includes config backup)
-- **System Updates**: Automated system updates with scheduled reboots
-- **Security**: Comprehensive security auditing and hardening (fail2ban, UFW, SSH)
-- **Disk Management**: Automatic disk cleanup and space monitoring
-- **Uptime Kuma Integration**: Push monitor heartbeats
-- **Auto-Start**: Systemd service for boot-time startup
-- **Debug Mode**: Enhanced debugging with detailed logging
-- **Installation Management**: Check and clean existing components
+A declarative, idempotent server management solution for Ubuntu 24.04 LTS with automated monitoring, backups, and security hardening.
 
 ---
 
-## 📦 Installation
+## 🌟 What's New in v1.0.0
 
-### Quick Install
+**Complete architectural overhaul** from bash scripts to Ansible playbooks:
 
-```bash
-# 1. Download/create the script
-sudo git clone https://github.com/thelasttenno/Server-Helper.git
-
-# 2. Make executable
-sudo chmod +x server_helper_setup.sh
-
-# 3. First run (creates config file)
-sudo bash /opt/Server-Helper/server_helper_setup.sh
-```
-
-### Configure
-
-```bash
-# Edit configuration file with your settings
-sudo nano server-helper.conf
-
-# Required settings:
-# - NAS_IP
-# - NAS_SHARE
-# - NAS_USERNAME
-# - NAS_PASSWORD
-
-# Validate configuration
-sudo ./server_helper_setup.sh validate-config
-```
-
-### Run Setup
-
-```bash
-# Run full setup (includes pre-installation check)
-sudo bash /opt/Server-Helper/server_helper_setup.sh
-
-# Script will:
-# - Check for existing installations
-# - Offer cleanup options if found
-# - Mount NAS
-# - Install Docker & Dockge
-# - Create initial configuration backup
-# - Optionally enable auto-start
-# - Start monitoring
-```
+- ✅ **Declarative Configuration**: Define desired state, let Ansible handle the rest
+- ✅ **Idempotent Operations**: Run playbooks multiple times safely
+- ✅ **Community Roles**: Uses trusted Ansible Galaxy roles
+- ✅ **Modern Stack**: Netdata, Uptime Kuma, Restic, Lynis
+- ✅ **Web UIs**: All management via web interfaces
+- ✅ **Flexible Backups**: NAS, S3, B2, local storage (any combination)
+- ✅ **Auto-Update**: Self-updating via ansible-pull
+- ✅ **Hybrid Monitoring**: Pull + Push alerting for comprehensive coverage
 
 ---
 
-## 🆕 What's New in v0.3.0
+## 🏗️ Architecture
 
-### Self-Updater System
-
-Automatic script updates directly from GitHub with full safety features:
-
-```bash
-# Check for available updates
-sudo ./server_helper_setup.sh check-updates-script
-
-# Update to latest version (auto-backup + config preservation)
-sudo ./server_helper_setup.sh self-update
-
-# Rollback to previous version if needed
-sudo ./server_helper_setup.sh rollback
-
-# View update changelog from GitHub
-sudo ./server_helper_setup.sh changelog
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Server Helper v1.0.0                     │
+│                                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
+│  │   Netdata    │  │ Uptime Kuma  │  │   Dockge     │     │
+│  │  (Metrics)   │  │  (Alerting)  │  │  (Stacks)    │     │
+│  └──────┬───────┘  └──────┬───────┘  └──────────────┘     │
+│         │                  │                                │
+│         │ Push alerts      │ Pull monitoring                │
+│         └──────────────────┘                                │
+│                                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
+│  │   Restic     │  │    Lynis     │  │  Watchtower  │     │
+│  │  (Backups)   │  │  (Security)  │  │  (Updates)   │     │
+│  └──────────────┘  └──────────────┘  └──────────────┘     │
+│                                                              │
+│  ┌──────────────────────────────────────────────────┐      │
+│  │  Optional: Traefik/Nginx Proxy Manager          │      │
+│  └──────────────────────────────────────────────────┘      │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**Features:**
-- Automatic version checking against GitHub repository
-- One-command update with full backup
-- Configuration file preservation
-- Service state management (stops before update, restarts after)
-- Rollback capability to previous versions
-- Optional auto-update checking in monitoring loop (12-hour cycle)
-- Uptime Kuma integration for update notifications
+### Core Services (All in Dockge stacks):
 
-**Menu items 39-42** provide access to self-update features.
+- **Netdata**: System and container metrics (~100MB RAM)
+- **Uptime Kuma**: Uptime monitoring and alerting (~50MB RAM)
+- **Dockge**: Docker compose stack manager (~50MB RAM)
+- **Restic**: Encrypted, deduplicated backups (via systemd timer)
+- **Lynis**: Security auditing (via systemd timer)
+- **Watchtower**: Auto-update containers (optional)
+- **Traefik/Nginx**: Reverse proxy (optional)
 
-### Loading Indicators
-
-Visual feedback for long-running operations:
-
-```bash
-# Spinner animation for background processes
-show_spinner $pid "Processing..."
-
-# Progress bars for multi-step operations
-show_progress_bar 5 10 "Installing"
-
-# Execute commands with spinner feedback
-execute_with_spinner "Updating system" "apt-get update"
-```
-
-**Features:**
-- Spinner animation (|/-\) for background processes
-- Progress bars with percentage display
-- No external dependencies (pure bash)
-- DEBUG mode compatible
-
-### Auto-Update Checking
-
-Optional scheduled update checking in monitoring service:
-
-```bash
-# Edit configuration
-sudo ./server_helper_setup.sh edit-config
-
-# Set AUTO_UPDATE_CHECK="true"
-# Set UPTIME_KUMA_UPDATE_URL="http://uptime-kuma:3001/api/push/xyz" (optional)
-```
-
-**Monitoring Integration:**
-- Checks for updates every 12 hours during monitoring
-- Non-intrusive - only logs when updates available
-- Optional Uptime Kuma notifications
-- Manual approval required for installation
+**Total RAM**: ~200-250MB + containers
 
 ---
 
-## 🐛 Debug Mode
+## 📦 Quick Start
 
-### Overview
-
-Debug mode provides detailed logging for troubleshooting and monitoring script execution. When enabled, it logs:
-
-- Function entry and exit points
-- Variable values and state
-- File operations
-- Network operations
-- Command execution details
-- Error conditions and recovery attempts
-
-### Enabling Debug Mode
+### Prerequisites
 
 ```bash
-# Enable debug mode for a single command
-DEBUG=true sudo ./server_helper_setup.sh <command>
-
-# Examples:
-DEBUG=true sudo ./server_helper_setup.sh monitor
-DEBUG=true sudo ./server_helper_setup.sh backup
-DEBUG=true sudo ./server_helper_setup.sh setup
+# Ubuntu 24.04 LTS server
+# Ansible control node (can be same server)
+# Python 3.8+
+# SSH access with sudo privileges
 ```
 
-### Persistent Debug Mode
-
-To enable debug mode permanently, edit your configuration file:
+### 1. Install Ansible (on control node)
 
 ```bash
-sudo nano server-helper.conf
+# On Ubuntu/Debian
+sudo apt update
+sudo apt install -y ansible python3-pip git
 
-# Add or change:
-DEBUG="true"
+# Verify installation
+ansible --version
 ```
 
-### Debug Output
-
-Debug messages are displayed in blue and include:
-- Timestamp
-- Function name
-- Operation details
-- Status information
-
-Example debug output:
-```
-[2025-12-21 10:30:45] DEBUG: [mount_nas] Starting NAS mount process
-[2025-12-21 10:30:45] DEBUG: [mount_nas] Processing single NAS configuration
-[2025-12-21 10:30:46] DEBUG: [mount_single_nas] IP: 192.168.1.100, Share: share, Mount: /mnt/nas
-[2025-12-21 10:30:46] DEBUG: [mount_single_nas] Attempting mount with SMB 3.0
-[2025-12-21 10:30:47] DEBUG: [mount_single_nas] Mount successful with SMB 3.0
-[2025-12-21 10:30:47] DEBUG: [mount_nas] Mount process complete
-```
-
-### When to Use Debug Mode
-
-- **Troubleshooting**: When operations fail unexpectedly
-- **Development**: When modifying or extending the script
-- **Monitoring**: When you need detailed operational insights
-- **Support**: When seeking help with issues
-
----
-
-## 🚀 Usage
-
-### Initial Setup Workflow
+### 2. Clone Repository
 
 ```bash
-# 1. Create and configure
-sudo bash /opt/Server-Helper/server_helper_setup.sh           # Creates config
-sudo ./server_helper_setup.sh edit-config  # Edit settings
-sudo bash /opt/Server-Helper/server_helper_setup.sh             # Run setup
-
-# 2. Enable auto-start (recommended)
-sudo ./server_helper_setup.sh enable-autostart
-
-# 3. Start monitoring
-sudo ./server_helper_setup.sh start
+git clone https://github.com/thelasttenno/Server-Helper.git
+cd Server-Helper
+git checkout v1.0.0
 ```
 
-### Daily Operations
+### 3. Install Requirements
 
 ```bash
-# Check system status
-sudo ./server_helper_setup.sh service-status
+# Install community roles
+ansible-galaxy install -r requirements.yml
 
-# View live logs
-sudo ./server_helper_setup.sh logs
+# Install Python dependencies
+pip3 install -r requirements.txt
+```
 
-# Create manual backup
-sudo ./server_helper_setup.sh backup
+### 4. Configure Inventory
 
-# Check for updates
-sudo ./server_helper_setup.sh check-updates
+```bash
+# Edit inventory
+cp inventory/hosts.example.yml inventory/hosts.yml
+nano inventory/hosts.yml
 
-# Run security audit
-sudo ./server_helper_setup.sh security-audit
+# Add your server(s):
+all:
+  hosts:
+    server01:
+      ansible_host: 192.168.1.100
+      ansible_user: ubuntu
+      ansible_become: yes
+```
+
+### 5. Configure Variables
+
+```bash
+# Copy example config
+cp group_vars/all.example.yml group_vars/all.yml
+
+# Edit with your settings (use mapping from Step 2)
+nano group_vars/all.yml
+
+# Key settings to configure:
+# - hostname
+# - nas (if used)
+# - restic (backup destinations)
+# - netdata (monitoring)
+# - uptime_kuma (alerting)
+# - security (firewall, fail2ban, ssh)
+```
+
+### 6. Setup Ansible Vault (Secure Secrets)
+
+```bash
+# Create vault password file
+openssl rand -base64 32 > .vault_password
+chmod 600 .vault_password
+
+# Create encrypted vault file
+ansible-vault create group_vars/vault.yml
+
+# Add your secrets (see group_vars/vault.example.yml for template):
+# - NAS passwords
+# - Restic backup passwords
+# - Cloud credentials (AWS, B2)
+# - SMTP passwords
+# - API keys
+
+# Reference vault variables in all.yml:
+# nas:
+#   username: "{{ vault_nas_credentials[0].username }}"
+#   password: "{{ vault_nas_credentials[0].password }}"
+
+# See VAULT_GUIDE.md for complete documentation
+```
+
+### 7. Run Setup Playbook
+
+```bash
+# Dry run first (check mode)
+ansible-playbook playbooks/setup.yml --check
+
+# Run actual setup
+ansible-playbook playbooks/setup.yml
+
+# With verbose output
+ansible-playbook playbooks/setup.yml -v
+```
+
+### 7. Access Services
+
+After setup completes:
+
+```bash
+# Dockge: http://your-server:5001
+# Netdata: http://your-server:19999
+# Uptime Kuma: http://your-server:3001
+
+# Initial Uptime Kuma setup
+# - Visit http://your-server:3001
+# - Create admin account
+# - Configure monitors (done via playbook on subsequent runs)
 ```
 
 ---
 
-## 📋 Complete Command Reference
+## 🔐 Ansible Vault - Secure Secrets Management
 
-### 🔧 Configuration Management
+Server Helper uses **Ansible Vault** to encrypt sensitive data (passwords, API keys, credentials). This allows you to safely commit encrypted secrets to Git.
 
-| Command | Description |
-|---------|-------------|
-| `edit-config` | Edit configuration file with nano/vim |
-| `show-config` | Display config (passwords masked) |
-| `validate-config` | Validate configuration settings |
+### Quick Setup
 
-**Examples:**
 ```bash
-sudo ./server_helper_setup.sh edit-config
-sudo ./server_helper_setup.sh show-config
-sudo ./server_helper_setup.sh validate-config
+# 1. Create vault password file
+openssl rand -base64 32 > .vault_password
+chmod 600 .vault_password
+
+# 2. Create encrypted vault file
+ansible-vault create group_vars/vault.yml
+
+# 3. Add your secrets in the editor that opens
+# See group_vars/vault.example.yml for template
+
+# 4. Reference vault variables in group_vars/all.yml
+# Example:
+#   nas:
+#     username: "{{ vault_nas_credentials[0].username }}"
+#     password: "{{ vault_nas_credentials[0].password }}"
+```
+
+### Common Vault Commands
+
+```bash
+# Edit encrypted file
+ansible-vault edit group_vars/vault.yml
+
+# View encrypted file
+ansible-vault view group_vars/vault.yml
+
+# Change vault password
+ansible-vault rekey group_vars/vault.yml
+
+# Run playbook (uses .vault_password automatically)
+ansible-playbook playbooks/setup.yml
+```
+
+### What to Store in Vault
+
+**Always encrypt:**
+- 🔑 NAS passwords
+- 🔑 Restic backup passwords
+- 🔑 AWS/S3/B2 credentials
+- 🔑 SMTP passwords
+- 🔑 API keys and tokens
+- 🔑 SSL certificates and private keys
+- 🔑 Admin account passwords
+
+**Safe to keep in plain text:**
+- ✅ Hostnames
+- ✅ Port numbers
+- ✅ File paths
+- ✅ Feature flags
+- ✅ Public URLs
+
+### Security Best Practices
+
+- ✅ **Keep .vault_password secret**: Never commit to Git
+- ✅ **Strong passwords**: Use 32+ character random passwords
+- ✅ **Secure sharing**: Share vault password via password manager
+- ✅ **Regular rotation**: Change vault password periodically
+- ✅ **Unique secrets**: Don't reuse passwords across services
+
+### Documentation
+
+- **Comprehensive Guide**: [VAULT_GUIDE.md](VAULT_GUIDE.md)
+- **Quick Reference**: [VAULT_QUICK_REFERENCE.md](VAULT_QUICK_REFERENCE.md)
+- **Example Vault**: [group_vars/vault.example.yml](group_vars/vault.example.yml)
+
+---
+
+## 🔧 Configuration
+
+### Main Configuration File: `group_vars/all.yml`
+
+```yaml
+# System Configuration
+hostname: "server-01"
+timezone: "America/New_York"
+
+# NAS Configuration (optional)
+nas:
+  enabled: true
+  shares:
+    - ip: "192.168.1.100"
+      share: "backup"
+      mount: "/mnt/nas/backup"
+      username: "nasuser"
+      password: "naspass"
+    - ip: "192.168.1.100"
+      share: "media"
+      mount: "/mnt/nas/media"
+      username: "nasuser"
+      password: "naspass"
+
+# Backup Configuration (flexible - any combination)
+restic:
+  enabled: true
+  schedule: "0 2 * * *"  # 2 AM daily
+  retention:
+    keep_daily: 7
+    keep_weekly: 4
+    keep_monthly: 6
+  
+  # Backup destinations (enable any/all)
+  destinations:
+    nas:
+      enabled: true
+      path: "/mnt/nas/backup/restic"
+      password: "restic-repo-password"
+    
+    s3:
+      enabled: false
+      bucket: "my-backups"
+      endpoint: "s3.amazonaws.com"
+      access_key: "AWS_ACCESS_KEY"
+      secret_key: "AWS_SECRET_KEY"
+      password: "restic-repo-password"
+    
+    b2:
+      enabled: false
+      bucket: "my-backups"
+      account_id: "B2_ACCOUNT_ID"
+      account_key: "B2_ACCOUNT_KEY"
+      password: "restic-repo-password"
+    
+    local:
+      enabled: true
+      path: "/opt/backups/restic"
+      password: "restic-repo-password"
+  
+  # What to backup
+  backup_paths:
+    - /opt/dockge/stacks
+    - /opt/dockge/data
+    - /etc
+    - /home
+
+# Monitoring Configuration
+netdata:
+  enabled: true
+  port: 19999
+  claim_token: ""  # Optional: Netdata Cloud claim token
+  
+uptime_kuma:
+  enabled: true
+  port: 3001
+  # Monitors configured after initial setup
+
+# Container Management
+dockge:
+  enabled: true
+  port: 5001
+  stacks_dir: "/opt/dockge/stacks"
+  data_dir: "/opt/dockge/data"
+
+# Security Configuration
+security:
+  fail2ban_enabled: true
+  ufw_enabled: true
+  ufw_allowed_ports:
+    - 22    # SSH
+    - 5001  # Dockge
+    - 19999 # Netdata
+    - 3001  # Uptime Kuma
+  
+  ssh_hardening: true
+  ssh_port: 22
+  ssh_password_authentication: false
+  ssh_permit_root_login: false
+  
+  lynis_enabled: true
+  lynis_schedule: "0 3 * * 0"  # 3 AM every Sunday
+
+# Optional Services
+watchtower:
+  enabled: false
+  schedule: "0 4 * * *"  # 4 AM daily
+
+reverse_proxy:
+  enabled: false
+  type: "traefik"  # or "nginx"
+  domain: "example.com"
+  email: "admin@example.com"  # For Let's Encrypt
+
+# Self-Update Configuration
+self_update:
+  enabled: true
+  schedule: "0 5 * * *"  # 5 AM daily
+  git_repo: "https://github.com/thelasttenno/Server-Helper.git"
+  branch: "main"
+  version: "v1.0.0"
 ```
 
 ---
 
-### 🚀 Setup & Monitoring
+## 📚 Common Operations
 
-| Command | Description |
-|---------|-------------|
-| *(no args)* | Run full interactive setup |
-| `monitor` | Start monitoring in foreground |
+### Run Full Setup
 
-**Examples:**
 ```bash
-sudo ./server_helper_setup.sh          # Full setup
-sudo ./server_helper_setup.sh monitor  # Manual monitoring
+ansible-playbook playbooks/setup.yml
+```
 
-# With debug mode
-DEBUG=true sudo ./server_helper_setup.sh monitor
+### Update System (self-update)
+
+```bash
+ansible-playbook playbooks/update.yml
+
+# Or let systemd timer do it automatically
+sudo systemctl status ansible-pull.timer
+```
+
+### Run Backup Manually
+
+```bash
+ansible-playbook playbooks/backup.yml
+
+# Or trigger via systemd
+sudo systemctl start restic-backup.service
+```
+
+### Security Audit
+
+```bash
+ansible-playbook playbooks/security.yml
+
+# Or trigger Lynis manually
+sudo systemctl start lynis-scan.service
+```
+
+### Check Service Status
+
+```bash
+# All services
+ansible all -m shell -a "systemctl status docker dockge netdata uptime-kuma"
+
+# Specific service
+ansible all -m shell -a "docker ps"
+```
+
+### View Logs
+
+```bash
+# Ansible playbook logs
+tail -f /var/log/ansible-pull.log
+
+# Restic backup logs
+sudo journalctl -u restic-backup -f
+
+# Lynis scan logs
+sudo journalctl -u lynis-scan -f
 ```
 
 ---
 
-### ⚙️ Service Management (Auto-Start)
+## 🔄 Monitoring & Alerting
 
-| Command | Description |
-|---------|-------------|
-| `enable-autostart` | Create systemd service for boot |
-| `disable-autostart` | Remove systemd service |
-| `start` | Start the service now |
-| `stop` | Stop the service |
-| `restart` | Restart the service |
-| `service-status` | Show service status |
-| `logs` | View live service logs |
+### Hybrid Monitoring Setup
 
-**Examples:**
+#### Pull Monitoring (Uptime Kuma → Services)
+
+Uptime Kuma checks these endpoints every 60 seconds:
+
+```yaml
+Monitors:
+  - name: "Netdata Health"
+    type: HTTP
+    url: "http://localhost:19999/api/v1/info"
+    interval: 60
+  
+  - name: "Dockge Health"
+    type: HTTP
+    url: "http://localhost:5001"
+    interval: 60
+  
+  - name: "Docker Daemon"
+    type: HTTP
+    url: "http://localhost:2375/_ping"  # If Docker API enabled
+    interval: 60
+```
+
+#### Push Monitoring (Services → Uptime Kuma)
+
+Services send alerts to Uptime Kuma:
+
+```yaml
+Netdata Alarms:
+  - CPU > 95% → POST http://uptime-kuma:3001/api/push/CPU123
+  - RAM > 95% → POST http://uptime-kuma:3001/api/push/RAM123
+  - Disk > 90% → POST http://uptime-kuma:3001/api/push/DISK123
+
+Restic Backup:
+  - Success → POST http://uptime-kuma:3001/api/push/BACKUP123?status=up
+  - Failure → POST http://uptime-kuma:3001/api/push/BACKUP123?status=down
+
+Lynis Scan:
+  - Complete → POST http://uptime-kuma:3001/api/push/LYNIS123?status=up&msg=score-XX
+```
+
+### Configure Notifications
+
+In Uptime Kuma UI:
+
+1. Go to **Settings** → **Notifications**
+2. Add notification endpoints:
+   - Email (SMTP)
+   - Discord webhook
+   - Telegram bot
+   - Slack webhook
+   - Many more...
+
+---
+
+## 💾 Backup & Restore
+
+### Backup Destinations
+
+Configure any combination in `group_vars/all.yml`:
+
+```yaml
+restic:
+  destinations:
+    nas:
+      enabled: true        # ✅ Backup to NAS
+    s3:
+      enabled: true        # ✅ Backup to AWS S3
+    local:
+      enabled: true        # ✅ Backup to local disk
+    b2:
+      enabled: false       # ❌ Disabled
+```
+
+### Manual Backup
+
 ```bash
-sudo ./server_helper_setup.sh enable-autostart
-sudo ./server_helper_setup.sh start
-sudo ./server_helper_setup.sh service-status
-sudo ./server_helper_setup.sh logs
+# Run backup playbook
+ansible-playbook playbooks/backup.yml
 
-# Or use systemctl directly:
-sudo systemctl status server-helper
-sudo journalctl -u server-helper -f
+# Or trigger systemd service
+sudo systemctl start restic-backup.service
+```
+
+### Restore from Backup
+
+```bash
+# List snapshots
+sudo restic -r /mnt/nas/backup/restic snapshots
+
+# Restore specific snapshot
+sudo restic -r /mnt/nas/backup/restic restore <snapshot-id> --target /tmp/restore
+
+# Restore latest
+sudo restic -r /mnt/nas/backup/restic restore latest --target /tmp/restore
+```
+
+### Backup Schedule
+
+Configured via systemd timer (default: daily at 2 AM):
+
+```bash
+# Check timer status
+sudo systemctl status restic-backup.timer
+
+# View next run time
+sudo systemctl list-timers restic-backup.timer
+
+# Modify schedule
+sudo nano /etc/systemd/system/restic-backup.timer
+sudo systemctl daemon-reload
+sudo systemctl restart restic-backup.timer
 ```
 
 ---
 
-### 💾 Backup & Restore
+## 🔒 Security
 
-| Command | Description |
-|---------|-------------|
-| `backup` | Create manual backup to NAS |
-| `backup-config` | Backup configuration files only |
-| `backup-all` | Backup everything (Dockge + config) |
-| `restore` | Restore from backup (interactive) |
-| `restore-config` | Restore configuration files |
-| `list-backups` | List all available backups |
-| `show-manifest <file>` | Show backup contents |
-
-**Examples:**
-```bash
-sudo ./server_helper_setup.sh backup
-sudo ./server_helper_setup.sh backup-config
-sudo ./server_helper_setup.sh backup-all
-sudo ./server_helper_setup.sh list-backups
-sudo ./server_helper_setup.sh restore
-
-# With debug mode
-DEBUG=true sudo ./server_helper_setup.sh backup
-```
-
-**Automatic Backups:**
-- Runs every 6 hours during monitoring
-- Stored on NAS: `$NAS_MOUNT_POINT/dockge_backups/`
-- Auto-cleanup: Deletes backups older than 30 days (configurable)
-
----
-
-### 🖥️ System Management
-
-| Command | Description |
-|---------|-------------|
-| `set-hostname <name>` | Set system hostname |
-| `show-hostname` | Display current hostname |
-
-**Examples:**
-```bash
-sudo ./server_helper_setup.sh set-hostname docker-server-01
-sudo ./server_helper_setup.sh show-hostname
-```
-
----
-
-### 🧹 Disk Management
-
-| Command | Description |
-|---------|-------------|
-| `clean-disk` | Run disk cleanup manually |
-| `disk-space` | Show disk usage information |
-
-**Examples:**
-```bash
-sudo ./server_helper_setup.sh clean-disk
-sudo ./server_helper_setup.sh disk-space
-
-# With debug mode
-DEBUG=true sudo ./server_helper_setup.sh clean-disk
-```
-
-**What Gets Cleaned:**
-- APT cache and old packages
-- Old kernel versions
-- Docker (stopped containers, dangling images, unused volumes)
-- System logs (keeps last 7 days)
-- Temporary files
-
-**Automatic Cleanup:**
-- Triggers when disk usage exceeds 80% (configurable)
-- Runs during monitoring checks
-
----
-
-### 🔄 System Updates
-
-| Command | Description |
-|---------|-------------|
-| `update` | Update system packages |
-| `full-upgrade` | Full system upgrade (interactive) |
-| `check-updates` | Check for available updates |
-| `update-status` | Show detailed update status |
-| `schedule-reboot [time]` | Schedule system reboot |
-
-**Examples:**
-```bash
-sudo ./server_helper_setup.sh update
-sudo ./server_helper_setup.sh check-updates
-sudo ./server_helper_setup.sh schedule-reboot 03:00
-sudo ./server_helper_setup.sh full-upgrade
-
-# With debug mode
-DEBUG=true sudo ./server_helper_setup.sh update
-```
-
-**Automatic Updates:**
-- Enable in config: `AUTO_UPDATE_ENABLED="true"`
-- Checks every 24 hours (configurable)
-- Auto-reboot option available
-
----
-
-### 🔒 Security & Compliance
-
-| Command | Description |
-|---------|-------------|
-| `security-audit` | Run complete security audit |
-| `security-status` | Show detailed security status |
-| `security-harden` | Apply all security hardening |
-| `setup-fail2ban` | Install/configure fail2ban |
-| `setup-ufw` | Setup UFW firewall |
-| `harden-ssh` | Harden SSH configuration |
-
-**Examples:**
-```bash
-sudo ./server_helper_setup.sh security-audit
-sudo ./server_helper_setup.sh security-status
-sudo ./server_helper_setup.sh security-harden
-
-# With debug mode
-DEBUG=true sudo ./server_helper_setup.sh security-audit
-```
-
-**Security Audit Checks:**
-
-- ✅ SSH configuration (root login, password auth)
-- ✅ Firewall status (UFW)
-- ✅ Intrusion prevention (fail2ban)
-- ✅ File permissions
-- ✅ User account security
-- ✅ Docker security
-- ✅ Automatic updates configured
-
-**Security Hardening Includes:**
+### Security Features
 
 - **fail2ban**: Protects against brute force attacks
-- **UFW Firewall**: Default deny with specific allows
+- **UFW**: Firewall with default deny policy
 - **SSH Hardening**: Disables password auth, root login
-- **Unattended Upgrades**: Automatic security patches
+- **Lynis**: Weekly security audits
+- **Automatic Updates**: Watchtower for containers (optional)
 
----
+### Run Security Audit
 
-### 🆙 Self-Update Commands
-
-| Command | Description |
-|---------|-------------|
-| `check-updates-script` | Check for Server Helper updates |
-| `self-update` | Update to latest version from GitHub |
-| `rollback` | Rollback to previous version |
-| `changelog` | View update changelog from GitHub |
-
-**Examples:**
 ```bash
-sudo ./server_helper_setup.sh check-updates-script
-sudo ./server_helper_setup.sh self-update
-sudo ./server_helper_setup.sh rollback
-sudo ./server_helper_setup.sh changelog
+# Via Ansible
+ansible-playbook playbooks/security.yml
 
-# With debug mode
-DEBUG=true sudo ./server_helper_setup.sh self-update
+# Via systemd (runs weekly by default)
+sudo systemctl start lynis-scan.service
+
+# View report
+sudo cat /var/log/lynis/report.dat
 ```
 
-**Update Process:**
+### Security Audit Schedule
 
-1. Fetches VERSION from GitHub
-2. Compares with local version
-3. Creates timestamped backup
-4. Preserves configuration
-5. Stops service if running
-6. Installs update
-7. Restarts service
-8. Cleans up temporary files
-
-**Requirements:**
-
-- `git` - For cloning updates
-- `curl` - For version checking
-- Internet connection to GitHub
-
----
-
-### 🗑️ Installation & Cleanup
-
-| Command | Description |
-|---------|-------------|
-| `check-install` | Check for existing installations |
-| `clean-install` | Clean existing components |
-| `unmount-nas [path]` | Emergency NAS unmount |
-| `uninstall` | Complete uninstallation |
-
-**Examples:**
 ```bash
-sudo ./server_helper_setup.sh check-install
-sudo ./server_helper_setup.sh clean-install
-sudo ./server_helper_setup.sh unmount-nas
-sudo ./server_helper_setup.sh uninstall
+# Default: Sunday at 3 AM
+sudo systemctl status lynis-scan.timer
+
+# Change schedule
+sudo nano /etc/systemd/system/lynis-scan.timer
+sudo systemctl daemon-reload
 ```
 
 ---
 
-## 📁 Configuration File
+## 🔄 Self-Update
 
-### Location
-`/opt/Server-Helper/server-helper.conf`
+### Automatic Updates (ansible-pull)
 
-### Required Settings
+The system self-updates daily via ansible-pull:
 
 ```bash
-# NAS Configuration
-NAS_IP="192.168.1.100"              # Your NAS IP address
-NAS_SHARE="share"                    # Your NAS share name
-NAS_USERNAME="your_username"         # NAS username
-NAS_PASSWORD="your_password"         # NAS password
+# Check self-update timer
+sudo systemctl status ansible-pull.timer
+
+# View last update
+sudo journalctl -u ansible-pull -n 50
+
+# Manual update
+sudo systemctl start ansible-pull.service
 ```
 
-### Optional Settings
+### How It Works
 
-```bash
-# Dockge
-DOCKGE_PORT="5001"
-DOCKGE_DATA_DIR="/opt/dockge"
-BACKUP_DIR="$NAS_MOUNT_POINT/dockge_backups"
-BACKUP_RETENTION_DAYS="30"
+```yaml
+Systemd Timer:
+  Schedule: Daily at 5 AM
+  Command: ansible-pull -U https://github.com/thelasttenno/Server-Helper.git
+  Playbook: playbooks/setup.yml
+  Result: System updates to latest configuration
+```
 
-# Uptime Kuma (leave empty to disable)
-UPTIME_KUMA_NAS_URL=""
-UPTIME_KUMA_DOCKGE_URL=""
-UPTIME_KUMA_SYSTEM_URL=""
-UPTIME_KUMA_UPDATE_URL=""  # NEW in v0.3.0 - Update notifications
+### Disable Self-Update
 
-# Automatic Features
-DISK_CLEANUP_THRESHOLD="80"
-AUTO_CLEANUP_ENABLED="true"
-AUTO_UPDATE_ENABLED="false"
-UPDATE_CHECK_INTERVAL="24"
-AUTO_REBOOT_ENABLED="false"
-REBOOT_TIME="03:00"
-
-# Self-Update (NEW in v0.3.0)
-AUTO_UPDATE_CHECK="false"  # Check for script updates during monitoring
-
-# Security
-SECURITY_CHECK_ENABLED="true"
-SECURITY_CHECK_INTERVAL="12"
-FAIL2BAN_ENABLED="false"
-UFW_ENABLED="false"
-SSH_HARDENING_ENABLED="false"
-
-# Debug
-DEBUG="false"  # Set to "true" for detailed logging
+```yaml
+# In group_vars/all.yml
+self_update:
+  enabled: false
 ```
 
 ---
 
-## 🔄 Monitoring Features
+## 🐛 Troubleshooting
 
-### What Gets Monitored (Every 2 Minutes)
-
-1. **NAS Connectivity**
-   - Mount point status
-   - Network accessibility
-   - Auto-remount on failure
-
-2. **Dockge Service**
-   - Container running status
-   - Web interface responsiveness
-   - Auto-restart on failure
-
-3. **Disk Usage**
-   - Automatic cleanup at threshold
-   - Real-time usage reporting
-
-4. **System Updates**
-   - Periodic update checks
-   - Automatic installation (optional)
-   - Scheduled reboots (optional)
-
-5. **Security**
-   - Periodic security audits
-   - Issue detection and reporting
-
-6. **Script Updates** (NEW in v0.3.0)
-   - Checks for Server Helper updates every 12 hours (optional)
-   - Uptime Kuma notifications when updates available
-   - Manual approval required for installation
-
-### Uptime Kuma Integration
-
-Configure push monitor URLs in config file:
-```bash
-UPTIME_KUMA_NAS_URL="http://uptime-kuma:3001/api/push/abc123"
-UPTIME_KUMA_DOCKGE_URL="http://uptime-kuma:3001/api/push/def456"
-UPTIME_KUMA_SYSTEM_URL="http://uptime-kuma:3001/api/push/ghi789"
-UPTIME_KUMA_UPDATE_URL="http://uptime-kuma:3001/api/push/jkl012"  # NEW in v0.3.0
-```
-
-Monitors send:
-- Status: `up` or `down`
-- Messages: Detailed error information
-- Heartbeat: Every 2 minutes (script updates: every 12 hours)
-
----
-
-## 📂 File Structure
-
-```
-/opt/Server-Helper/
-├── server_helper_setup.sh    # Main script (v0.3.0)
-├── server-helper.conf         # Configuration (chmod 600)
-├── VERSION                    # Version file
-└── lib/                       # Module library
-    ├── core.sh               # Core utilities + loading indicators
-    ├── config.sh             # Configuration management
-    ├── validation.sh         # Input validation
-    ├── preinstall.sh         # Pre-installation checks
-    ├── nas.sh                # NAS management
-    ├── docker.sh             # Docker & Dockge
-    ├── backup.sh             # Backup & restore
-    ├── disk.sh               # Disk management
-    ├── updates.sh            # System updates
-    ├── security.sh           # Security features
-    ├── service.sh            # Systemd service + monitoring
-    ├── selfupdate.sh         # Self-update system (NEW in v0.3.0)
-    ├── menu.sh               # Interactive menu (43 options)
-    └── uninstall.sh          # Uninstallation
-
-/opt/dockge/
-├── docker-compose.yml
-├── data/
-└── stacks/
-
-/mnt/nas/
-└── dockge_backups/
-    ├── dockge_backup_20251220_120000.tar.gz
-    ├── dockge_backup_20251220_180000.tar.gz
-    └── config/
-        ├── config_backup_20251220_120000.tar.gz
-        └── config_backup_20251220_180000.tar.gz
-
-/etc/systemd/system/
-└── server-helper.service      # Systemd service
-
-/root/
-└── .nascreds                  # NAS credentials (chmod 600)
-
-/var/log/server-helper/
-├── server-helper.log          # Main log file
-└── error.log                  # Error log file
-```
-
----
-
-## 🛡️ Security Best Practices
-
-### 1. Protect Configuration File
-```bash
-sudo chmod 600 /opt/Server-Helper/server-helper.conf
-```
-
-### 2. Use SSH Keys
-Before enabling SSH hardening:
-```bash
-# On your local machine
-ssh-copy-id user@server
-
-# Test SSH key login
-ssh user@server
-
-# Then enable hardening
-sudo ./server_helper_setup.sh harden-ssh
-```
-
-### 3. Enable Security Features
-```bash
-# Edit config
-FAIL2BAN_ENABLED="true"
-UFW_ENABLED="true"
-SSH_HARDENING_ENABLED="true"
-
-# Apply hardening
-sudo ./server_helper_setup.sh security-harden
-```
-
-### 4. Regular Audits
-```bash
-# Run security audit regularly
-sudo ./server_helper_setup.sh security-audit
-
-# With debug mode for detailed information
-DEBUG=true sudo ./server_helper_setup.sh security-audit
-```
-
----
-
-## 🔧 Troubleshooting
-
-### Using Debug Mode
-
-For any troubleshooting, always enable debug mode first:
+### Playbook Fails
 
 ```bash
-DEBUG=true sudo ./server_helper_setup.sh <command>
-```
+# Run with verbose output
+ansible-playbook playbooks/setup.yml -vvv
 
-### NAS Not Mounting
+# Check specific task
+ansible-playbook playbooks/setup.yml --start-at-task="Install Docker"
 
-```bash
-# Check NAS connectivity with debug mode
-DEBUG=true sudo ./server_helper_setup.sh mount-nas
-
-# Manual check
-ping $NAS_IP
-
-# Verify credentials
-sudo ./server_helper_setup.sh show-config
-
-# Check mount manually
-sudo mount -t cifs //$NAS_IP/$NAS_SHARE /mnt/nas -o username=xxx,password=xxx
+# Dry run (check mode)
+ansible-playbook playbooks/setup.yml --check
 ```
 
 ### Service Not Starting
 
 ```bash
-# Check service status with debug mode
-DEBUG=true sudo ./server_helper_setup.sh service-status
+# Check Docker containers
+docker ps -a
 
-# View detailed logs
-sudo journalctl -u server-helper -n 50
+# Check systemd services
+sudo systemctl status restic-backup
+sudo systemctl status lynis-scan
 
-# Verify script permissions
-ls -l /opt/Server-Helper/server_helper_setup.sh
+# View logs
+sudo journalctl -xe
 ```
 
-### Dockge Not Accessible
+### Backup Failures
 
 ```bash
-# Check Docker status with debug mode
-DEBUG=true sudo ./server_helper_setup.sh service-status
+# Check Restic repository
+sudo restic -r /mnt/nas/backup/restic check
 
-# Check Dockge logs
-cd /opt/dockge
-sudo docker compose logs
+# View backup logs
+sudo journalctl -u restic-backup -f
 
-# Restart Dockge
-sudo docker compose restart
+# Test backup manually
+sudo restic -r /mnt/nas/backup/restic backup /opt/dockge
 ```
 
-### Disk Space Issues
+### NAS Mount Issues
 
 ```bash
-# Check disk usage with debug mode
-DEBUG=true sudo ./server_helper_setup.sh disk-space
+# Check mounts
+mount | grep cifs
 
-# Manual cleanup with debug
-DEBUG=true sudo ./server_helper_setup.sh clean-disk
+# Test mount manually
+sudo mount -t cifs //192.168.1.100/backup /mnt/nas/backup -o username=user,password=pass
 
-# Check Docker usage
-sudo docker system df
-sudo docker system prune -a
+# Check NAS connectivity
+ping 192.168.1.100
 ```
 
 ---
 
-## 📊 Quick Reference Card
+## 📖 Migration from v0.3.0
 
-### Most Common Commands
+See **[MIGRATION.md](MIGRATION.md)** for detailed migration guide from bash version.
 
-```bash
-# Status & Logs
-sudo ./server_helper_setup.sh service-status
-sudo ./server_helper_setup.sh logs
+**Quick summary:**
+1. Export current configuration
+2. Map to Ansible variables
+3. Run new playbook
+4. Verify services
+5. Disable old bash system
 
-# Backups
-sudo ./server_helper_setup.sh backup
-sudo ./server_helper_setup.sh list-backups
+---
 
-# Maintenance
-sudo ./server_helper_setup.sh check-updates
-sudo ./server_helper_setup.sh clean-disk
-sudo ./server_helper_setup.sh security-audit
+## 📁 Directory Structure
 
-# Service Control
-sudo systemctl start server-helper
-sudo systemctl stop server-helper
-sudo systemctl restart server-helper
-
-# With Debug Mode
-DEBUG=true sudo ./server_helper_setup.sh <command>
 ```
+/opt/
+├── dockge/
+│   ├── docker-compose.yml
+│   ├── data/
+│   └── stacks/
+│       ├── netdata/
+│       │   └── docker-compose.yml
+│       ├── uptime-kuma/
+│       │   └── docker-compose.yml
+│       ├── watchtower/  (optional)
+│       │   └── docker-compose.yml
+│       └── reverse-proxy/  (optional)
+│           └── docker-compose.yml
+├── backups/
+│   └── restic/  (if local backup enabled)
+└── ansible/
+    └── Server-Helper/  (playbook repository)
 
-### Emergency Commands
+/mnt/
+└── nas/
+    └── backup/
+        └── restic/  (if NAS backup enabled)
 
-```bash
-# Stop monitoring immediately
-sudo ./server_helper_setup.sh stop
+/var/log/
+├── ansible-pull.log
+├── restic-backup.log
+└── lynis/
+    └── report.dat
 
-# Restore from latest backup
-sudo ./server_helper_setup.sh restore
-# Type: latest
-
-# Disable auto-start
-sudo ./server_helper_setup.sh disable-autostart
-
-# Manual NAS unmount
-sudo umount -f /mnt/nas
-
-# Enable debug for troubleshooting
-DEBUG=true sudo ./server_helper_setup.sh monitor
+/etc/systemd/system/
+├── restic-backup.service
+├── restic-backup.timer
+├── lynis-scan.service
+├── lynis-scan.timer
+├── ansible-pull.service
+└── ansible-pull.timer
 ```
 
 ---
 
-## 📝 Version History
+## 🎯 Feature Comparison
 
-### v0.3.0 - Self-Update & Loading Indicators (Current)
-- 🆙 Self-updater system with GitHub integration
-- ⏳ Loading indicators (spinners, progress bars)
-- 📡 Auto-update checking in monitoring loop (12-hour cycle)
-- 🔄 Rollback capability for safe updates
-- 📋 Menu expanded to 43 options
-- 💾 Automatic backup before updates
-- 🛡️ Configuration preservation during updates
+| Feature | v0.3.0 (Bash) | v1.0.0 (Ansible) |
+|---------|---------------|------------------|
+| **Configuration** | Bash config file | YAML variables |
+| **Idempotency** | ❌ Manual | ✅ Automatic |
+| **Interface** | CLI menu | Web UIs |
+| **Monitoring** | Basic heartbeats | Netdata + Uptime Kuma |
+| **Backups** | Tar archives | Restic (encrypted, deduplicated) |
+| **Security** | Manual scripts | Lynis + automated hardening |
+| **Updates** | Git pull | ansible-pull |
+| **Modularity** | Bash functions | Ansible roles |
+| **Community Support** | ❌ | ✅ Galaxy roles |
+| **Extensibility** | Manual editing | Add roles/tasks |
 
-### v0.2.3 - Integration Update
-- ✨ Pre-installation detection system
-- 🚨 Emergency NAS unmount functionality
-- 🔧 Installation management commands
-- 📋 Enhanced interactive menu (38 options)
+---
 
-### v0.2.2 - Enhanced Debug Edition
-- ✨ Added comprehensive debug mode to all functions
-- 📝 Enhanced logging with function-level tracing
-- 🔍 Improved troubleshooting capabilities
-- 📚 Updated README with debug mode documentation
-- 🏷️ Standardized version numbering (SemVer)
+## 🤝 Contributing
 
-### v0.2.1 - Config Backup Edition
-- 💾 Added configuration file backup functionality
-- 📦 Enhanced backup manifest with file listings
-- 🔄 Automatic config backup with Dockge backups
-
-### v0.2.0 - Modular Architecture
-- 🏗️ Restructured into modular library system
-- 📁 Organized code into separate functional modules
-- 🔧 Improved maintainability and extensibility
+See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ---
 
 ## 📝 License
 
-This script is provided under the GNU General Public License v3.0.
-
-## 🤝 Support
-
-For issues, questions, or contributions:
-- Enable debug mode for detailed error information
-- Check log files in `/var/log/server-helper/`
-- Review the troubleshooting section
-- Contact your system administrator
+GNU General Public License v3.0
 
 ---
 
-## ✨ Summary
+## 🆘 Support
 
-**Server Helper v0.3.0** is your all-in-one solution for:
-- 🔧 Automated server setup
-- 📊 24/7 monitoring
-- 💾 Reliable backups
-- 🔒 Security hardening
-- 🔄 Update management
-- 🆙 Self-updating from GitHub
-- 🧹 Disk maintenance
-- ⏳ Visual loading feedback
-- 🐛 Advanced debugging
-
-**Total Commands: 35+** | **Menu Options: 43** | **Auto-Start: ✅** | **Security: ✅** | **Monitoring: ✅** | **Self-Update: ✅**
+- **Issues**: https://github.com/thelasttenno/Server-Helper/issues
+- **Discussions**: https://github.com/thelasttenno/Server-Helper/discussions
+- **Documentation**: https://github.com/thelasttenno/Server-Helper/wiki
 
 ---
 
-**Made with ❤️ for Ubuntu 24.04.3 LTS**
+## ✨ Credits
+
+Uses these excellent community roles:
+- [geerlingguy.docker](https://github.com/geerlingguy/ansible-role-docker)
+- [geerlingguy.security](https://github.com/geerlingguy/ansible-role-security)
+- [geerlingguy.pip](https://github.com/geerlingguy/ansible-role-pip)
+
+Built with:
+- [Netdata](https://www.netdata.cloud/)
+- [Uptime Kuma](https://github.com/louislam/uptime-kuma)
+- [Dockge](https://github.com/louislam/dockge)
+- [Restic](https://restic.net/)
+- [Lynis](https://cisofy.com/lynis/)
+
+---
+
+**Made with ❤️ for Ubuntu 24.04 LTS**

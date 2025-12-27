@@ -1,0 +1,28 @@
+# Uptime Kuma Stack - Uptime Monitoring & Alerting
+# Deployed via Dockge
+
+version: '3.8'
+
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "{{ uptime_kuma.port }}:3001"
+    volumes:
+      - uptime-kuma-data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - PUID=1000
+      - PGID=1000
+    networks:
+      - monitoring
+
+volumes:
+  uptime-kuma-data:
+
+networks:
+  monitoring:
+    external: true
+    name: monitoring

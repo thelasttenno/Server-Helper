@@ -1,0 +1,98 @@
+---
+# Lynis Role - Security auditing with automated scanning
+# Performs weekly security scans and sends results to Uptime Kuma
+
+- name: Install Lynis dependencies
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - software-properties-common
+    state: present
+    update_cache: yes
+  when: lynis.enabled | default(true)
+
+- name: Add Lynis repository key
+  apt_key:
+    url: https://packages.cisofy.com/keys/cisofy-software-public.key
+    state: present
+  when: lynis.enabled | default(true)
+
+- name: Add Lynis repository
+  apt_repository:
+    repo: "deb https://packages.cisofy.com/community/lynis/deb/ stable main"
+    state: present
+    filename: cisofy-lynis
+  when: lynis.enabled | default(true)
+
+- name: Install Lynis
+  apt:
+    name: lynis
+    state: present
+    update_cache: yes
+  when: lynis.enabled | default(true)
+
+- name: Create Lynis scan directory
+  file:
+    path: "{{ lynis.scan_dir }}"
+    state: directory
+    mode: '0755'
+  when: lynis.enabled | default(true)
+
+- name: Create Lynis scan script
+  template:
+    src: lynis-scan.sh.j2
+    dest: /usr/local/bin/lynis-scan.sh
+    mode: '0755'
+  when: lynis.enabled | default(true)
+
+- name: Create Lynis systemd service
+  template:
+    src: lynis-scan.service.j2
+    dest: /etc/systemd/system/lynis-scan.service
+    mode: '0644'
+  when: lynis.enabled | default(true)
+  notify:
+    - reload systemd
+    - enable lynis scan timer
+
+- name: Create Lynis systemd timer
+  template:
+    src: lynis-scan.timer.j2
+    dest: /etc/systemd/system/lynis-scan.timer
+    mode: '0644'
+  when: lynis.enabled | default(true)
+  notify:
+    - reload systemd
+    - enable lynis scan timer
+
+- name: Enable and start Lynis scan timer
+  systemd:
+    name: lynis-scan.timer
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  when: lynis.enabled | default(true)
+
+- name: Run initial Lynis scan
+  command: /usr/local/bin/lynis-scan.sh
+  async: 300
+  poll: 0
+  register: initial_scan
+  when: lynis.enabled | default(true)
+  changed_when: false
+
+- name: Display Lynis information
+  debug:
+    msg:
+      - "Lynis security scanner is configured!"
+      - "Scan schedule: {{ lynis.schedule }}"
+      - "Scan directory: {{ lynis.scan_dir }}"
+      - "Initial scan running in background..."
+      - ""
+      - "Manual scan: sudo /usr/local/bin/lynis-scan.sh"
+      - "View latest report: sudo lynis show report"
+      - "View scan logs: journalctl -u lynis-scan -f"
+      - ""
+      - "Timer status: systemctl status lynis-scan.timer"
+  when: lynis.enabled | default(true)

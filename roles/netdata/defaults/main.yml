@@ -1,0 +1,35 @@
+---
+# Netdata Role Default Variables
+
+netdata:
+  enabled: true
+  port: 19999
+  
+  # Alarm configuration
+  alarms:
+    enabled: true
+    
+    # CPU thresholds
+    cpu_warning: 80
+    cpu_critical: 95
+    
+    # RAM thresholds
+    ram_warning: 80
+    ram_critical: 95
+    
+    # Disk thresholds
+    disk_warning: 80
+    disk_critical: 90
+    
+    # Health check interval
+    check_interval_minutes: 5
+    
+    # Uptime Kuma push URLs (populated from vault)
+    uptime_kuma_urls:
+      cpu: ""
+      ram: ""
+      disk: ""
+      docker: ""
+  
+  # Netdata Cloud (optional)
+  claim_token: ""

@@ -1,0 +1,173 @@
+---
+# Ansible Vault - Secrets Template (EXAMPLE - NOT ENCRYPTED)
+# 
+# IMPORTANT: This is an EXAMPLE file showing the structure.
+# To use this:
+#   1. Create vault password: openssl rand -base64 32 > .vault_password
+#   2. Create encrypted vault: ansible-vault create group_vars/vault.yml
+#   3. Add your actual secrets (never commit plain text!)
+#
+# Edit encrypted vault: ansible-vault edit group_vars/vault.yml
+
+# =============================================================================
+# NAS CREDENTIALS
+# =============================================================================
+
+vault_nas_credentials:
+  # Main NAS share
+  - username: "your_nas_user"
+    password: "your_nas_password"
+  
+  # Additional shares (if needed)
+  # - username: "another_user"
+  #   password: "another_password"
+
+# =============================================================================
+# BACKUP PASSWORDS (Restic)
+# =============================================================================
+
+# Use strong, unique passwords for each repository
+vault_restic_passwords:
+  nas: "change-me-restic-nas-password"
+  s3: "change-me-restic-s3-password"
+  b2: "change-me-restic-b2-password"
+  local: "change-me-restic-local-password"
+
+# =============================================================================
+# CLOUD PROVIDER CREDENTIALS
+# =============================================================================
+
+# AWS S3 Credentials
+# Get from: AWS Console → IAM → Users → Security Credentials
+vault_aws_credentials:
+  access_key: "AKIAIOSFODNN7EXAMPLE"
+  secret_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+
+# Backblaze B2 Credentials
+# Get from: Backblaze Console → App Keys
+vault_b2_credentials:
+  account_id: "your_b2_account_id"
+  account_key: "your_b2_account_key"
+
+# =============================================================================
+# SERVICE ADMIN CREDENTIALS
+# =============================================================================
+
+# Dockge admin account
+# Change these on first login!
+vault_dockge_credentials:
+  username: "admin"
+  password: "change-me-on-first-login"
+
+# Uptime Kuma admin account
+# Change these on first login!
+vault_uptime_kuma_credentials:
+  username: "admin"
+  password: "change-me-on-first-login"
+
+# =============================================================================
+# MONITORING & OBSERVABILITY
+# =============================================================================
+
+# Netdata Cloud (optional)
+# Get token from: https://app.netdata.cloud → Connect Node
+vault_netdata_claim_token: ""
+
+# Uptime Kuma Push Monitor URLs
+# Create monitors in Uptime Kuma UI, then add URLs here
+vault_uptime_kuma_push_urls:
+  nas: ""              # NAS health check
+  dockge: ""           # Dockge health check
+  system: ""           # System health (Netdata)
+  backup: ""           # Backup success/failure
+  security: ""         # Security scan results
+  update: ""           # Self-update status
+
+# =============================================================================
+# NOTIFICATION SERVICES
+# =============================================================================
+
+# Email Notifications (SMTP)
+vault_smtp_credentials:
+  host: "smtp.gmail.com"
+  port: 587
+  username: "your-email@gmail.com"
+  password: "your-app-password"  # Use app-specific password!
+  from_address: "server@example.com"
+  to_addresses:
+    - "admin@example.com"
+
+# Discord Webhook
+# Get from: Server Settings → Integrations → Webhooks
+vault_discord_webhook: ""
+
+# Telegram Bot
+# Get token from: @BotFather
+# Get chat_id from: @userinfobot
+vault_telegram_credentials:
+  bot_token: ""
+  chat_id: ""
+
+# Slack Webhook
+# Get from: Slack App → Incoming Webhooks
+vault_slack_webhook: ""
+
+# =============================================================================
+# REVERSE PROXY / SSL
+# =============================================================================
+
+# Let's Encrypt Email (for SSL certificates)
+vault_letsencrypt_email: "admin@example.com"
+
+# Cloudflare API (if using Cloudflare DNS challenge)
+vault_cloudflare_credentials:
+  api_token: ""
+  zone_id: ""
+
+# Custom SSL Certificate (if not using Let's Encrypt)
+vault_ssl_certificate: |
+  -----BEGIN CERTIFICATE-----
+  MIIDXTCCAkWgAwIBAgIJAKL0UG+mRKuoMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV
+  ... your certificate content ...
+  -----END CERTIFICATE-----
+
+vault_ssl_private_key: |
+  -----BEGIN PRIVATE KEY-----
+  MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj
+  ... your private key content ...
+  -----END PRIVATE KEY-----
+
+# =============================================================================
+# ADDITIONAL SECRETS
+# =============================================================================
+
+# Add any custom secrets your setup needs here
+# Examples:
+# vault_database_password: ""
+# vault_api_keys:
+#   service1: ""
+#   service2: ""
+# vault_ssh_private_key: |
+#   -----BEGIN OPENSSH PRIVATE KEY-----
+#   ...
+#   -----END OPENSSH PRIVATE KEY-----
+
+# =============================================================================
+# NOTES
+# =============================================================================
+
+# Password Generation:
+#   openssl rand -base64 32           # Random 32-byte password
+#   pwgen -s 32 1                     # Random 32-char password
+#   
+# Best Practices:
+#   - Use unique passwords for each service
+#   - Use 32+ character passwords
+#   - Rotate passwords periodically
+#   - Never reuse passwords
+#   - Store vault password in password manager
+#
+# After creating vault:
+#   ansible-vault view group_vars/vault.yml    # View secrets
+#   ansible-vault edit group_vars/vault.yml    # Edit secrets
+#   ansible-vault rekey group_vars/vault.yml   # Change vault password

@@ -1,0 +1,120 @@
+# Server Helper v1.0.0 - Self-Update Playbook
+# This playbook is run by ansible-pull for automatic updates
+
+---
+- name: Server Helper Self-Update
+  hosts: localhost
+  connection: local
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    # Override with local configuration if exists
+    config_file: "/opt/ansible/Server-Helper/group_vars/all.yml"
+  
+  pre_tasks:
+    - name: Display update banner
+      debug:
+        msg: |
+          ╔════════════════════════════════════════╗
+          ║    Server Helper - Self Update         ║
+          ║    Running via ansible-pull            ║
+          ╚════════════════════════════════════════╝
+    
+    - name: Load local configuration
+      include_vars:
+        file: "{{ config_file }}"
+      when: config_file is file
+      ignore_errors: yes
+    
+    - name: Check current version
+      slurp:
+        src: /etc/server-helper-version.txt
+      register: current_version
+      failed_when: false
+    
+    - name: Display current version
+      debug:
+        msg: "Current version: {{ (current_version.content | b64decode).strip() if current_version.content is defined else 'Unknown' }}"
+  
+  tasks:
+    # Pull latest changes
+    - name: Ensure git repository is up to date
+      git:
+        repo: "{{ self_update.git_repo }}"
+        dest: "/opt/ansible/Server-Helper"
+        version: "{{ self_update.version | default('main') }}"
+        force: yes
+      register: git_pull
+      when: self_update.enabled
+    
+    - name: Check if updates were pulled
+      debug:
+        msg: "{{ 'Changes detected - applying updates' if git_pull.changed else 'No changes detected' }}"
+      when: git_pull is defined
+    
+    # Run setup playbook if changes detected
+    - name: Run setup playbook
+      command: >
+        ansible-playbook 
+        /opt/ansible/Server-Helper/playbooks/setup.yml
+        --inventory localhost,
+        --connection local
+      when: git_pull.changed or (self_update.check_only is defined and not self_update.check_only)
+      register: setup_result
+    
+    - name: Display setup result
+      debug:
+        msg: "{{ setup_result.stdout_lines }}"
+      when: setup_result is defined and setup_result.stdout_lines is defined
+  
+  post_tasks:
+    - name: Save update timestamp
+      copy:
+        content: |
+          Last update: {{ ansible_date_time.iso8601 }}
+          Version: {{ self_update.version }}
+          Changes: {{ 'Yes' if git_pull.changed else 'No' }}
+        dest: /var/log/ansible-pull-last-run.txt
+        mode: '0644'
+    
+    - name: Update version file
+      copy:
+        content: "{{ self_update.version }}"
+        dest: /etc/server-helper-version.txt
+        mode: '0644'
+      when: git_pull.changed
+    
+    - name: Log update completion
+      lineinfile:
+        path: "{{ self_update.log_file }}"
+        line: "[{{ ansible_date_time.iso8601 }}] Self-update completed. Changes: {{ 'Yes' if git_pull.changed else 'No' }}"
+        create: yes
+        mode: '0644'
+    
+    - name: Send update heartbeat to Uptime Kuma
+      uri:
+        url: "{{ self_update.uptime_kuma_push_url }}?status=up&msg=self-update-complete"
+        method: POST
+        status_code: [200, 201]
+      when: self_update.uptime_kuma_push_url | default('') | length > 0
+      ignore_errors: yes
+    
+    - name: Display completion message
+      debug:
+        msg: |
+          ╔════════════════════════════════════════╗
+          ║    Self-Update Complete!               ║
+          ╚════════════════════════════════════════╝
+          
+          📊 Update Status:
+          - Changes detected: {{ 'Yes' if git_pull.changed else 'No' }}
+          - Version: {{ self_update.version }}
+          - Timestamp: {{ ansible_date_time.iso8601 }}
+          
+          📝 Logs:
+          - Update log: {{ self_update.log_file }}
+          - Last run: /var/log/ansible-pull-last-run.txt
+          
+          💡 Next scheduled update: Check systemd timer
+          - systemctl status ansible-pull.timer

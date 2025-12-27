@@ -1,0 +1,48 @@
+---
+# NAS Mounts Role - Main Tasks
+- name: Install CIFS utilities
+  ansible.builtin.apt:
+    name:
+      - cifs-utils
+      - nfs-common
+    state: present
+
+- name: Create NAS mount points
+  ansible.builtin.file:
+    path: "{{ item.mount_point }}"
+    state: directory
+    mode: '0755'
+  loop: "{{ nas_mounts.shares }}"
+  when: nas_mounts.enabled | default(false)
+
+- name: Create NAS credentials files
+  ansible.builtin.template:
+    src: nas_credentials.j2
+    dest: "/root/.nascreds_{{ item.name }}"
+    mode: '0600'
+  loop: "{{ nas_mounts.shares }}"
+  when: nas_mounts.enabled | default(false)
+  no_log: true
+
+- name: Add NAS mounts to fstab
+  ansible.posix.mount:
+    path: "{{ item.mount_point }}"
+    src: "//{{ item.ip }}/{{ item.share_name }}"
+    fstype: cifs
+    opts: "credentials=/root/.nascreds_{{ item.name }},vers={{ item.smb_version }},{{ item.options }}"
+    state: mounted
+  loop: "{{ nas_mounts.shares }}"
+  when: nas_mounts.enabled | default(false)
+
+- name: Verify NAS mounts are accessible
+  ansible.builtin.stat:
+    path: "{{ item.mount_point }}"
+  loop: "{{ nas_mounts.shares }}"
+  register: nas_mount_check
+  when: nas_mounts.enabled | default(false)
+
+- name: Display NAS mount status
+  ansible.builtin.debug:
+    msg: "NAS mount {{ item.item.name }} at {{ item.item.mount_point }}: {{ 'OK' if item.stat.exists else 'FAILED' }}"
+  loop: "{{ nas_mount_check.results }}"
+  when: nas_mounts.enabled | default(false)

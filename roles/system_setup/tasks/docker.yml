@@ -1,0 +1,77 @@
+---
+# Docker Installation Tasks
+- name: Check if Docker is already installed
+  ansible.builtin.command: docker --version
+  register: docker_check
+  failed_when: false
+  changed_when: false
+
+- name: Remove old Docker packages
+  ansible.builtin.apt:
+    name:
+      - docker
+      - docker-engine
+      - docker.io
+      - containerd
+      - runc
+    state: absent
+  when: docker_check.rc != 0
+
+- name: Add Docker GPG key
+  ansible.builtin.apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+  when: docker_check.rc != 0
+
+- name: Add Docker repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+    filename: docker
+  when: docker_check.rc != 0
+
+- name: Install Docker packages
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+  when: docker_check.rc != 0
+
+- name: Ensure Docker service is started and enabled
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Add current user to docker group
+  ansible.builtin.user:
+    name: "{{ ansible_env.USER }}"
+    groups: docker
+    append: true
+  when: ansible_env.USER is defined
+
+- name: Configure Docker daemon
+  ansible.builtin.copy:
+    content: |
+      {
+        "log-driver": "{{ docker.log_driver }}",
+        "log-opts": {
+          "max-size": "{{ docker.log_max_size }}",
+          "max-file": "{{ docker.log_max_file }}"
+        },
+        "storage-driver": "{{ docker.storage_driver }}"
+      }
+    dest: /etc/docker/daemon.json
+    mode: '0644'
+  notify: Restart Docker
+
+- name: Install Docker Python SDK
+  ansible.builtin.pip:
+    name:
+      - docker
+      - docker-compose
+    state: present

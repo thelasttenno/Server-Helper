@@ -1,0 +1,40 @@
+---
+# Dockge Role - Main Tasks
+- name: Create Dockge directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ dockge_base_dir }}"
+    - "{{ dockge_stacks_dir }}"
+    - "{{ dockge_data_dir }}"
+
+- name: Deploy Dockge docker-compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ dockge_base_dir }}/docker-compose.yml"
+    mode: '0644'
+  notify: Restart Dockge
+
+- name: Start Dockge container
+  community.docker.docker_compose:
+    project_src: "{{ dockge_base_dir }}"
+    state: present
+    pull: true
+
+- name: Wait for Dockge to be ready
+  ansible.builtin.uri:
+    url: "http://localhost:{{ dockge.port }}"
+    status_code: 200
+  register: dockge_health
+  until: dockge_health.status == 200
+  retries: 30
+  delay: 2
+
+- name: Display Dockge access info
+  ansible.builtin.debug:
+    msg:
+      - "Dockge is ready!"
+      - "Access at: http://{{ ansible_default_ipv4.address }}:{{ dockge.port }}"
+      - "All container stacks will be deployed to: {{ dockge_stacks_dir }}"

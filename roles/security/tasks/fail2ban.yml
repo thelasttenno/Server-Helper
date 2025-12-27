@@ -1,0 +1,24 @@
+---
+# Fail2ban Configuration
+
+- name: Create Fail2ban jail.local
+  ansible.builtin.template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    mode: '0644'
+  notify: Restart Fail2ban
+
+- name: Ensure Fail2ban is started and enabled
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: started
+    enabled: true
+
+- name: Display Fail2ban status
+  ansible.builtin.command: fail2ban-client status
+  register: fail2ban_status
+  changed_when: false
+
+- name: Show Fail2ban status
+  ansible.builtin.debug:
+    var: fail2ban_status.stdout_lines

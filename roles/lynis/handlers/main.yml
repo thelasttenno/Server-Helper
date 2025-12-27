@@ -1,0 +1,12 @@
+---
+# Lynis Role Handlers
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: enable lynis scan timer
+  systemd:
+    name: lynis-scan.timer
+    enabled: yes
+    state: started

@@ -1,0 +1,369 @@
+# Server Helper Configuration - Main Variables
+# This file contains all configuration options for Server Helper v1.0.0
+
+---
+# =============================================================================
+# SYSTEM CONFIGURATION
+# =============================================================================
+
+# Server hostname
+hostname: "server-01"
+
+# Timezone (use 'timedatectl list-timezones' to see available)
+timezone: "America/New_York"
+
+# Locale settings
+locale: "en_US.UTF-8"
+
+# =============================================================================
+# NAS CONFIGURATION (Optional)
+# =============================================================================
+
+nas:
+  enabled: true
+  
+  # Multiple NAS shares supported
+  shares:
+    - ip: "192.168.1.100"
+      share: "backup"
+      mount: "/mnt/nas/backup"
+      username: "nasuser"
+      password: "changeme"
+      options: "vers=3.0,_netdev,nofail"
+    
+    # Add more shares as needed
+    # - ip: "192.168.1.100"
+    #   share: "media"
+    #   mount: "/mnt/nas/media"
+    #   username: "nasuser"
+    #   password: "changeme"
+
+# =============================================================================
+# BACKUP CONFIGURATION (Restic)
+# =============================================================================
+
+restic:
+  enabled: true
+  
+  # Cron schedule (cron syntax)
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  
+  # Retention policy
+  retention:
+    keep_daily: 7
+    keep_weekly: 4
+    keep_monthly: 6
+    keep_yearly: 2
+  
+  # Backup destinations (enable any combination)
+  destinations:
+    # NAS backup
+    nas:
+      enabled: true
+      path: "/mnt/nas/backup/restic"
+      password: "changeme-restic-password"
+    
+    # AWS S3 backup
+    s3:
+      enabled: false
+      bucket: "my-server-backups"
+      endpoint: "s3.amazonaws.com"
+      region: "us-east-1"
+      access_key: "AWS_ACCESS_KEY_ID"
+      secret_key: "AWS_SECRET_ACCESS_KEY"
+      password: "changeme-restic-password"
+    
+    # Backblaze B2 backup
+    b2:
+      enabled: false
+      bucket: "my-server-backups"
+      account_id: "B2_ACCOUNT_ID"
+      account_key: "B2_ACCOUNT_KEY"
+      password: "changeme-restic-password"
+    
+    # Local backup
+    local:
+      enabled: true
+      path: "/opt/backups/restic"
+      password: "changeme-restic-password"
+  
+  # Paths to backup
+  backup_paths:
+    - /opt/dockge/stacks
+    - /opt/dockge/data
+    - /etc
+    - /home
+    - /root
+  
+  # Paths to exclude
+  exclude_patterns:
+    - "*.tmp"
+    - "*.log"
+    - ".cache"
+    - "__pycache__"
+  
+  # Uptime Kuma heartbeat (optional)
+  uptime_kuma_push_url: ""  # e.g., "http://localhost:3001/api/push/BACKUP123"
+
+# =============================================================================
+# MONITORING CONFIGURATION
+# =============================================================================
+
+# Netdata - System and container metrics
+netdata:
+  enabled: true
+  port: 19999
+  
+  # Netdata Cloud (optional)
+  claim_token: ""  # Get from: https://app.netdata.cloud
+  claim_rooms: ""  # Room IDs (comma-separated)
+  
+  # Alarms configuration
+  alarms:
+    enabled: true
+    
+    # CPU alarm thresholds
+    cpu_warning: 80
+    cpu_critical: 95
+    
+    # RAM alarm thresholds
+    ram_warning: 80
+    ram_critical: 95
+    
+    # Disk alarm thresholds
+    disk_warning: 80
+    disk_critical: 90
+    
+    # Uptime Kuma push URLs for alarms
+    uptime_kuma_urls:
+      cpu: ""      # http://localhost:3001/api/push/CPU123
+      ram: ""      # http://localhost:3001/api/push/RAM123
+      disk: ""     # http://localhost:3001/api/push/DISK123
+
+# Uptime Kuma - Uptime monitoring and alerting
+uptime_kuma:
+  enabled: true
+  port: 3001
+  
+  # Initial admin credentials (change on first login!)
+  admin_username: "admin"
+  admin_password: "changeme"
+  
+  # Monitors (configured after initial setup)
+  monitors:
+    - name: "Netdata Health"
+      type: "http"
+      url: "http://localhost:19999/api/v1/info"
+      interval: 60
+      
+    - name: "Dockge Health"
+      type: "http"
+      url: "http://localhost:5001"
+      interval: 60
+      
+    - name: "Docker Daemon"
+      type: "docker"
+      docker_host: "unix:///var/run/docker.sock"
+      interval: 60
+  
+  # Notification endpoints (configure in UI or via API)
+  notifications: []
+  # Example:
+  # - type: "smtp"
+  #   name: "Email Alerts"
+  #   smtp_host: "smtp.gmail.com"
+  #   smtp_port: 587
+  #   smtp_username: "your-email@gmail.com"
+  #   smtp_password: "your-app-password"
+
+# =============================================================================
+# CONTAINER MANAGEMENT (Dockge)
+# =============================================================================
+
+dockge:
+  enabled: true
+  port: 5001
+  stacks_dir: "/opt/dockge/stacks"
+  data_dir: "/opt/dockge/data"
+  
+  # Initial admin credentials (change on first login!)
+  admin_username: "admin"
+  admin_password: "changeme"
+
+# =============================================================================
+# SECURITY CONFIGURATION
+# =============================================================================
+
+security:
+  # fail2ban - Intrusion prevention
+  fail2ban_enabled: true
+  fail2ban_bantime: 3600  # seconds
+  fail2ban_maxretry: 5
+  
+  # UFW Firewall
+  ufw_enabled: true
+  ufw_default_policy: "deny"
+  ufw_allowed_ports:
+    - 22      # SSH
+    - 5001    # Dockge
+    - 19999   # Netdata
+    - 3001    # Uptime Kuma
+  
+  # SSH Hardening
+  ssh_hardening: true
+  ssh_port: 22
+  ssh_password_authentication: false
+  ssh_permit_root_login: false
+  ssh_max_auth_tries: 3
+  ssh_client_alive_interval: 300
+  
+  # Lynis Security Auditing
+  lynis_enabled: true
+  lynis_schedule: "0 3 * * 0"  # Sunday at 3 AM
+  lynis_uptime_kuma_push_url: ""  # Optional heartbeat
+  
+  # Automatic security updates
+  unattended_upgrades: true
+  auto_reboot: false
+  auto_reboot_time: "03:00"
+
+# =============================================================================
+# OPTIONAL SERVICES
+# =============================================================================
+
+# Watchtower - Automatic container updates
+watchtower:
+  enabled: false
+  schedule: "0 4 * * *"  # Daily at 4 AM
+  cleanup: true
+  monitor_only: false  # Set to true for notifications without updates
+  notifications:
+    enabled: false
+    url: ""  # Shoutrrr URL (e.g., discord://token@id)
+
+# Reverse Proxy (Traefik or Nginx Proxy Manager)
+reverse_proxy:
+  enabled: false
+  type: "traefik"  # or "nginx"
+  
+  # Domain configuration
+  domain: "example.com"
+  email: "admin@example.com"  # For Let's Encrypt
+  
+  # SSL/TLS
+  ssl_enabled: true
+  ssl_provider: "letsencrypt"  # or "cloudflare"
+  
+  # Traefik-specific settings
+  traefik:
+    dashboard_enabled: true
+    dashboard_port: 8080
+    entrypoints:
+      - name: "web"
+        port: 80
+        redirect_to_https: true
+      - name: "websecure"
+        port: 443
+  
+  # Nginx Proxy Manager settings
+  nginx:
+    admin_port: 81
+    http_port: 80
+    https_port: 443
+
+# =============================================================================
+# SELF-UPDATE CONFIGURATION (ansible-pull)
+# =============================================================================
+
+self_update:
+  enabled: true
+  schedule: "0 5 * * *"  # Daily at 5 AM
+  
+  # Git repository
+  git_repo: "https://github.com/thelasttenno/Server-Helper.git"
+  branch: "main"
+  version: "v1.0.0"  # Git tag or branch
+  
+  # Playbook to run
+  playbook: "playbooks/setup.yml"
+  
+  # Log file
+  log_file: "/var/log/ansible-pull.log"
+  
+  # Only check for updates (don't apply)
+  check_only: false
+
+# =============================================================================
+# DOCKER CONFIGURATION
+# =============================================================================
+
+docker:
+  # Docker edition
+  edition: "ce"  # ce or ee
+  
+  # Docker compose version
+  compose_version: "2.23.0"
+  
+  # Docker daemon configuration
+  daemon_config:
+    log_driver: "json-file"
+    log_opts:
+      max_size: "10m"
+      max_file: "3"
+    storage_driver: "overlay2"
+  
+  # Docker networks
+  networks:
+    - name: "monitoring"
+      driver: "bridge"
+    - name: "proxy"
+      driver: "bridge"
+  
+  # Docker volumes
+  volumes: []
+
+# =============================================================================
+# NOTIFICATION SETTINGS
+# =============================================================================
+
+notifications:
+  # Email notifications
+  email:
+    enabled: false
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    smtp_username: "your-email@gmail.com"
+    smtp_password: "your-app-password"
+    from_address: "server@example.com"
+    to_addresses:
+      - "admin@example.com"
+  
+  # Discord webhook
+  discord:
+    enabled: false
+    webhook_url: ""
+  
+  # Telegram bot
+  telegram:
+    enabled: false
+    bot_token: ""
+    chat_id: ""
+
+# =============================================================================
+# ADVANCED SETTINGS
+# =============================================================================
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  retention_days: 30
+
+# Performance
+performance:
+  max_parallel_tasks: 10
+  connection_timeout: 30
+
+# Feature flags
+features:
+  experimental: false
+  debug_mode: false

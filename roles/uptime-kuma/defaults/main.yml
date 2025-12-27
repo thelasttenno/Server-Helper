@@ -1,0 +1,10 @@
+---
+# Uptime Kuma Role Default Variables
+
+uptime_kuma:
+  enabled: true
+  port: 3001
+  
+  # Admin credentials (from vault)
+  admin_username: "{{ vault_uptime_kuma_credentials.username | default('admin') }}"
+  admin_password: "{{ vault_uptime_kuma_credentials.password | default('changeme') }}"

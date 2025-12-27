@@ -1,0 +1,94 @@
+---
+# Server Helper v1.0.0 - Main Setup Playbook
+# ===========================================
+- name: Server Helper - Complete Setup
+  hosts: all
+  gather_facts: true
+  
+  vars_prompt:
+    - name: confirm_setup
+      prompt: "This will configure your server with Docker, Dockge, monitoring, and backups. Continue? (yes/no)"
+      private: false
+      default: "no"
+  
+  pre_tasks:
+    - name: Verify setup confirmation
+      ansible.builtin.fail:
+        msg: "Setup cancelled by user"
+      when: confirm_setup | lower != 'yes'
+    
+    - name: Display banner
+      ansible.builtin.debug:
+        msg:
+          - "╔════════════════════════════════════════╗"
+          - "║  Server Helper v1.0.0 - Ansible       ║"
+          - "║  Complete Server Setup                 ║"
+          - "╚════════════════════════════════════════╝"
+    
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+  
+  roles:
+    - role: system_setup
+      tags: ['system', 'setup']
+    
+    - role: nas_mounts
+      tags: ['nas', 'storage']
+      when: nas_mounts.enabled | default(false)
+    
+    - role: security
+      tags: ['security', 'hardening']
+      when: security is defined
+    
+    - role: dockge
+      tags: ['dockge', 'docker', 'containers']
+      when: dockge.enabled | default(true)
+    
+    - role: monitoring
+      tags: ['monitoring', 'netdata', 'uptime-kuma']
+      when: monitoring is defined
+    
+    - role: backups
+      tags: ['backups', 'restic']
+      when: backups.enabled | default(false)
+    
+    - role: proxy
+      tags: ['proxy', 'traefik', 'nginx']
+      when: reverse_proxy.enabled | default(false)
+  
+  post_tasks:
+    - name: Display setup complete message
+      ansible.builtin.debug:
+        msg:
+          - "═══════════════════════════════════════"
+          - "      Setup Complete!"
+          - "═══════════════════════════════════════"
+          - ""
+          - "Access your services:"
+          - "  - Dockge: http://{{ ansible_default_ipv4.address }}:{{ dockge.port }}"
+          - "  - Netdata: http://{{ ansible_default_ipv4.address }}:{{ monitoring.netdata.port }}"
+          - "  - Uptime Kuma: http://{{ ansible_default_ipv4.address }}:{{ monitoring.uptime_kuma.port }}"
+          - ""
+          - "Next steps:"
+          - "  1. Configure Uptime Kuma monitors"
+          - "  2. Set up backup repositories (Restic)"
+          - "  3. Review security settings"
+          - ""
+    
+    - name: Save service URLs
+      ansible.builtin.copy:
+        content: |
+          # Server Helper v1.0.0 - Service URLs
+          # Generated: {{ ansible_date_time.iso8601 }}
+          
+          Dockge: http://{{ ansible_default_ipv4.address }}:{{ dockge.port }}
+          Netdata: http://{{ ansible_default_ipv4.address }}:{{ monitoring.netdata.port }}
+          Uptime Kuma: http://{{ ansible_default_ipv4.address }}:{{ monitoring.uptime_kuma.port }}
+          {% if reverse_proxy.enabled %}
+          Reverse Proxy: http://{{ ansible_default_ipv4.address }}:{{ reverse_proxy.traefik.port if reverse_proxy.type == 'traefik' else reverse_proxy.npm.port }}
+          {% endif %}
+        dest: "{{ base_install_dir }}/service_urls.txt"
+        mode: '0644'

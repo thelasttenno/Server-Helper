@@ -1,0 +1,157 @@
+# Restic Role - Encrypted Backup System
+# Supports NAS, S3, B2, and local destinations
+
+---
+- name: Install Restic
+  apt:
+    name: restic
+    state: present
+  tags: [restic, install]
+
+- name: Create Restic directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0700'
+    owner: root
+    group: root
+  loop:
+    - /root/.restic
+    - /var/log/restic
+  tags: [restic, directories]
+
+- name: Initialize Restic repositories
+  block:
+    # NAS repository
+    - name: Initialize NAS Restic repository
+      shell: |
+        restic -r {{ restic.destinations.nas.path }} init \
+          --password-command "echo {{ restic.destinations.nas.password }}"
+      environment:
+        RESTIC_PASSWORD: "{{ restic.destinations.nas.password }}"
+      when: 
+        - restic.destinations.nas.enabled
+        - restic.destinations.nas.path is defined
+      register: nas_init
+      failed_when: 
+        - nas_init.rc != 0
+        - "'already initialized' not in nas_init.stderr"
+      no_log: true
+      tags: [restic, init, nas]
+    
+    # S3 repository
+    - name: Initialize S3 Restic repository
+      shell: |
+        restic -r s3:{{ restic.destinations.s3.endpoint }}/{{ restic.destinations.s3.bucket }} init \
+          --password-command "echo {{ restic.destinations.s3.password }}"
+      environment:
+        RESTIC_PASSWORD: "{{ restic.destinations.s3.password }}"
+        AWS_ACCESS_KEY_ID: "{{ restic.destinations.s3.access_key }}"
+        AWS_SECRET_ACCESS_KEY: "{{ restic.destinations.s3.secret_key }}"
+      when:
+        - restic.destinations.s3.enabled
+        - restic.destinations.s3.bucket is defined
+      register: s3_init
+      failed_when:
+        - s3_init.rc != 0
+        - "'already initialized' not in s3_init.stderr"
+      no_log: true
+      tags: [restic, init, s3]
+    
+    # B2 repository
+    - name: Initialize B2 Restic repository
+      shell: |
+        restic -r b2:{{ restic.destinations.b2.bucket }} init \
+          --password-command "echo {{ restic.destinations.b2.password }}"
+      environment:
+        RESTIC_PASSWORD: "{{ restic.destinations.b2.password }}"
+        B2_ACCOUNT_ID: "{{ restic.destinations.b2.account_id }}"
+        B2_ACCOUNT_KEY: "{{ restic.destinations.b2.account_key }}"
+      when:
+        - restic.destinations.b2.enabled
+        - restic.destinations.b2.bucket is defined
+      register: b2_init
+      failed_when:
+        - b2_init.rc != 0
+        - "'already initialized' not in b2_init.stderr"
+      no_log: true
+      tags: [restic, init, b2]
+    
+    # Local repository
+    - name: Initialize local Restic repository
+      shell: |
+        restic -r {{ restic.destinations.local.path }} init \
+          --password-command "echo {{ restic.destinations.local.password }}"
+      environment:
+        RESTIC_PASSWORD: "{{ restic.destinations.local.password }}"
+      when:
+        - restic.destinations.local.enabled
+        - restic.destinations.local.path is defined
+      register: local_init
+      failed_when:
+        - local_init.rc != 0
+        - "'already initialized' not in local_init.stderr"
+      no_log: true
+      tags: [restic, init, local]
+
+- name: Create Restic backup script
+  template:
+    src: restic-backup.sh.j2
+    dest: /opt/scripts/restic-backup.sh
+    mode: '0700'
+    owner: root
+    group: root
+  tags: [restic, script]
+
+- name: Create Restic systemd service
+  template:
+    src: restic-backup.service.j2
+    dest: /etc/systemd/system/restic-backup.service
+    mode: '0644'
+  notify: systemd daemon-reload
+  tags: [restic, systemd]
+
+- name: Create Restic systemd timer
+  template:
+    src: restic-backup.timer.j2
+    dest: /etc/systemd/system/restic-backup.timer
+    mode: '0644'
+  notify: systemd daemon-reload
+  tags: [restic, systemd]
+
+- name: Enable and start Restic timer
+  systemd:
+    name: restic-backup.timer
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  tags: [restic, systemd]
+
+- name: Display Restic setup summary
+  debug:
+    msg: |
+      ✓ Restic backup system configured
+      
+      📦 Repositories:
+      {% if restic.destinations.nas.enabled %}- NAS: {{ restic.destinations.nas.path }}{% endif %}
+      {% if restic.destinations.s3.enabled %}- S3: {{ restic.destinations.s3.bucket }}{% endif %}
+      {% if restic.destinations.b2.enabled %}- B2: {{ restic.destinations.b2.bucket }}{% endif %}
+      {% if restic.destinations.local.enabled %}- Local: {{ restic.destinations.local.path }}{% endif %}
+      
+      📅 Schedule: {{ restic.schedule }}
+      🔄 Retention:
+      - Daily: {{ restic.retention.keep_daily }}
+      - Weekly: {{ restic.retention.keep_weekly }}
+      - Monthly: {{ restic.retention.keep_monthly }}
+      - Yearly: {{ restic.retention.keep_yearly | default(0) }}
+      
+      💡 Commands:
+      - Manual backup: ansible-playbook playbooks/backup.yml
+      - List snapshots: restic -r <repo> snapshots
+      - Restore: restic -r <repo> restore <snapshot-id> --target /tmp/restore
+  tags: [restic]
+
+# Handlers
+- name: systemd daemon-reload
+  systemd:
+    daemon_reload: yes

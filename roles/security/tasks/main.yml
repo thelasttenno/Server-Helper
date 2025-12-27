@@ -1,0 +1,42 @@
+---
+# Security Role - Wrapper for community security roles
+# Applies comprehensive security hardening
+
+- name: Apply general security hardening
+  include_role:
+    name: geerlingguy.security
+  when: security.basic_hardening | default(true)
+
+- name: Setup fail2ban
+  include_role:
+    name: robertdebock.fail2ban
+  when: security.fail2ban.enabled | default(true)
+
+- name: Setup UFW firewall
+  include_role:
+    name: weareinteractive.ufw
+  vars:
+    ufw_rules:
+      - { rule: "allow", port: "22", proto: "tcp", comment: "SSH" }
+      - { rule: "allow", port: "{{ dockge.port }}", proto: "tcp", comment: "Dockge" }
+      - { rule: "allow", port: "{{ netdata.port }}", proto: "tcp", comment: "Netdata" }
+      - { rule: "allow", port: "{{ uptime_kuma.port }}", proto: "tcp", comment: "Uptime Kuma" }
+  when: security.ufw.enabled | default(true)
+
+- name: Harden SSH configuration
+  template:
+    src: sshd_config_hardening.j2
+    dest: /etc/ssh/sshd_config.d/99-hardening.conf
+    mode: '0644'
+  when: security.ssh_hardening | default(true)
+  notify: restart sshd
+
+- name: Display security information
+  debug:
+    msg:
+      - "Security hardening applied!"
+      - "fail2ban: {{ 'enabled' if security.fail2ban.enabled | default(true) else 'disabled' }}"
+      - "UFW firewall: {{ 'enabled' if security.ufw.enabled | default(true) else 'disabled' }}"
+      - "SSH hardening: {{ 'enabled' if security.ssh_hardening | default(true) else 'disabled' }}"
+      - ""
+      - "Run security audit: ansible-playbook playbooks/security.yml"

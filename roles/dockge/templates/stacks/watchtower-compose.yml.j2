@@ -1,0 +1,30 @@
+# Watchtower Stack - Automatic Container Updates
+# Deployed via Dockge
+
+version: '3.8'
+
+services:
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP={{ watchtower.cleanup | default(true) | lower }}
+      - WATCHTOWER_SCHEDULE={{ watchtower.schedule | default('0 4 * * *') }}
+      - WATCHTOWER_MONITOR_ONLY={{ watchtower.monitor_only | default(false) | lower }}
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+      - WATCHTOWER_INCLUDE_STOPPED=false
+      - TZ={{ timezone | default('UTC') }}
+{% if watchtower.notifications.enabled and watchtower.notifications.url %}
+      - WATCHTOWER_NOTIFICATIONS=shoutrrr
+      - WATCHTOWER_NOTIFICATION_URL={{ watchtower.notifications.url }}
+{% endif %}
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    external: true
+    name: monitoring

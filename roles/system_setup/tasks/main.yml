@@ -1,0 +1,60 @@
+---
+# System Setup Role - Main Tasks
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ server_hostname }}"
+  when: server_hostname is defined
+
+- name: Update /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1'
+    line: "127.0.1.1 {{ server_hostname }}"
+    state: present
+  when: server_hostname is defined
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ server_timezone }}"
+  when: server_timezone is defined
+
+- name: Install required system packages
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - software-properties-common
+      - python3
+      - python3-pip
+      - git
+      - vim
+      - htop
+      - net-tools
+      - jq
+      - cifs-utils  # For NAS mounting
+      - nfs-common  # For NFS
+    state: present
+    update_cache: true
+
+- name: Install Docker
+  include_tasks: docker.yml
+
+- name: Create base directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ base_install_dir }}"
+    - "{{ dockge_base_dir }}"
+    - "{{ dockge_stacks_dir }}"
+    - "{{ dockge_data_dir }}"
+
+- name: Copy version file
+  ansible.builtin.copy:
+    content: "1.0.0"
+    dest: "{{ base_install_dir }}/VERSION"
+    mode: '0644'

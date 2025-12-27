@@ -1,0 +1,82 @@
+---
+# Uptime Kuma Role - Setup and configuration
+# Note: API configuration requires initial admin account creation via UI
+
+- name: Wait for Uptime Kuma container to be healthy
+  uri:
+    url: "http://localhost:{{ uptime_kuma.port }}"
+    status_code: 200
+  register: uptime_kuma_health
+  until: uptime_kuma_health.status == 200
+  retries: 30
+  delay: 5
+  when: uptime_kuma.enabled | default(true)
+
+- name: Check if Uptime Kuma has been configured
+  uri:
+    url: "http://localhost:{{ uptime_kuma.port }}/api/status-page/heartbeat"
+    method: GET
+    status_code: [200, 401, 403]
+  register: uptime_kuma_configured
+  failed_when: false
+  when: uptime_kuma.enabled | default(true)
+
+- name: Create Uptime Kuma setup guide
+  template:
+    src: uptime-kuma-setup-guide.md.j2
+    dest: /root/uptime-kuma-setup-guide.md
+    mode: '0644'
+  when: uptime_kuma.enabled | default(true)
+
+- name: Create Uptime Kuma monitor configuration helper script
+  template:
+    src: configure-uptime-kuma-monitors.sh.j2
+    dest: /usr/local/bin/configure-uptime-kuma-monitors.sh
+    mode: '0755'
+  when: uptime_kuma.enabled | default(true)
+
+- name: Display Uptime Kuma setup instructions
+  debug:
+    msg:
+      - "=============================================="
+      - "    Uptime Kuma Setup Required"
+      - "=============================================="
+      - ""
+      - "Uptime Kuma is running but requires initial setup:"
+      - ""
+      - "1. Access Uptime Kuma:"
+      - "   http://{{ ansible_host }}:{{ uptime_kuma.port }}"
+      - ""
+      - "2. Create admin account:"
+      - "   - Username: {{ vault_uptime_kuma_credentials.username }}"
+      - "   - Password: {{ vault_uptime_kuma_credentials.password }}"
+      - ""
+      - "3. Configure monitors using the helper script:"
+      - "   sudo /usr/local/bin/configure-uptime-kuma-monitors.sh"
+      - ""
+      - "4. Or manually configure these monitors:"
+      - "   - Netdata Health (HTTP)"
+      - "   - Dockge (HTTP)"
+      - "   - Docker Daemon (HTTP)"
+      - "   - NAS Connectivity (Ping/HTTP)"
+      - "   - System Health (Push)"
+      - "   - Backup Status (Push)"
+      - "   - Security Scan (Push)"
+      - ""
+      - "5. Setup guide available at:"
+      - "   /root/uptime-kuma-setup-guide.md"
+      - ""
+      - "=============================================="
+  when:
+    - uptime_kuma.enabled | default(true)
+    - uptime_kuma_configured.status in [401, 403]
+
+- name: Display Uptime Kuma information (already configured)
+  debug:
+    msg:
+      - "Uptime Kuma is configured!"
+      - "Access at: http://{{ ansible_host }}:{{ uptime_kuma.port }}"
+      - "Monitor configuration helper: /usr/local/bin/configure-uptime-kuma-monitors.sh"
+  when:
+    - uptime_kuma.enabled | default(true)
+    - uptime_kuma_configured.status == 200
