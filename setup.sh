@@ -170,56 +170,6 @@ prompt_config() {
     read -p "Timezone [America/New_York]: " TIMEZONE
     TIMEZONE=${TIMEZONE:-America/New_York}
 
-    # User account configuration
-    echo
-    echo -e "${BOLD}User Account Configuration:${NC}"
-    read -p "Create new admin user account? (y/N): " -n 1 -r CREATE_ADMIN_USER
-    echo
-    CREATE_ADMIN_USER=${CREATE_ADMIN_USER:-n}
-
-    if [[ $CREATE_ADMIN_USER =~ ^[Yy]$ ]]; then
-        read -p "Admin username [admin]: " ADMIN_USER
-        ADMIN_USER=${ADMIN_USER:-admin}
-
-        read -sp "Admin password: " ADMIN_PASSWORD
-        echo
-
-        read -p "Enable passwordless sudo for admin? (Y/n): " -n 1 -r ADMIN_PASSWORDLESS_SUDO
-        echo
-        ADMIN_PASSWORDLESS_SUDO=${ADMIN_PASSWORDLESS_SUDO:-y}
-
-        read -p "Add SSH public key for admin? (Y/n): " -n 1 -r ADD_ADMIN_SSH_KEY
-        echo
-        ADD_ADMIN_SSH_KEY=${ADD_ADMIN_SSH_KEY:-y}
-
-        if [[ $ADD_ADMIN_SSH_KEY =~ ^[Yy]$ ]]; then
-            echo "Enter SSH public key (paste full key):"
-            read ADMIN_SSH_KEY
-        fi
-    fi
-
-    read -p "Disable root password login? (Y/n): " -n 1 -r DISABLE_ROOT_PASSWORD
-    echo
-    DISABLE_ROOT_PASSWORD=${DISABLE_ROOT_PASSWORD:-y}
-
-    # Virtualization configuration
-    echo
-    echo -e "${BOLD}Virtualization Configuration:${NC}"
-    read -p "Install QEMU guest agent (for Proxmox/KVM)? (y/N): " -n 1 -r INSTALL_QEMU_AGENT
-    echo
-    INSTALL_QEMU_AGENT=${INSTALL_QEMU_AGENT:-n}
-
-    # LVM configuration
-    echo
-    echo -e "${BOLD}LVM/Disk Configuration:${NC}"
-    read -p "Fix Ubuntu default LVM partitioning? (Y/n): " -n 1 -r FIX_LVM
-    echo
-    FIX_LVM=${FIX_LVM:-y}
-
-    if [[ $FIX_LVM =~ ^[Yy]$ ]]; then
-        print_info "This will extend the root logical volume to use all available space."
-    fi
-
     # NAS configuration
     echo
     echo -e "${BOLD}NAS Configuration:${NC}"
@@ -415,36 +365,6 @@ timezone: "${TIMEZONE}"
 locale: "en_US.UTF-8"
 base_install_dir: "/opt"
 
-# User Account Configuration
-system_users:
-  create_admin_user: $(if [[ $CREATE_ADMIN_USER =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
-$(if [[ $CREATE_ADMIN_USER =~ ^[Yy]$ ]]; then cat <<EOU
-  admin_user: "${ADMIN_USER}"
-  admin_password: "{{ vault_system_users.admin_password }}"
-  admin_groups:
-    - sudo
-    - docker
-  admin_passwordless_sudo: $(if [[ $ADMIN_PASSWORDLESS_SUDO =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
-  admin_ssh_key: "$(if [[ $ADD_ADMIN_SSH_KEY =~ ^[Yy]$ ]]; then echo '{{ vault_system_users.admin_ssh_key }}'; else echo ''; fi)"
-EOU
-else
-echo "  admin_user: \"admin\""
-echo "  admin_password: \"changeme\""
-fi)
-  disable_root_password: $(if [[ $DISABLE_ROOT_PASSWORD =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
-  additional_users: []
-
-# Virtualization Configuration
-virtualization:
-  qemu_guest_agent: $(if [[ $INSTALL_QEMU_AGENT =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
-
-# LVM Configuration
-lvm_config:
-  enabled: $(if [[ $FIX_LVM =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
-  auto_extend_ubuntu: $(if [[ $FIX_LVM =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
-  custom_lvs: []
-  create_lvs: []
-
 # NAS Configuration
 nas_mounts:
   enabled: $(if [[ $ENABLE_NAS =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
@@ -578,8 +498,6 @@ dockge:
 
 # Security Configuration
 security:
-  ssh_install_server: true
-
   fail2ban_enabled: $(if [[ $ENABLE_FAIL2BAN =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
   fail2ban_bantime: 3600
   fail2ban_maxretry: 5
@@ -696,20 +614,6 @@ create_vault() {
 ---
 # Ansible Vault - Encrypted Secrets
 # Generated: $(date '+%Y-%m-%d %H:%M:%S')
-
-# System User Credentials
-vault_system_users:
-$(if [[ $CREATE_ADMIN_USER =~ ^[Yy]$ ]]; then cat <<EOUS
-  admin_password: "${ADMIN_PASSWORD}"
-  admin_ssh_key: "$(if [[ $ADD_ADMIN_SSH_KEY =~ ^[Yy]$ ]]; then echo "${ADMIN_SSH_KEY}"; else echo ""; fi)"
-EOUS
-else
-cat <<EOUS
-  admin_password: "changeme"
-  admin_ssh_key: ""
-EOUS
-fi)
-  developer_password: ""
 
 # NAS Credentials
 $(if [[ $ENABLE_NAS =~ ^[Yy]$ ]]; then cat <<EON
