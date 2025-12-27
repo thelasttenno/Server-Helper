@@ -1,0 +1,24 @@
+---
+# LVM Configuration Role - Default Variables
+
+lvm_config:
+  # Automatically extend Ubuntu default LV to use all available space
+  auto_extend_ubuntu: true
+
+  # Custom logical volumes to extend
+  custom_lvs: []
+  # Example:
+  # - lv_path: "/dev/my-vg/my-lv"
+  #   extend_percent: 100  # Percentage of free space to use
+  #   resize_cmd: "resize2fs"  # Command to resize filesystem (resize2fs, xfs_growfs, etc.)
+
+  # New logical volumes to create
+  create_lvs: []
+  # Example:
+  # - vg: "ubuntu-vg"
+  #   lv: "docker-lv"
+  #   size: "50G"
+  #   fstype: "ext4"
+  #   mount_point: "/var/lib/docker"
+  #   mount_opts: "defaults,noatime"
+  #   create_fs: true
