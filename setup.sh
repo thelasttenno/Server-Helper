@@ -58,9 +58,16 @@ log_exec() {
 # Check if running as root
 check_not_root() {
     if [[ $EUID -eq 0 ]]; then
-        print_error "This script should NOT be run as root"
-        print_info "Please run as a regular user with sudo privileges"
-        exit 1
+        print_warning "Running as root is not recommended for security reasons"
+        print_info "It's better to run as a regular user with sudo privileges"
+        echo
+        read -p "Continue running as root? (yes/no): " -r CONFIRM
+        if [[ ! $CONFIRM =~ ^[Yy][Ee][Ss]$ ]]; then
+            print_info "Please run as a regular user with sudo privileges"
+            exit 1
+        fi
+        print_warning "Continuing as root..."
+        echo
     fi
 }
 
