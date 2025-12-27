@@ -1,0 +1,129 @@
+---
+# LVM Configuration Role - Fix Ubuntu default partitioning
+# Extends logical volumes to use available space
+
+- name: Install LVM2 tools
+  ansible.builtin.apt:
+    name:
+      - lvm2
+      - parted
+    state: present
+    update_cache: yes
+
+- name: Gather volume group information
+  ansible.builtin.command: vgs --noheadings -o vg_name
+  register: vg_list
+  changed_when: false
+  failed_when: false
+
+- name: Display volume groups found
+  ansible.builtin.debug:
+    msg: "Volume groups found: {{ vg_list.stdout_lines }}"
+  when: vg_list.rc == 0 and vg_list.stdout_lines | length > 0
+
+- name: Gather logical volume information
+  ansible.builtin.command: lvs --noheadings -o lv_name,vg_name,lv_size
+  register: lv_list
+  changed_when: false
+  failed_when: false
+
+- name: Display logical volumes found
+  ansible.builtin.debug:
+    msg: "Logical volumes found: {{ lv_list.stdout_lines }}"
+  when: lv_list.rc == 0 and lv_list.stdout_lines | length > 0
+
+# Fix Ubuntu default installation which leaves most of the disk unallocated
+- name: Check if default Ubuntu VG exists (ubuntu-vg)
+  ansible.builtin.command: vgs ubuntu-vg --noheadings
+  register: ubuntu_vg_check
+  changed_when: false
+  failed_when: false
+
+- name: Extend logical volume to use all available space (ubuntu-vg)
+  ansible.builtin.command: lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv
+  when:
+    - ubuntu_vg_check.rc == 0
+    - lvm_config.auto_extend_ubuntu | default(true)
+  register: lvextend_result
+  failed_when: false
+  changed_when: "'successfully resized' in lvextend_result.stdout or 'New size' in lvextend_result.stdout"
+
+- name: Resize filesystem after extending LV (ubuntu-vg)
+  ansible.builtin.command: resize2fs /dev/ubuntu-vg/ubuntu-lv
+  when:
+    - ubuntu_vg_check.rc == 0
+    - lvm_config.auto_extend_ubuntu | default(true)
+    - lvextend_result.changed
+  register: resize_result
+  changed_when: "'resized' in resize_result.stdout.lower()"
+
+# Handle custom volume group configurations
+- name: Extend custom logical volumes
+  ansible.builtin.command: "lvextend -l +{{ item.extend_percent }}%FREE {{ item.lv_path }}"
+  loop: "{{ lvm_config.custom_lvs }}"
+  when:
+    - lvm_config.custom_lvs is defined
+    - item.extend_percent is defined
+  register: custom_lvextend
+  failed_when: false
+  changed_when: "'successfully resized' in custom_lvextend.stdout or 'New size' in custom_lvextend.stdout"
+
+- name: Resize filesystems for custom LVs
+  ansible.builtin.command: "{{ item.item.resize_cmd | default('resize2fs') }} {{ item.item.lv_path }}"
+  loop: "{{ custom_lvextend.results }}"
+  when:
+    - lvm_config.custom_lvs is defined
+    - item.changed | default(false)
+  changed_when: true
+
+# Create new logical volumes if specified
+- name: Create new logical volumes
+  community.general.lvol:
+    vg: "{{ item.vg }}"
+    lv: "{{ item.lv }}"
+    size: "{{ item.size }}"
+    state: present
+  loop: "{{ lvm_config.create_lvs }}"
+  when: lvm_config.create_lvs is defined
+
+- name: Create filesystems on new logical volumes
+  community.general.filesystem:
+    fstype: "{{ item.fstype | default('ext4') }}"
+    dev: "/dev/{{ item.vg }}/{{ item.lv }}"
+  loop: "{{ lvm_config.create_lvs }}"
+  when:
+    - lvm_config.create_lvs is defined
+    - item.create_fs | default(true)
+
+- name: Mount new logical volumes
+  ansible.posix.mount:
+    path: "{{ item.mount_point }}"
+    src: "/dev/{{ item.vg }}/{{ item.lv }}"
+    fstype: "{{ item.fstype | default('ext4') }}"
+    opts: "{{ item.mount_opts | default('defaults') }}"
+    state: mounted
+  loop: "{{ lvm_config.create_lvs }}"
+  when:
+    - lvm_config.create_lvs is defined
+    - item.mount_point is defined
+
+# Display final disk usage
+- name: Display disk usage after LVM changes
+  ansible.builtin.command: df -h
+  register: disk_usage
+  changed_when: false
+
+- name: Show disk usage
+  ansible.builtin.debug:
+    msg: "{{ disk_usage.stdout_lines }}"
+
+- name: Display LVM summary
+  ansible.builtin.debug:
+    msg:
+      - "════════════════════════════════════════"
+      - "LVM Configuration Complete"
+      - "════════════════════════════════════════"
+      - "Volume groups and logical volumes have been configured."
+      - "Run 'vgs' and 'lvs' to view detailed information."
+      - "Run 'df -h' to see mounted filesystem usage."
+      - "════════════════════════════════════════"

@@ -49,6 +49,30 @@
     state: present
     update_cache: yes
 
+- name: Install QEMU guest agent for Proxmox/KVM virtualization
+  apt:
+    name: qemu-guest-agent
+    state: present
+  when: virtualization.qemu_guest_agent | default(false)
+
+- name: Enable and start QEMU guest agent service
+  service:
+    name: qemu-guest-agent
+    state: started
+    enabled: yes
+  when: virtualization.qemu_guest_agent | default(false)
+
+- name: Detect virtualization platform
+  command: systemd-detect-virt
+  register: virt_platform
+  changed_when: false
+  failed_when: false
+
+- name: Display virtualization platform
+  debug:
+    msg: "Detected virtualization platform: {{ virt_platform.stdout }}"
+  when: virt_platform.rc == 0
+
 - name: Create necessary directories
   file:
     path: "{{ item }}"

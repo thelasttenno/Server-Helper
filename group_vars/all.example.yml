@@ -6,6 +6,9 @@
 # SYSTEM CONFIGURATION
 # =============================================================================
 
+# Base installation directory
+base_install_dir: "/opt"
+
 # Server hostname
 hostname: "server-01"
 
@@ -14,6 +17,68 @@ timezone: "America/New_York"
 
 # Locale settings
 locale: "en_US.UTF-8"
+
+# =============================================================================
+# USER ACCOUNT CONFIGURATION
+# =============================================================================
+
+system_users:
+  # Create admin user account
+  create_admin_user: false
+  admin_user: "admin"
+  admin_password: "{{ vault_system_users.admin_password }}"  # From vault
+  admin_groups:
+    - sudo
+    - docker
+  admin_passwordless_sudo: true
+  admin_ssh_key: "{{ vault_system_users.admin_ssh_key }}"  # From vault (optional)
+
+  # Disable root password login
+  disable_root_password: true
+
+  # Additional users (optional)
+  additional_users: []
+  # Example:
+  # - name: "developer"
+  #   password: "{{ vault_system_users.developer_password }}"
+  #   groups: ["docker"]
+  #   shell: "/bin/bash"
+  #   ssh_key: "ssh-rsa AAAA..."
+
+# =============================================================================
+# VIRTUALIZATION CONFIGURATION
+# =============================================================================
+
+virtualization:
+  # Install QEMU guest agent for Proxmox/KVM
+  qemu_guest_agent: false
+
+# =============================================================================
+# LVM CONFIGURATION
+# =============================================================================
+
+lvm_config:
+  enabled: false
+
+  # Automatically extend Ubuntu default LV to use all available space
+  auto_extend_ubuntu: true
+
+  # Custom logical volumes to extend
+  custom_lvs: []
+  # Example:
+  # - lv_path: "/dev/my-vg/my-lv"
+  #   extend_percent: 100
+  #   resize_cmd: "resize2fs"
+
+  # New logical volumes to create
+  create_lvs: []
+  # Example:
+  # - vg: "ubuntu-vg"
+  #   lv: "docker-lv"
+  #   size: "50G"
+  #   fstype: "ext4"
+  #   mount_point: "/var/lib/docker"
+  #   mount_opts: "defaults,noatime"
 
 # =============================================================================
 # NAS CONFIGURATION (Optional)
