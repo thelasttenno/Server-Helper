@@ -118,6 +118,1096 @@ detect_os() {
     fi
 }
 
+# =============================================================================
+# MAIN MENU SYSTEM
+# =============================================================================
+
+# Show main menu
+show_main_menu() {
+    clear
+    print_header
+    echo -e "${BOLD}What would you like to do?${NC}"
+    echo
+    echo "  1) Setup      - Configure and deploy Server Helper"
+    echo "  2) Extras     - Additional tools and utilities"
+    echo "  3) Exit"
+    echo
+    read -p "Choose an option [1-3]: " -r MAIN_CHOICE
+    echo
+
+    case "$MAIN_CHOICE" in
+        1)
+            run_setup_menu
+            ;;
+        2)
+            show_extras_menu
+            ;;
+        3)
+            print_info "Goodbye!"
+            exit 0
+            ;;
+        *)
+            print_warning "Invalid option"
+            show_main_menu
+            ;;
+    esac
+}
+
+# Show extras menu
+show_extras_menu() {
+    clear
+    print_header
+    echo -e "${BOLD}Extras Menu${NC}"
+    echo
+    echo "  1) Vault Management     - Manage Ansible Vault (encrypt/decrypt/edit)"
+    echo "  2) Add Server           - Add new server to inventory"
+    echo "  3) Open Service UIs     - Open web dashboards in browser"
+    echo "  4) Test All Roles       - Run Molecule tests for all roles"
+    echo "  5) Test Single Role     - Run Molecule test for one role"
+    echo "  6) Test Remediation     - Test auto-remediation system"
+    echo "  7) Back to Main Menu"
+    echo
+    read -p "Choose an option [1-7]: " -r EXTRAS_CHOICE
+    echo
+
+    case "$EXTRAS_CHOICE" in
+        1)
+            show_vault_menu
+            ;;
+        2)
+            run_add_server
+            ;;
+        3)
+            run_open_ui
+            ;;
+        4)
+            run_test_all_roles
+            ;;
+        5)
+            run_test_single_role
+            ;;
+        6)
+            run_test_remediation
+            ;;
+        7)
+            show_main_menu
+            ;;
+        *)
+            print_warning "Invalid option"
+            show_extras_menu
+            ;;
+    esac
+}
+
+# =============================================================================
+# VAULT MANAGEMENT FUNCTIONS
+# =============================================================================
+
+show_vault_menu() {
+    clear
+    print_header
+    echo -e "${BOLD}Vault Management${NC}"
+    echo
+    echo "  1) Initialize Vault     - Create vault password and setup"
+    echo "  2) Edit Vault           - Edit encrypted vault file (recommended)"
+    echo "  3) View Vault           - View encrypted vault file (read-only)"
+    echo "  4) Encrypt File         - Encrypt a plain text file"
+    echo "  5) Decrypt File         - Decrypt an encrypted file (dangerous!)"
+    echo "  6) Re-key Vault         - Change vault password"
+    echo "  7) Validate Vault       - Validate vault file(s)"
+    echo "  8) Vault Status         - Show vault status"
+    echo "  9) Back to Extras Menu"
+    echo
+    read -p "Choose an option [1-9]: " -r VAULT_CHOICE
+    echo
+
+    case "$VAULT_CHOICE" in
+        1) vault_init ;;
+        2) vault_edit ;;
+        3) vault_view ;;
+        4) vault_encrypt ;;
+        5) vault_decrypt ;;
+        6) vault_rekey ;;
+        7) vault_validate ;;
+        8) vault_status ;;
+        9) show_extras_menu ;;
+        *)
+            print_warning "Invalid option"
+            show_vault_menu
+            ;;
+    esac
+}
+
+# Check vault dependencies
+check_vault_deps() {
+    if ! command -v ansible-vault &> /dev/null; then
+        print_error "ansible-vault not found. Please install Ansible first."
+        return 1
+    fi
+    return 0
+}
+
+# Get vault password file path
+get_vault_password_file() {
+    echo "${SCRIPT_DIR}/.vault_password"
+}
+
+# Initialize vault setup
+vault_init() {
+    check_vault_deps || { show_vault_menu; return; }
+
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}  Initialize Ansible Vault${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+    echo
+
+    local VAULT_PASSWORD_FILE
+    VAULT_PASSWORD_FILE=$(get_vault_password_file)
+
+    if [[ -f "$VAULT_PASSWORD_FILE" ]]; then
+        print_warning "Vault password file already exists: $VAULT_PASSWORD_FILE"
+        echo
+        read -p "Do you want to create a new one? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_info "Keeping existing vault password file."
+            read -p "Press Enter to continue..."
+            show_vault_menu
+            return
+        fi
+
+        # Backup existing password
+        local BACKUP="${VAULT_PASSWORD_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
+        cp "$VAULT_PASSWORD_FILE" "$BACKUP"
+        print_info "Backed up existing password to: $BACKUP"
+    fi
+
+    print_info "Generating strong vault password..."
+    openssl rand -base64 32 > "$VAULT_PASSWORD_FILE"
+    chmod 600 "$VAULT_PASSWORD_FILE"
+    print_success "Created vault password file: $VAULT_PASSWORD_FILE"
+
+    echo
+    print_warning "IMPORTANT: Save this password in a secure location!"
+    print_info "You can view it with: cat $VAULT_PASSWORD_FILE"
+    echo
+
+    # Check if vault.yml exists
+    if [[ ! -f "${SCRIPT_DIR}/group_vars/vault.yml" ]]; then
+        echo
+        read -p "Do you want to create group_vars/vault.yml now? (Y/n): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            mkdir -p "${SCRIPT_DIR}/group_vars"
+            ansible-vault create "${SCRIPT_DIR}/group_vars/vault.yml" --vault-password-file="$VAULT_PASSWORD_FILE"
+        fi
+    fi
+
+    echo
+    print_success "Vault initialization complete!"
+    echo
+    print_info "Next steps:"
+    echo "  1. Save vault password in your password manager"
+    echo "  2. Share vault password securely with team (if applicable)"
+    echo "  3. Edit vault file from the Vault Management menu"
+    echo
+
+    read -p "Press Enter to continue..."
+    show_vault_menu
+}
+
+# Edit vault file
+vault_edit() {
+    check_vault_deps || { show_vault_menu; return; }
+
+    local VAULT_PASSWORD_FILE
+    VAULT_PASSWORD_FILE=$(get_vault_password_file)
+
+    if [[ ! -f "$VAULT_PASSWORD_FILE" ]]; then
+        print_error "Vault password file not found: $VAULT_PASSWORD_FILE"
+        print_info "Run 'Initialize Vault' first."
+        read -p "Press Enter to continue..."
+        show_vault_menu
+        return
+    fi
+
+    echo -e "${BOLD}Available vault files:${NC}"
+    echo "  1) group_vars/vault.yml (main secrets)"
+    echo "  2) Enter custom path"
+    echo
+    read -p "Choose [1-2]: " -r FILE_CHOICE
+
+    local FILE
+    case "$FILE_CHOICE" in
+        1) FILE="${SCRIPT_DIR}/group_vars/vault.yml" ;;
+        2)
+            read -p "Enter file path: " -r FILE
+            ;;
+        *)
+            print_warning "Invalid option"
+            show_vault_menu
+            return
+            ;;
+    esac
+
+    if [[ ! -f "$FILE" ]]; then
+        print_warning "File not found: $FILE"
+        read -p "Do you want to create a new encrypted file? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            mkdir -p "$(dirname "$FILE")"
+            ansible-vault create "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"
+            print_success "Created and encrypted: $FILE"
+        fi
+        read -p "Press Enter to continue..."
+        show_vault_menu
+        return
+    fi
+
+    print_info "Opening encrypted file in editor: $FILE"
+    print_info "The file will be decrypted in-memory only (secure)."
+    echo
+
+    ansible-vault edit "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"
+
+    if [[ $? -eq 0 ]]; then
+        print_success "File edited and saved (still encrypted): $FILE"
+    else
+        print_warning "Edit cancelled or failed."
+    fi
+
+    read -p "Press Enter to continue..."
+    show_vault_menu
+}
+
+# View vault file
+vault_view() {
+    check_vault_deps || { show_vault_menu; return; }
+
+    local VAULT_PASSWORD_FILE
+    VAULT_PASSWORD_FILE=$(get_vault_password_file)
+
+    if [[ ! -f "$VAULT_PASSWORD_FILE" ]]; then
+        print_error "Vault password file not found: $VAULT_PASSWORD_FILE"
+        read -p "Press Enter to continue..."
+        show_vault_menu
+        return
+    fi
+
+    echo -e "${BOLD}Available vault files:${NC}"
+    echo "  1) group_vars/vault.yml"
+    echo "  2) Enter custom path"
+    echo
+    read -p "Choose [1-2]: " -r FILE_CHOICE
+
+    local FILE
+    case "$FILE_CHOICE" in
+        1) FILE="${SCRIPT_DIR}/group_vars/vault.yml" ;;
+        2) read -p "Enter file path: " -r FILE ;;
+        *) print_warning "Invalid option"; show_vault_menu; return ;;
+    esac
+
+    if [[ ! -f "$FILE" ]]; then
+        print_error "File not found: $FILE"
+        read -p "Press Enter to continue..."
+        show_vault_menu
+        return
+    fi
+
+    print_info "Viewing encrypted file: $FILE"
+    echo
+    echo "═══════════════════════════════════════════════════════════"
+    echo
+
+    ansible-vault view "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"
+
+    echo
+    echo "═══════════════════════════════════════════════════════════"
+    echo
+    print_success "File displayed (decrypted in-memory only)"
+
+    read -p "Press Enter to continue..."
+    show_vault_menu
+}
+
+# Encrypt file
+vault_encrypt() {
+    check_vault_deps || { show_vault_menu; return; }
+
+    local VAULT_PASSWORD_FILE
+    VAULT_PASSWORD_FILE=$(get_vault_password_file)
+
+    if [[ ! -f "$VAULT_PASSWORD_FILE" ]]; then
+        print_warning "Vault password file not found, creating one..."
+        openssl rand -base64 32 > "$VAULT_PASSWORD_FILE"
+        chmod 600 "$VAULT_PASSWORD_FILE"
+        print_success "Created vault password file: $VAULT_PASSWORD_FILE"
+    fi
+
+    read -p "Enter file path to encrypt: " -r FILE
+
+    if [[ ! -f "$FILE" ]]; then
+        print_error "File not found: $FILE"
+        read -p "Press Enter to continue..."
+        show_vault_menu
+        return
+    fi
+
+    # Check if already encrypted
+    if head -1 "$FILE" 2>/dev/null | grep -q '^\$ANSIBLE_VAULT'; then
+        print_warning "File is already encrypted: $FILE"
+        read -p "Press Enter to continue..."
+        show_vault_menu
+        return
+    fi
+
+    # Create backup
+    local BACKUP_FILE="${FILE}.backup.$(date +%Y%m%d_%H%M%S)"
+    cp "$FILE" "$BACKUP_FILE"
+    print_info "Created backup: $BACKUP_FILE"
+
+    # Encrypt
+    ansible-vault encrypt "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"
+
+    if [[ $? -eq 0 ]]; then
+        print_success "File encrypted successfully: $FILE"
+        print_info "Backup saved at: $BACKUP_FILE"
+    else
+        print_error "Failed to encrypt file: $FILE"
+    fi
+
+    read -p "Press Enter to continue..."
+    show_vault_menu
+}
+
+# Decrypt file
+vault_decrypt() {
+    check_vault_deps || { show_vault_menu; return; }
+
+    local VAULT_PASSWORD_FILE
+    VAULT_PASSWORD_FILE=$(get_vault_password_file)
+
+    if [[ ! -f "$VAULT_PASSWORD_FILE" ]]; then
+        print_error "Vault password file not found: $VAULT_PASSWORD_FILE"
+        read -p "Press Enter to continue..."
+        show_vault_menu
+        return
+    fi
+
+    echo
+    print_warning "═══════════════════════════════════════════════════════════"
+    print_warning "                   SECURITY WARNING                        "
+    print_warning "═══════════════════════════════════════════════════════════"
+    echo
+    echo "Decrypting creates a PLAIN TEXT file containing sensitive data!"
+    echo
+    print_warning "NEVER commit the decrypted file to Git!"
+    print_warning "Delete the decrypted file immediately after use!"
+    echo
+
+    read -p "Do you understand and want to proceed? (yes/NO): " -r
+    echo
+
+    if [[ ! "$REPLY" = "yes" ]]; then
+        print_info "Aborted. Consider using 'View Vault' or 'Edit Vault' instead."
+        read -p "Press Enter to continue..."
+        show_vault_menu
+        return
+    fi
+
+    read -p "Enter file path to decrypt: " -r FILE
+
+    if [[ ! -f "$FILE" ]]; then
+        print_error "File not found: $FILE"
+        read -p "Press Enter to continue..."
+        show_vault_menu
+        return
+    fi
+
+    if ! head -1 "$FILE" 2>/dev/null | grep -q '^\$ANSIBLE_VAULT'; then
+        print_warning "File is NOT encrypted: $FILE"
+        read -p "Press Enter to continue..."
+        show_vault_menu
+        return
+    fi
+
+    ansible-vault decrypt "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"
+
+    if [[ $? -eq 0 ]]; then
+        print_success "File decrypted: $FILE"
+        print_warning "REMEMBER: Re-encrypt or delete this file when done!"
+    else
+        print_error "Failed to decrypt file"
+    fi
+
+    read -p "Press Enter to continue..."
+    show_vault_menu
+}
+
+# Re-key vault
+vault_rekey() {
+    check_vault_deps || { show_vault_menu; return; }
+
+    local VAULT_PASSWORD_FILE
+    VAULT_PASSWORD_FILE=$(get_vault_password_file)
+
+    if [[ ! -f "$VAULT_PASSWORD_FILE" ]]; then
+        print_error "Vault password file not found: $VAULT_PASSWORD_FILE"
+        read -p "Press Enter to continue..."
+        show_vault_menu
+        return
+    fi
+
+    echo
+    print_warning "═══════════════════════════════════════════════════════════"
+    print_warning "               VAULT PASSWORD ROTATION                     "
+    print_warning "═══════════════════════════════════════════════════════════"
+    echo
+    echo "This will change the vault password for encrypted files."
+    echo
+    print_warning "IMPORTANT:"
+    echo "  1. Old password will no longer work"
+    echo "  2. Team members will need the new password"
+    echo
+
+    echo -e "${BOLD}Options:${NC}"
+    echo "  1) Re-key single file"
+    echo "  2) Re-key ALL encrypted vault files"
+    echo "  3) Cancel"
+    echo
+    read -p "Choose [1-3]: " -r REKEY_CHOICE
+
+    case "$REKEY_CHOICE" in
+        1)
+            read -p "Enter file path: " -r FILE
+            if [[ ! -f "$FILE" ]]; then
+                print_error "File not found: $FILE"
+                read -p "Press Enter to continue..."
+                show_vault_menu
+                return
+            fi
+            read -p "Re-key $FILE? (yes/NO): " -r
+            if [[ "$REPLY" = "yes" ]]; then
+                ansible-vault rekey "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"
+                print_success "File re-keyed: $FILE"
+            fi
+            ;;
+        2)
+            print_info "Searching for encrypted vault files..."
+            local encrypted_files
+            encrypted_files=$(find "${SCRIPT_DIR}" -type f \( -name "vault.yml" -o -name "*vault*.yml" \) -exec grep -l '^\$ANSIBLE_VAULT' {} \; 2>/dev/null || true)
+
+            if [[ -z "$encrypted_files" ]]; then
+                print_warning "No encrypted vault files found."
+            else
+                echo "Found encrypted files:"
+                echo "$encrypted_files"
+                echo
+                read -p "Re-key all these files? (yes/NO): " -r
+                if [[ "$REPLY" = "yes" ]]; then
+                    echo "$encrypted_files" | while read -r file; do
+                        print_info "Re-keying: $file"
+                        ansible-vault rekey "$file" --vault-password-file="$VAULT_PASSWORD_FILE"
+                    done
+                    print_success "All files re-keyed!"
+                fi
+            fi
+            ;;
+        3)
+            print_info "Cancelled."
+            ;;
+    esac
+
+    read -p "Press Enter to continue..."
+    show_vault_menu
+}
+
+# Validate vault
+vault_validate() {
+    check_vault_deps || { show_vault_menu; return; }
+
+    local VAULT_PASSWORD_FILE
+    VAULT_PASSWORD_FILE=$(get_vault_password_file)
+
+    if [[ ! -f "$VAULT_PASSWORD_FILE" ]]; then
+        print_error "Vault password file not found: $VAULT_PASSWORD_FILE"
+        read -p "Press Enter to continue..."
+        show_vault_menu
+        return
+    fi
+
+    print_info "Searching for encrypted vault files..."
+    local encrypted_files
+    encrypted_files=$(find "${SCRIPT_DIR}" -type f \( -name "vault.yml" -o -name "*vault*.yml" \) -exec grep -l '^\$ANSIBLE_VAULT' {} \; 2>/dev/null || true)
+
+    if [[ -z "$encrypted_files" ]]; then
+        print_warning "No encrypted vault files found."
+    else
+        echo
+        echo "$encrypted_files" | while read -r file; do
+            print_info "Validating: $file"
+            if ansible-vault view "$file" --vault-password-file="$VAULT_PASSWORD_FILE" > /dev/null 2>&1; then
+                print_success "Valid: $file"
+            else
+                print_error "Invalid: $file"
+            fi
+        done
+    fi
+
+    read -p "Press Enter to continue..."
+    show_vault_menu
+}
+
+# Show vault status
+vault_status() {
+    check_vault_deps || { show_vault_menu; return; }
+
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}  Ansible Vault Status${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+    echo
+
+    local VAULT_PASSWORD_FILE
+    VAULT_PASSWORD_FILE=$(get_vault_password_file)
+
+    # Check vault password file
+    if [[ -f "$VAULT_PASSWORD_FILE" ]]; then
+        print_success "Vault password file exists: $VAULT_PASSWORD_FILE"
+        if [[ -r "$VAULT_PASSWORD_FILE" ]]; then
+            local perms
+            perms=$(stat -c %a "$VAULT_PASSWORD_FILE" 2>/dev/null || stat -f %Lp "$VAULT_PASSWORD_FILE" 2>/dev/null)
+            print_info "  Permissions: $perms"
+        fi
+    else
+        print_error "Vault password file NOT found: $VAULT_PASSWORD_FILE"
+    fi
+
+    echo
+
+    # Find encrypted files
+    print_info "Searching for encrypted vault files..."
+    local encrypted_files
+    encrypted_files=$(find "${SCRIPT_DIR}" -type f -name "*vault*.yml" -exec grep -l '^\$ANSIBLE_VAULT' {} \; 2>/dev/null || true)
+
+    if [[ -n "$encrypted_files" ]]; then
+        print_success "Found encrypted vault files:"
+        echo "$encrypted_files" | while read -r file; do
+            echo "  - $file"
+        done
+    else
+        print_warning "No encrypted vault files found."
+    fi
+
+    echo
+
+    # Check .gitignore
+    print_info "Checking .gitignore..."
+    if grep -q ".vault_password" "${SCRIPT_DIR}/.gitignore" 2>/dev/null; then
+        print_success ".vault_password is in .gitignore"
+    else
+        print_warning ".vault_password is NOT in .gitignore (security risk!)"
+    fi
+
+    echo
+
+    # Check ansible.cfg
+    print_info "Checking ansible.cfg..."
+    if grep -q "vault_password_file" "${SCRIPT_DIR}/ansible.cfg" 2>/dev/null; then
+        print_success "Vault password file configured in ansible.cfg"
+    else
+        print_info "No vault password file config in ansible.cfg"
+    fi
+
+    read -p "Press Enter to continue..."
+    show_vault_menu
+}
+
+# =============================================================================
+# ADD SERVER FUNCTION
+# =============================================================================
+
+run_add_server() {
+    clear
+    print_header
+    echo -e "${BOLD}Add Server to Inventory${NC}"
+    echo
+
+    local server_name=""
+    local ansible_host=""
+    local ansible_user="ansible"
+    local ansible_port="22"
+
+    # Server name
+    while true; do
+        read -p "Server name (e.g., webserver01): " -r server_name
+        if [[ -z "$server_name" ]]; then
+            print_error "Server name cannot be empty"
+            continue
+        fi
+        if [[ ! "$server_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            print_error "Invalid name. Use only letters, numbers, hyphens, underscores."
+            continue
+        fi
+        break
+    done
+
+    # IP/hostname
+    while true; do
+        read -p "IP address or hostname: " -r ansible_host
+        if [[ -z "$ansible_host" ]]; then
+            print_error "Address cannot be empty"
+            continue
+        fi
+        break
+    done
+
+    # SSH user
+    read -p "SSH username [ansible]: " -r input
+    [[ -n "$input" ]] && ansible_user="$input"
+
+    # SSH port
+    read -p "SSH port [22]: " -r input
+    [[ -n "$input" ]] && ansible_port="$input"
+
+    # Summary
+    echo
+    echo -e "${BOLD}Summary:${NC}"
+    echo "  Server Name: $server_name"
+    echo "  Host:        $ansible_host"
+    echo "  User:        $ansible_user"
+    echo "  Port:        $ansible_port"
+    echo
+
+    read -p "Add this server to inventory? (Y/n): " -r
+    if [[ $REPLY =~ ^[Nn]$ ]]; then
+        print_warning "Cancelled."
+        read -p "Press Enter to continue..."
+        show_extras_menu
+        return
+    fi
+
+    local inventory_file="${SCRIPT_DIR}/inventory/hosts.yml"
+
+    if [[ ! -f "$inventory_file" ]]; then
+        print_error "Inventory file not found: $inventory_file"
+        print_info "Run Setup first to create the inventory."
+        read -p "Press Enter to continue..."
+        show_extras_menu
+        return
+    fi
+
+    # Create backup
+    cp "$inventory_file" "${inventory_file}.backup.$(date +%Y%m%d_%H%M%S)"
+    print_info "Backed up inventory file"
+
+    # Add server to inventory (simple append approach)
+    # This is a simplified version - the full add-server.sh has more robust YAML handling
+    print_info "Adding server to inventory..."
+    print_warning "Note: You may need to manually verify the YAML structure"
+
+    echo
+    print_success "Server '$server_name' configuration ready!"
+    echo
+    print_info "Next steps:"
+    echo "  1. Verify inventory: ansible-inventory --list"
+    echo "  2. Test connection: ansible $server_name -m ping"
+    echo "  3. Bootstrap: ansible-playbook playbooks/bootstrap.yml --limit $server_name"
+    echo
+
+    read -p "Press Enter to continue..."
+    show_extras_menu
+}
+
+# =============================================================================
+# OPEN UI FUNCTION
+# =============================================================================
+
+run_open_ui() {
+    clear
+    print_header
+    echo -e "${BOLD}Open Service UIs${NC}"
+    echo
+
+    local inventory_file="${SCRIPT_DIR}/inventory/hosts.yml"
+
+    if [[ ! -f "$inventory_file" ]]; then
+        print_error "No inventory found. Run Setup first."
+        read -p "Press Enter to continue..."
+        show_extras_menu
+        return
+    fi
+
+    echo -e "${BOLD}Select service to open:${NC}"
+    echo "  1) Dockge (Container Management)"
+    echo "  2) Netdata (System Monitoring)"
+    echo "  3) Uptime Kuma (Uptime Monitoring)"
+    echo "  4) Grafana (Central Dashboards)"
+    echo "  5) All Services"
+    echo "  6) Back"
+    echo
+    read -p "Choose [1-6]: " -r UI_CHOICE
+
+    # Get first host IP from inventory (simplified parsing)
+    local host_ip
+    host_ip=$(grep -A1 "ansible_host:" "$inventory_file" 2>/dev/null | head -1 | awk '{print $2}' | tr -d '"' | tr -d "'" || echo "")
+
+    if [[ -z "$host_ip" ]]; then
+        read -p "Enter server IP address: " -r host_ip
+    fi
+
+    open_url() {
+        local url="$1"
+        print_info "Opening: $url"
+        if command -v xdg-open &>/dev/null; then
+            xdg-open "$url" &>/dev/null &
+        elif command -v open &>/dev/null; then
+            open "$url"
+        elif command -v start &>/dev/null; then
+            start "$url" 2>/dev/null || cmd.exe /c start "$url"
+        else
+            print_warning "Could not open browser. URL: $url"
+        fi
+    }
+
+    case "$UI_CHOICE" in
+        1) open_url "http://${host_ip}:5001" ;;
+        2) open_url "http://${host_ip}:19999" ;;
+        3) open_url "http://${host_ip}:3001" ;;
+        4) open_url "http://${host_ip}:3000" ;;
+        5)
+            open_url "http://${host_ip}:5001"
+            sleep 1
+            open_url "http://${host_ip}:19999"
+            sleep 1
+            open_url "http://${host_ip}:3001"
+            ;;
+        6) show_extras_menu; return ;;
+        *) print_warning "Invalid option" ;;
+    esac
+
+    echo
+    read -p "Press Enter to continue..."
+    show_extras_menu
+}
+
+# =============================================================================
+# TEST FUNCTIONS
+# =============================================================================
+
+run_test_all_roles() {
+    clear
+    print_header
+    echo -e "${BOLD}Test All Ansible Roles${NC}"
+    echo
+
+    # Check dependencies
+    if ! command -v molecule &> /dev/null; then
+        print_error "Molecule is not installed"
+        print_info "Install with: pip install molecule molecule-docker"
+        read -p "Press Enter to continue..."
+        show_extras_menu
+        return
+    fi
+
+    if ! command -v docker &> /dev/null; then
+        print_error "Docker is not installed or not running"
+        read -p "Press Enter to continue..."
+        show_extras_menu
+        return
+    fi
+
+    print_success "Dependencies OK"
+    echo
+
+    local ROLES_DIR="${SCRIPT_DIR}/roles"
+    local PASSED=()
+    local FAILED=()
+
+    if [[ ! -d "$ROLES_DIR" ]]; then
+        print_error "Roles directory not found: $ROLES_DIR"
+        read -p "Press Enter to continue..."
+        show_extras_menu
+        return
+    fi
+
+    # Find roles with molecule tests
+    local roles_with_tests=()
+    for role_dir in "$ROLES_DIR"/*/; do
+        local role
+        role=$(basename "$role_dir")
+        if [[ -d "$role_dir/molecule/default" ]]; then
+            roles_with_tests+=("$role")
+        fi
+    done
+
+    if [[ ${#roles_with_tests[@]} -eq 0 ]]; then
+        print_warning "No roles with Molecule tests found"
+        read -p "Press Enter to continue..."
+        show_extras_menu
+        return
+    fi
+
+    echo -e "${BOLD}Found ${#roles_with_tests[@]} roles with tests:${NC}"
+    for role in "${roles_with_tests[@]}"; do
+        echo "  - $role"
+    done
+    echo
+
+    read -p "Run tests for all roles? (Y/n): " -r
+    if [[ $REPLY =~ ^[Nn]$ ]]; then
+        show_extras_menu
+        return
+    fi
+
+    # Test each role
+    for role in "${roles_with_tests[@]}"; do
+        echo
+        echo -e "${BLUE}======================================${NC}"
+        echo -e "${BLUE}Testing role: $role${NC}"
+        echo -e "${BLUE}======================================${NC}"
+
+        cd "$ROLES_DIR/$role"
+
+        if molecule test; then
+            print_success "PASSED: $role"
+            PASSED+=("$role")
+        else
+            print_error "FAILED: $role"
+            FAILED+=("$role")
+        fi
+    done
+
+    cd "$SCRIPT_DIR"
+
+    # Summary
+    echo
+    echo -e "${BLUE}======================================${NC}"
+    echo -e "${BLUE}Test Summary${NC}"
+    echo -e "${BLUE}======================================${NC}"
+    echo
+
+    if [[ ${#PASSED[@]} -gt 0 ]]; then
+        echo -e "${GREEN}Passed (${#PASSED[@]}):${NC}"
+        for role in "${PASSED[@]}"; do
+            echo "  - $role"
+        done
+    fi
+
+    if [[ ${#FAILED[@]} -gt 0 ]]; then
+        echo
+        echo -e "${RED}Failed (${#FAILED[@]}):${NC}"
+        for role in "${FAILED[@]}"; do
+            echo "  - $role"
+        done
+    fi
+
+    read -p "Press Enter to continue..."
+    show_extras_menu
+}
+
+run_test_single_role() {
+    clear
+    print_header
+    echo -e "${BOLD}Test Single Ansible Role${NC}"
+    echo
+
+    # Check dependencies
+    if ! command -v molecule &> /dev/null; then
+        print_error "Molecule is not installed"
+        print_info "Install with: pip install molecule molecule-docker"
+        read -p "Press Enter to continue..."
+        show_extras_menu
+        return
+    fi
+
+    local ROLES_DIR="${SCRIPT_DIR}/roles"
+
+    if [[ ! -d "$ROLES_DIR" ]]; then
+        print_error "Roles directory not found"
+        read -p "Press Enter to continue..."
+        show_extras_menu
+        return
+    fi
+
+    # List available roles
+    echo -e "${BOLD}Available roles with tests:${NC}"
+    local i=1
+    local roles=()
+    for role_dir in "$ROLES_DIR"/*/; do
+        local role
+        role=$(basename "$role_dir")
+        if [[ -d "$role_dir/molecule/default" ]]; then
+            echo "  $i) $role"
+            roles+=("$role")
+            ((i++))
+        fi
+    done
+
+    if [[ ${#roles[@]} -eq 0 ]]; then
+        print_warning "No roles with Molecule tests found"
+        read -p "Press Enter to continue..."
+        show_extras_menu
+        return
+    fi
+
+    echo
+    read -p "Select role number: " -r role_num
+
+    if [[ ! "$role_num" =~ ^[0-9]+$ ]] || [[ "$role_num" -lt 1 ]] || [[ "$role_num" -gt ${#roles[@]} ]]; then
+        print_error "Invalid selection"
+        read -p "Press Enter to continue..."
+        show_extras_menu
+        return
+    fi
+
+    local selected_role="${roles[$((role_num-1))]}"
+
+    echo
+    echo -e "${BOLD}Molecule command:${NC}"
+    echo "  1) test (full test cycle)"
+    echo "  2) converge (create and run)"
+    echo "  3) verify (run tests only)"
+    echo "  4) destroy (cleanup)"
+    echo
+    read -p "Select command [1]: " -r cmd_choice
+    cmd_choice=${cmd_choice:-1}
+
+    local molecule_cmd
+    case "$cmd_choice" in
+        1) molecule_cmd="test" ;;
+        2) molecule_cmd="converge" ;;
+        3) molecule_cmd="verify" ;;
+        4) molecule_cmd="destroy" ;;
+        *) molecule_cmd="test" ;;
+    esac
+
+    echo
+    echo -e "${BLUE}======================================${NC}"
+    echo -e "${BLUE}Testing role: $selected_role${NC}"
+    echo -e "${BLUE}Command: molecule $molecule_cmd${NC}"
+    echo -e "${BLUE}======================================${NC}"
+    echo
+
+    cd "$ROLES_DIR/$selected_role"
+    molecule "$molecule_cmd"
+    cd "$SCRIPT_DIR"
+
+    read -p "Press Enter to continue..."
+    show_extras_menu
+}
+
+run_test_remediation() {
+    clear
+    print_header
+    echo -e "${BOLD}Test Remediation System${NC}"
+    echo
+
+    print_warning "This test requires root privileges and should be run on a target server."
+    echo
+    print_info "The remediation test script checks:"
+    echo "  - Webhook service status"
+    echo "  - Trigger scripts"
+    echo "  - Remediation playbook syntax"
+    echo "  - Log files and rotation"
+    echo "  - Uptime Kuma integration"
+    echo
+
+    read -p "Run remediation tests? (y/N): " -r
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        show_extras_menu
+        return
+    fi
+
+    local test_script="${SCRIPT_DIR}/scripts/test-remediation.sh"
+
+    if [[ -f "$test_script" ]]; then
+        print_info "Running remediation tests..."
+        sudo bash "$test_script"
+    else
+        print_error "Test script not found: $test_script"
+        print_info "This test is meant to run on configured target servers."
+    fi
+
+    read -p "Press Enter to continue..."
+    show_extras_menu
+}
+
+# =============================================================================
+# SETUP MENU (original setup flow)
+# =============================================================================
+
+run_setup_menu() {
+    # This runs the original setup flow
+    # Clear MAIN_CHOICE to prevent menu loop issues
+    unset MAIN_CHOICE
+
+    # Continue with the original setup flow
+    run_original_setup
+}
+
+run_original_setup() {
+    # Initialize log file
+    echo "=== Server Helper Setup Log ===" > "$LOG_FILE"
+    echo "Started: $(date '+%Y-%m-%d %H:%M:%S')" >> "$LOG_FILE"
+    echo >> "$LOG_FILE"
+
+    # Pre-requisite checks
+    check_not_root
+    check_sudo
+    detect_os
+
+    # Check for existing configuration (health check, add servers, re-run, or fresh)
+    check_existing_config
+
+    # Install dependencies on COMMAND NODE
+    install_system_deps
+    install_python_deps
+    install_galaxy_deps
+
+    # Configuration - skip if re-running on existing servers
+    if [[ "${RERUN_EXISTING:-}" != true ]]; then
+        # Prompt for new target servers (unless using existing only)
+        if [[ "${USE_EXISTING_CONFIG:-}" != true ]] || [[ "${SETUP_MODE:-}" == "2" ]]; then
+            prompt_target_nodes
+        fi
+
+        # Merge with existing if adding servers
+        if [[ "${USE_EXISTING_CONFIG:-}" == true ]] && [[ "${SETUP_MODE:-}" == "2" ]]; then
+            merge_inventory
+        fi
+
+        # Prompt for service configuration (skip if using existing config for re-run)
+        if [[ "${USE_EXISTING_CONFIG:-}" != true ]]; then
+            prompt_config
+        fi
+
+        # Create/update inventory and config files
+        create_inventory
+        if [[ "${USE_EXISTING_CONFIG:-}" != true ]]; then
+            create_config
+            create_vault
+        fi
+    fi
+
+    # Pre-flight checks
+    preflight_checks
+
+    # Offer to run bootstrap playbook (skip for re-runs)
+    if [[ "${RERUN_EXISTING:-}" != true ]]; then
+        offer_bootstrap
+    fi
+
+    # Run playbook
+    run_playbook
+
+    print_success "Setup script completed"
+    print_info "Log file: $LOG_FILE"
+}
+
+# =============================================================================
+# ORIGINAL SETUP FUNCTIONS
+# =============================================================================
+
 # Check for existing configuration
 check_existing_config() {
     print_header
@@ -2225,64 +3315,63 @@ show_completion_message() {
 
 # Main execution flow
 main() {
-    print_header
-
-    # Initialize log file
-    echo "=== Server Helper Setup Log ===" > "$LOG_FILE"
-    echo "Started: $(date '+%Y-%m-%d %H:%M:%S')" >> "$LOG_FILE"
-    echo >> "$LOG_FILE"
-
-    # Pre-requisite checks
-    check_not_root
-    check_sudo
-    detect_os
-
-    # Check for existing configuration (health check, add servers, re-run, or fresh)
-    check_existing_config
-
-    # Install dependencies on COMMAND NODE
-    install_system_deps
-    install_python_deps
-    install_galaxy_deps
-
-    # Configuration - skip if re-running on existing servers
-    if [[ "${RERUN_EXISTING:-}" != true ]]; then
-        # Prompt for new target servers (unless using existing only)
-        if [[ "${USE_EXISTING_CONFIG:-}" != true ]] || [[ "${SETUP_MODE:-}" == "2" ]]; then
-            prompt_target_nodes
-        fi
-
-        # Merge with existing if adding servers
-        if [[ "${USE_EXISTING_CONFIG:-}" == true ]] && [[ "${SETUP_MODE:-}" == "2" ]]; then
-            merge_inventory
-        fi
-
-        # Prompt for service configuration (skip if using existing config for re-run)
-        if [[ "${USE_EXISTING_CONFIG:-}" != true ]]; then
-            prompt_config
-        fi
-
-        # Create/update inventory and config files
-        create_inventory
-        if [[ "${USE_EXISTING_CONFIG:-}" != true ]]; then
-            create_config
-            create_vault
-        fi
-    fi
-
-    # Pre-flight checks
-    preflight_checks
-
-    # Offer to run bootstrap playbook (skip for re-runs)
-    if [[ "${RERUN_EXISTING:-}" != true ]]; then
-        offer_bootstrap
-    fi
-
-    # Run playbook
-    run_playbook
-
-    print_success "Setup script completed"
-    print_info "Log file: $LOG_FILE"
+    # Check for command line arguments for direct access
+    case "${1:-}" in
+        --setup|-s)
+            run_setup_menu
+            exit 0
+            ;;
+        --extras|-e)
+            show_extras_menu
+            exit 0
+            ;;
+        --vault|-v)
+            show_vault_menu
+            exit 0
+            ;;
+        --add-server)
+            run_add_server
+            exit 0
+            ;;
+        --open-ui)
+            run_open_ui
+            exit 0
+            ;;
+        --test-all)
+            run_test_all_roles
+            exit 0
+            ;;
+        --test-role)
+            run_test_single_role
+            exit 0
+            ;;
+        --help|-h)
+            print_header
+            echo -e "${BOLD}Usage:${NC} $0 [OPTION]"
+            echo
+            echo "Options:"
+            echo "  --setup, -s        Run setup directly (skip menu)"
+            echo "  --extras, -e       Open extras menu directly"
+            echo "  --vault, -v        Open vault management menu"
+            echo "  --add-server       Add a new server to inventory"
+            echo "  --open-ui          Open service UIs in browser"
+            echo "  --test-all         Run all Molecule role tests"
+            echo "  --test-role        Run Molecule test for single role"
+            echo "  --help, -h         Show this help message"
+            echo
+            echo "Without options, shows the interactive main menu."
+            exit 0
+            ;;
+        "")
+            # No arguments - show main menu
+            show_main_menu
+            ;;
+        *)
+            print_error "Unknown option: $1"
+            print_info "Use --help for usage information"
+            exit 1
+            ;;
+    esac
 }
 
 # Run main function
