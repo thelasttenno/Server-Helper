@@ -2952,7 +2952,7 @@ create_vault() {
     local vault_file="group_vars/vault.yml"
 
     # Create temporary unencrypted vault file
-    local temp_vault="/tmp/vault_temp_$$.yml"
+    local temp_vault="/tmp/vault_temp.yml"
 
     cat > "$temp_vault" <<EOF
 ---
@@ -3045,8 +3045,8 @@ vault_system_users:
 EOF
 
     # Encrypt the vault file
-    ansible-vault encrypt "$vault_temp_$$" --vault-password-file="$vault_password_file" --output="$vault_file"
-    rm -f "$vault_temp_$$"
+    ansible-vault encrypt "$vault_temp" --vault-password-file="$vault_password_file" --output="$vault_file"
+    rm -f "$vault_temp"
 
     print_success "Encrypted vault file created: $vault_file"
     print_warning "Keep your vault password file secure: $vault_password_file"
