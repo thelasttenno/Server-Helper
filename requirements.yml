@@ -33,5 +33,4 @@ roles:
 
   # fail2ban installation and configuration
   - name: robertdebock.fail2ban
-    version: "5.1.0"
     src: https://github.com/robertdebock/ansible-role-fail2ban
