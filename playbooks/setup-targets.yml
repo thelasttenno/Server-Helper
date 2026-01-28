@@ -31,6 +31,10 @@
   hosts: all
   gather_facts: true
 
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/vault.yml
+
   vars_prompt:
     - name: confirm_setup
       prompt: "This will configure {{ ansible_play_hosts | length }} target server(s). Continue? (yes/no)"

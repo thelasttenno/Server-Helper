@@ -14,6 +14,9 @@
 - name: Gather Target Node Information
   hosts: all
   gather_facts: true
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/vault.yml
   tasks:
     - name: Collect target node service info
       ansible.builtin.set_fact:
@@ -47,6 +50,10 @@
   hosts: localhost
   connection: local
   gather_facts: false
+
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/vault.yml
 
   vars:
     uptime_kuma_url: "http://{{ control_node_ip }}:{{ control_uptime_kuma.port | default(3001) }}"

@@ -68,6 +68,7 @@
     dest: /etc/docker/daemon.json
     mode: '0644'
   notify: Restart Docker
+  when: target_docker is defined
 
 - name: Install Docker Python SDK
   ansible.builtin.pip:

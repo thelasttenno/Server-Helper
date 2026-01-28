@@ -6,6 +6,9 @@
 - name: Automated System Remediation
   hosts: all
   become: true
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/vault.yml
   vars:
     remediation_action: "{{ action | default('health_check') }}"
     affected_service: "{{ service | default('') }}"
