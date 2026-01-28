@@ -18,7 +18,7 @@ roles:
 
   # System security hardening
   - name: geerlingguy.security
-    version: "3.2.0"
+    version: "2.2.0"
     src: https://github.com/geerlingguy/ansible-role-security
 
   # Python pip installation
