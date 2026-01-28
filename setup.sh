@@ -299,7 +299,11 @@ vault_init() {
         echo
         if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             mkdir -p "${SCRIPT_DIR}/group_vars"
-            ansible-vault create "${SCRIPT_DIR}/group_vars/vault.yml" --vault-password-file="$VAULT_PASSWORD_FILE"
+            if ansible-vault create "${SCRIPT_DIR}/group_vars/vault.yml" --vault-password-file="$VAULT_PASSWORD_FILE"; then
+                print_success "Vault file created."
+            else
+                print_warning "Vault file creation cancelled or failed."
+            fi
         fi
     fi
 
@@ -356,8 +360,11 @@ vault_edit() {
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             mkdir -p "$(dirname "$FILE")"
-            ansible-vault create "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"
-            print_success "Created and encrypted: $FILE"
+            if ansible-vault create "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"; then
+                print_success "Created and encrypted: $FILE"
+            else
+                print_warning "File creation cancelled or failed."
+            fi
         fi
         read -p "Press Enter to continue..."
         show_vault_menu
@@ -368,9 +375,7 @@ vault_edit() {
     print_info "The file will be decrypted in-memory only (secure)."
     echo
 
-    ansible-vault edit "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"
-
-    if [[ $? -eq 0 ]]; then
+    if ansible-vault edit "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"; then
         print_success "File edited and saved (still encrypted): $FILE"
     else
         print_warning "Edit cancelled or failed."
@@ -419,12 +424,17 @@ vault_view() {
     echo "═══════════════════════════════════════════════════════════"
     echo
 
-    ansible-vault view "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"
-
-    echo
-    echo "═══════════════════════════════════════════════════════════"
-    echo
-    print_success "File displayed (decrypted in-memory only)"
+    if ansible-vault view "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"; then
+        echo
+        echo "═══════════════════════════════════════════════════════════"
+        echo
+        print_success "File displayed (decrypted in-memory only)"
+    else
+        echo
+        echo "═══════════════════════════════════════════════════════════"
+        echo
+        print_error "Failed to view vault file (wrong password or corrupt file)"
+    fi
 
     read -p "Press Enter to continue..."
     show_vault_menu
@@ -467,9 +477,7 @@ vault_encrypt() {
     print_info "Created backup: $BACKUP_FILE"
 
     # Encrypt
-    ansible-vault encrypt "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"
-
-    if [[ $? -eq 0 ]]; then
+    if ansible-vault encrypt "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"; then
         print_success "File encrypted successfully: $FILE"
         print_info "Backup saved at: $BACKUP_FILE"
     else
@@ -531,9 +539,7 @@ vault_decrypt() {
         return
     fi
 
-    ansible-vault decrypt "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"
-
-    if [[ $? -eq 0 ]]; then
+    if ansible-vault decrypt "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"; then
         print_success "File decrypted: $FILE"
         print_warning "REMEMBER: Re-encrypt or delete this file when done!"
     else
@@ -588,8 +594,11 @@ vault_rekey() {
             fi
             read -p "Re-key $FILE? (yes/NO): " -r
             if [[ "$REPLY" = "yes" ]]; then
-                ansible-vault rekey "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"
-                print_success "File re-keyed: $FILE"
+                if ansible-vault rekey "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"; then
+                    print_success "File re-keyed: $FILE"
+                else
+                    print_error "Failed to re-key: $FILE"
+                fi
             fi
             ;;
         2)
@@ -605,11 +614,17 @@ vault_rekey() {
                 echo
                 read -p "Re-key all these files? (yes/NO): " -r
                 if [[ "$REPLY" = "yes" ]]; then
+                    local rekey_failed=false
                     echo "$encrypted_files" | while read -r file; do
                         print_info "Re-keying: $file"
-                        ansible-vault rekey "$file" --vault-password-file="$VAULT_PASSWORD_FILE"
+                        if ! ansible-vault rekey "$file" --vault-password-file="$VAULT_PASSWORD_FILE"; then
+                            print_error "Failed to re-key: $file"
+                            rekey_failed=true
+                        fi
                     done
-                    print_success "All files re-keyed!"
+                    if [[ "$rekey_failed" == false ]]; then
+                        print_success "All files re-keyed!"
+                    fi
                 fi
             fi
             ;;
@@ -736,6 +751,7 @@ run_add_server() {
     local ansible_host=""
     local ansible_user="ansible"
     local ansible_port="22"
+    local custom_hostname=""
 
     # Server name
     while true; do
@@ -769,6 +785,9 @@ run_add_server() {
     read -p "SSH port [22]: " -r input
     [[ -n "$input" ]] && ansible_port="$input"
 
+    # Custom hostname
+    read -p "Custom hostname (leave empty to use '$server_name'): " -r custom_hostname
+
     # Summary
     echo
     echo -e "${BOLD}Summary:${NC}"
@@ -776,6 +795,7 @@ run_add_server() {
     echo "  Host:        $ansible_host"
     echo "  User:        $ansible_user"
     echo "  Port:        $ansible_port"
+    [[ -n "$custom_hostname" ]] && echo "  Hostname:    $custom_hostname"
     echo
 
     read -p "Add this server to inventory? (Y/n): " -r
@@ -789,29 +809,208 @@ run_add_server() {
     local inventory_file="${SCRIPT_DIR}/inventory/hosts.yml"
 
     if [[ ! -f "$inventory_file" ]]; then
-        print_error "Inventory file not found: $inventory_file"
-        print_info "Run Setup first to create the inventory."
-        read -p "Press Enter to continue..."
-        show_extras_menu
-        return
+        print_warning "Inventory file not found. Creating new inventory..."
+        mkdir -p "${SCRIPT_DIR}/inventory"
+
+        # Create a basic inventory file
+        cat > "$inventory_file" <<EOF
+# Server Helper Inventory
+# Generated: $(date '+%Y-%m-%d %H:%M:%S')
+
+---
+all:
+  hosts:
+    ${server_name}:
+      ansible_host: ${ansible_host}
+      ansible_user: ${ansible_user}
+      ansible_become: yes
+      ansible_python_interpreter: /usr/bin/python3
+EOF
+        if [[ "$ansible_port" != "22" ]]; then
+            echo "      ansible_port: ${ansible_port}" >> "$inventory_file"
+        fi
+        if [[ -n "$custom_hostname" ]]; then
+            echo "      hostname: \"${custom_hostname}\"" >> "$inventory_file"
+        fi
+
+        cat >> "$inventory_file" <<EOF
+
+  children:
+    servers:
+      hosts:
+        ${server_name}:
+
+  vars:
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+EOF
+
+        print_success "Created inventory file: $inventory_file"
+    else
+        # Create backup
+        local backup_file="${inventory_file}.backup.$(date +%Y%m%d_%H%M%S)"
+        cp "$inventory_file" "$backup_file"
+        print_info "Backed up inventory to: $backup_file"
+
+        # Check if server already exists
+        if grep -q "^    ${server_name}:" "$inventory_file" 2>/dev/null; then
+            print_error "Server '$server_name' already exists in inventory!"
+            read -p "Press Enter to continue..."
+            show_extras_menu
+            return
+        fi
+
+        # Build the host entry block
+        local host_block=""
+        host_block+="    ${server_name}:\n"
+        host_block+="      ansible_host: ${ansible_host}\n"
+        host_block+="      ansible_user: ${ansible_user}\n"
+        host_block+="      ansible_become: yes\n"
+        host_block+="      ansible_python_interpreter: /usr/bin/python3"
+        if [[ "$ansible_port" != "22" ]]; then
+            host_block+="\n      ansible_port: ${ansible_port}"
+        fi
+        if [[ -n "$custom_hostname" ]]; then
+            host_block+="\n      hostname: \"${custom_hostname}\""
+        fi
+
+        # Use python3 (required by Ansible, so always available) for reliable YAML editing
+        if command -v python3 &>/dev/null; then
+            if python3 - "$inventory_file" "$server_name" "$ansible_host" "$ansible_user" "$ansible_port" "${custom_hostname:-}" <<'PYEOF'
+import sys, os
+
+inventory_path = sys.argv[1]
+name = sys.argv[2]
+host = sys.argv[3]
+user = sys.argv[4]
+port = sys.argv[5]
+custom_hostname = sys.argv[6] if len(sys.argv) > 6 else ""
+
+with open(inventory_path, 'r') as f:
+    lines = f.readlines()
+
+new_lines = []
+in_all_hosts = False
+inserted_host = False
+in_servers_hosts = False
+inserted_server = False
+
+i = 0
+while i < len(lines):
+    line = lines[i]
+    new_lines.append(line)
+
+    stripped = line.rstrip()
+
+    # Detect "  hosts:" under "all:" (top-level hosts section)
+    if stripped == '  hosts:' and not in_all_hosts and not inserted_host:
+        in_all_hosts = True
+        i += 1
+        continue
+
+    # When inside hosts section, find the end to insert before
+    if in_all_hosts and not inserted_host:
+        # We're past hosts: header. Look for the next non-host line
+        # (a line that is indented at <= 2 spaces and not blank)
+        if stripped and not stripped.startswith('    ') and not stripped.startswith('#'):
+            # Insert our new host BEFORE this line
+            entry = f"    {name}:\n"
+            entry += f"      ansible_host: {host}\n"
+            entry += f"      ansible_user: {user}\n"
+            entry += f"      ansible_become: yes\n"
+            entry += f"      ansible_python_interpreter: /usr/bin/python3\n"
+            if port != "22":
+                entry += f"      ansible_port: {port}\n"
+            if custom_hostname:
+                entry += f'      hostname: "{custom_hostname}"\n'
+            entry += "\n"
+            # Insert before the current line (which was already appended)
+            new_lines.insert(len(new_lines) - 1, entry)
+            inserted_host = True
+            in_all_hosts = False
+
+    # Detect "      hosts:" under "    servers:" (children group)
+    if stripped == '      hosts:' and not inserted_server:
+        in_servers_hosts = True
+        i += 1
+        continue
+
+    # Insert server reference right after "      hosts:" line
+    if in_servers_hosts and not inserted_server:
+        new_lines.insert(len(new_lines) - 1, f"        {name}:\n")
+        inserted_server = True
+        in_servers_hosts = False
+
+    i += 1
+
+# If host wasn't inserted (hosts section goes to end of file), append
+if not inserted_host:
+    entry = f"\n    {name}:\n"
+    entry += f"      ansible_host: {host}\n"
+    entry += f"      ansible_user: {user}\n"
+    entry += f"      ansible_become: yes\n"
+    entry += f"      ansible_python_interpreter: /usr/bin/python3\n"
+    if port != "22":
+        entry += f"      ansible_port: {port}\n"
+    if custom_hostname:
+        entry += f'      hostname: "{custom_hostname}"\n'
+    # Try to insert before children section
+    for idx, l in enumerate(new_lines):
+        if l.strip() == 'children:':
+            new_lines.insert(idx, entry + "\n")
+            inserted_host = True
+            break
+    if not inserted_host:
+        new_lines.append(entry)
+
+with open(inventory_path, 'w') as f:
+    f.writelines(new_lines)
+
+print("OK")
+PYEOF
+            then
+                print_success "Server '$server_name' added to inventory!"
+            else
+                print_error "Failed to update inventory file"
+                print_info "Restoring from backup..."
+                cp "$backup_file" "$inventory_file"
+                read -p "Press Enter to continue..."
+                show_extras_menu
+                return
+            fi
+        else
+            # Fallback: append as a separate block and warn
+            print_warning "python3 not found. Using basic append (manual review recommended)."
+            {
+                echo ""
+                echo -e "$host_block"
+            } >> "$inventory_file"
+            print_success "Server '$server_name' appended to inventory."
+            print_warning "Please verify the YAML structure in: $inventory_file"
+        fi
     fi
 
-    # Create backup
-    cp "$inventory_file" "${inventory_file}.backup.$(date +%Y%m%d_%H%M%S)"
-    print_info "Backed up inventory file"
-
-    # Add server to inventory (simple append approach)
-    # This is a simplified version - the full add-server.sh has more robust YAML handling
-    print_info "Adding server to inventory..."
-    print_warning "Note: You may need to manually verify the YAML structure"
+    # Test SSH connection
+    echo
+    read -p "Test SSH connection to ${ansible_host}? (Y/n): " -r
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        print_info "Testing SSH connection to ${ansible_user}@${ansible_host}..."
+        if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -p "$ansible_port" "${ansible_user}@${ansible_host}" "echo 'Connected'" &>/dev/null; then
+            print_success "SSH connection successful!"
+        else
+            print_warning "SSH connection failed. You may need to:"
+            echo "  1. Copy SSH key: ssh-copy-id -p $ansible_port ${ansible_user}@${ansible_host}"
+            echo "  2. Run bootstrap: ansible-playbook playbooks/bootstrap.yml --limit $server_name -K"
+        fi
+    fi
 
     echo
-    print_success "Server '$server_name' configuration ready!"
+    print_success "Server '$server_name' added successfully!"
     echo
     print_info "Next steps:"
     echo "  1. Verify inventory: ansible-inventory --list"
     echo "  2. Test connection: ansible $server_name -m ping"
-    echo "  3. Bootstrap: ansible-playbook playbooks/bootstrap.yml --limit $server_name"
+    echo "  3. Bootstrap: ansible-playbook playbooks/bootstrap.yml --limit $server_name -K"
+    echo "  4. Setup: ansible-playbook playbooks/setup-targets.yml --limit $server_name"
     echo
 
     read -p "Press Enter to continue..."
@@ -821,6 +1020,124 @@ run_add_server() {
 # =============================================================================
 # OPEN UI FUNCTION
 # =============================================================================
+
+# Helper: open a URL in the system browser
+_open_browser_url() {
+    local url="$1"
+    local label="${2:-$url}"
+
+    print_info "Opening ${label}: ${url}"
+
+    if command -v xdg-open &>/dev/null; then
+        xdg-open "$url" &>/dev/null &
+    elif command -v open &>/dev/null; then
+        open "$url"
+    elif command -v start &>/dev/null; then
+        start "$url" 2>/dev/null || cmd.exe /c start "$url" 2>/dev/null
+    else
+        print_warning "Could not detect browser. Open manually: $url"
+    fi
+}
+
+# Helper: read a port from group_vars/all.yml
+_get_config_port() {
+    local service="$1"
+    local default_port="$2"
+    local config_file="${SCRIPT_DIR}/group_vars/all.yml"
+
+    if [[ ! -f "$config_file" ]]; then
+        echo "$default_port"
+        return
+    fi
+
+    local port=""
+    case "$service" in
+        dockge)
+            port=$(awk '/^target_dockge:/{found=1} found && /port:/{print $2; exit}' "$config_file" 2>/dev/null)
+            ;;
+        netdata)
+            port=$(awk '/^target_netdata:/{found=1} found && /port:/{print $2; exit}' "$config_file" 2>/dev/null)
+            ;;
+        uptime-kuma)
+            port=$(awk '/^control_uptime_kuma:/{found=1} found && /port:/{print $2; exit}' "$config_file" 2>/dev/null)
+            ;;
+        grafana)
+            port=$(awk '/^control_grafana:/{found=1} found && /port:/{print $2; exit}' "$config_file" 2>/dev/null)
+            ;;
+    esac
+
+    echo "${port:-$default_port}"
+}
+
+# Helper: parse inventory and populate host arrays
+_parse_inventory_hosts() {
+    local inventory_file="${SCRIPT_DIR}/inventory/hosts.yml"
+    _INV_NAMES=()
+    _INV_IPS=()
+
+    if [[ ! -f "$inventory_file" ]]; then
+        return 1
+    fi
+
+    local in_hosts=false
+    local current_name=""
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" =~ ^[[:space:]]*hosts:[[:space:]]*$ ]]; then
+            in_hosts=true
+            continue
+        fi
+
+        if [[ "$in_hosts" == true ]] && [[ "$line" =~ ^[[:space:]]{4}([a-zA-Z0-9_-]+):[[:space:]]*$ ]]; then
+            current_name="${BASH_REMATCH[1]}"
+            _INV_NAMES+=("$current_name")
+        fi
+
+        if [[ "$in_hosts" == true ]] && [[ "$line" =~ ansible_host:[[:space:]]*([0-9.a-zA-Z_-]+) ]]; then
+            _INV_IPS+=("${BASH_REMATCH[1]}")
+        fi
+
+        # Stop if we leave the hosts section (non-indented key)
+        if [[ "$in_hosts" == true ]] && [[ "$line" =~ ^[[:space:]]{2}[a-z] ]] && [[ ! "$line" =~ ^[[:space:]]{4} ]] && [[ ! "$line" =~ ^[[:space:]]*hosts: ]]; then
+            in_hosts=false
+        fi
+    done < "$inventory_file"
+
+    [[ ${#_INV_NAMES[@]} -gt 0 ]]
+}
+
+# Helper: let user pick a host, sets _SELECTED_IP
+_select_host_ip() {
+    _SELECTED_IP=""
+
+    if ! _parse_inventory_hosts; then
+        print_warning "Could not parse inventory."
+        read -p "Enter server IP address manually: " -r _SELECTED_IP
+        return
+    fi
+
+    if [[ ${#_INV_NAMES[@]} -eq 1 ]]; then
+        _SELECTED_IP="${_INV_IPS[0]}"
+        print_info "Using host: ${_INV_NAMES[0]} (${_SELECTED_IP})"
+        return
+    fi
+
+    echo -e "${BOLD}Select a host:${NC}"
+    for idx in "${!_INV_NAMES[@]}"; do
+        echo "  $((idx+1))) ${_INV_NAMES[$idx]} (${_INV_IPS[$idx]})"
+    done
+    echo "  $((${#_INV_NAMES[@]}+1))) Enter IP manually"
+    echo
+
+    read -p "Choose host: " -r host_num
+
+    if [[ "$host_num" =~ ^[0-9]+$ ]] && [[ "$host_num" -ge 1 ]] && [[ "$host_num" -le ${#_INV_NAMES[@]} ]]; then
+        _SELECTED_IP="${_INV_IPS[$((host_num-1))]}"
+        print_info "Using host: ${_INV_NAMES[$((host_num-1))]} (${_SELECTED_IP})"
+    else
+        read -p "Enter server IP address: " -r _SELECTED_IP
+    fi
+}
 
 run_open_ui() {
     clear
@@ -837,51 +1154,59 @@ run_open_ui() {
         return
     fi
 
-    echo -e "${BOLD}Select service to open:${NC}"
-    echo "  1) Dockge (Container Management)"
-    echo "  2) Netdata (System Monitoring)"
-    echo "  3) Uptime Kuma (Uptime Monitoring)"
-    echo "  4) Grafana (Central Dashboards)"
-    echo "  5) All Services"
-    echo "  6) Back"
-    echo
-    read -p "Choose [1-6]: " -r UI_CHOICE
-
-    # Get first host IP from inventory (simplified parsing)
-    local host_ip
-    host_ip=$(grep -A1 "ansible_host:" "$inventory_file" 2>/dev/null | head -1 | awk '{print $2}' | tr -d '"' | tr -d "'" || echo "")
+    # Let user pick a host
+    _select_host_ip
+    local host_ip="$_SELECTED_IP"
 
     if [[ -z "$host_ip" ]]; then
-        read -p "Enter server IP address: " -r host_ip
+        print_error "No host selected."
+        read -p "Press Enter to continue..."
+        show_extras_menu
+        return
     fi
 
-    open_url() {
-        local url="$1"
-        print_info "Opening: $url"
-        if command -v xdg-open &>/dev/null; then
-            xdg-open "$url" &>/dev/null &
-        elif command -v open &>/dev/null; then
-            open "$url"
-        elif command -v start &>/dev/null; then
-            start "$url" 2>/dev/null || cmd.exe /c start "$url"
-        else
-            print_warning "Could not open browser. URL: $url"
-        fi
-    }
+    # Read configured ports
+    local dockge_port netdata_port kuma_port grafana_port
+    dockge_port=$(_get_config_port "dockge" "5001")
+    netdata_port=$(_get_config_port "netdata" "19999")
+    kuma_port=$(_get_config_port "uptime-kuma" "3001")
+    grafana_port=$(_get_config_port "grafana" "3000")
+
+    echo
+    echo -e "${BOLD}Select service to open:${NC}"
+    echo "  1) Dockge            (http://${host_ip}:${dockge_port})"
+    echo "  2) Netdata           (http://${host_ip}:${netdata_port})"
+    echo "  3) Uptime Kuma       (http://${host_ip}:${kuma_port})"
+    echo "  4) Grafana           (http://${host_ip}:${grafana_port})"
+    echo "  5) All Services"
+    echo "  6) List URLs only"
+    echo "  7) Back"
+    echo
+    read -p "Choose [1-7]: " -r UI_CHOICE
 
     case "$UI_CHOICE" in
-        1) open_url "http://${host_ip}:5001" ;;
-        2) open_url "http://${host_ip}:19999" ;;
-        3) open_url "http://${host_ip}:3001" ;;
-        4) open_url "http://${host_ip}:3000" ;;
+        1) _open_browser_url "http://${host_ip}:${dockge_port}" "Dockge" ;;
+        2) _open_browser_url "http://${host_ip}:${netdata_port}" "Netdata" ;;
+        3) _open_browser_url "http://${host_ip}:${kuma_port}" "Uptime Kuma" ;;
+        4) _open_browser_url "http://${host_ip}:${grafana_port}" "Grafana" ;;
         5)
-            open_url "http://${host_ip}:5001"
+            _open_browser_url "http://${host_ip}:${dockge_port}" "Dockge"
             sleep 1
-            open_url "http://${host_ip}:19999"
+            _open_browser_url "http://${host_ip}:${netdata_port}" "Netdata"
             sleep 1
-            open_url "http://${host_ip}:3001"
+            _open_browser_url "http://${host_ip}:${kuma_port}" "Uptime Kuma"
+            sleep 1
+            _open_browser_url "http://${host_ip}:${grafana_port}" "Grafana"
             ;;
-        6) show_extras_menu; return ;;
+        6)
+            echo
+            echo -e "${BOLD}Service URLs for ${host_ip}:${NC}"
+            echo "  Dockge:      http://${host_ip}:${dockge_port}"
+            echo "  Netdata:     http://${host_ip}:${netdata_port}"
+            echo "  Uptime Kuma: http://${host_ip}:${kuma_port}"
+            echo "  Grafana:     http://${host_ip}:${grafana_port}"
+            ;;
+        7) show_extras_menu; return ;;
         *) print_warning "Invalid option" ;;
     esac
 
@@ -1089,7 +1414,11 @@ run_test_single_role() {
     echo
 
     cd "$ROLES_DIR/$selected_role"
-    molecule "$molecule_cmd"
+    if molecule "$molecule_cmd"; then
+        print_success "molecule $molecule_cmd completed successfully for: $selected_role"
+    else
+        print_error "molecule $molecule_cmd failed for: $selected_role"
+    fi
     cd "$SCRIPT_DIR"
 
     read -p "Press Enter to continue..."
@@ -1102,34 +1431,300 @@ run_test_remediation() {
     echo -e "${BOLD}Test Remediation System${NC}"
     echo
 
-    print_warning "This test requires root privileges and should be run on a target server."
-    echo
-    print_info "The remediation test script checks:"
+    print_info "Remediation tests check the auto-remediation infrastructure:"
     echo "  - Webhook service status"
-    echo "  - Trigger scripts"
+    echo "  - Trigger scripts (service restart, disk cleanup, cert renewal)"
     echo "  - Remediation playbook syntax"
     echo "  - Log files and rotation"
     echo "  - Uptime Kuma integration"
     echo
 
-    read -p "Run remediation tests? (y/N): " -r
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        show_extras_menu
-        return
-    fi
+    echo -e "${BOLD}Where to run tests:${NC}"
+    echo "  1) Locally (this machine is a target server)"
+    echo "  2) Remotely via Ansible (run on target servers)"
+    echo "  3) Back"
+    echo
+    read -p "Choose [1-3]: " -r REM_CHOICE
 
-    local test_script="${SCRIPT_DIR}/scripts/test-remediation.sh"
-
-    if [[ -f "$test_script" ]]; then
-        print_info "Running remediation tests..."
-        sudo bash "$test_script"
-    else
-        print_error "Test script not found: $test_script"
-        print_info "This test is meant to run on configured target servers."
-    fi
+    case "$REM_CHOICE" in
+        1)
+            _run_remediation_tests_local
+            ;;
+        2)
+            _run_remediation_tests_remote
+            ;;
+        3)
+            show_extras_menu
+            return
+            ;;
+        *)
+            print_warning "Invalid option"
+            read -p "Press Enter to continue..."
+            show_extras_menu
+            return
+            ;;
+    esac
 
     read -p "Press Enter to continue..."
     show_extras_menu
+}
+
+_remediation_log() {
+    echo -e "${GREEN}[TEST]${NC} $1"
+}
+
+_remediation_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+_remediation_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+_run_remediation_tests_local() {
+    echo
+    print_warning "Local tests require root privileges."
+    echo
+
+    if [[ "$EUID" -ne 0 ]] && ! sudo -n true 2>/dev/null; then
+        print_info "You will be prompted for your sudo password."
+    fi
+
+    local failed=0
+
+    echo
+    echo -e "${BLUE}===========================================${NC}"
+    echo -e "${BLUE}  Automated Remediation System - Test Suite${NC}"
+    echo -e "${BLUE}===========================================${NC}"
+    echo
+
+    # Test 1: Webhook service
+    _remediation_log "Testing webhook service..."
+    if sudo systemctl is-active --quiet remediation-webhook 2>/dev/null; then
+        _remediation_log "Webhook service is running"
+    else
+        _remediation_error "Webhook service is not running"
+        ((failed++)) || true
+    fi
+
+    if curl -s -f "http://localhost:9090?action=health_check" > /dev/null 2>&1; then
+        _remediation_log "Webhook endpoint is responding"
+    else
+        _remediation_warn "Webhook endpoint is not responding (may not be configured)"
+    fi
+    echo
+
+    # Test 2: Trigger scripts
+    _remediation_log "Testing trigger scripts..."
+    local scripts=(
+        "/usr/local/bin/trigger-service-restart.sh"
+        "/usr/local/bin/trigger-disk-cleanup.sh"
+        "/usr/local/bin/trigger-cert-renewal.sh"
+    )
+    for script in "${scripts[@]}"; do
+        if [[ -x "$script" ]]; then
+            _remediation_log "$(basename "$script") is executable"
+        else
+            _remediation_error "$(basename "$script") is not executable or missing"
+            ((failed++)) || true
+        fi
+    done
+    echo
+
+    # Test 3: Remediation playbook
+    _remediation_log "Testing remediation playbook..."
+    local playbook="/opt/ansible/playbooks/remediation.yml"
+    if [[ -f "$playbook" ]]; then
+        _remediation_log "Remediation playbook exists"
+        if ansible-playbook --syntax-check "$playbook" > /dev/null 2>&1; then
+            _remediation_log "Remediation playbook syntax is valid"
+        else
+            _remediation_error "Remediation playbook has syntax errors"
+            ((failed++)) || true
+        fi
+    else
+        _remediation_error "Remediation playbook not found: $playbook"
+        ((failed++)) || true
+    fi
+    echo
+
+    # Test 4: Log files
+    _remediation_log "Testing log files..."
+    local logs=(
+        "/var/log/auto-remediation.log"
+        "/var/log/remediation-webhook.log"
+    )
+    for logfile in "${logs[@]}"; do
+        if [[ -f "$logfile" ]]; then
+            _remediation_log "$logfile exists"
+        else
+            _remediation_warn "$logfile does not exist (created on first use)"
+        fi
+    done
+
+    if [[ -f "/etc/logrotate.d/remediation" ]]; then
+        _remediation_log "Log rotation is configured"
+    else
+        _remediation_warn "Log rotation not configured"
+    fi
+    echo
+
+    # Test 5: Uptime Kuma integration
+    _remediation_log "Testing Uptime Kuma integration..."
+    if [[ -f "/root/uptime-kuma-monitors.json" ]]; then
+        _remediation_log "Uptime Kuma monitor configuration exists"
+    else
+        _remediation_warn "Uptime Kuma monitor configuration not found"
+    fi
+
+    if curl -s -f "http://localhost:3001" > /dev/null 2>&1; then
+        _remediation_log "Uptime Kuma is accessible"
+    else
+        _remediation_warn "Uptime Kuma is not accessible (may not be enabled)"
+    fi
+    echo
+
+    # Optional: Service restart test
+    read -p "Run service restart test? (creates temporary container) [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        _remediation_log "Testing service auto-restart..."
+        if command -v docker &>/dev/null; then
+            _remediation_log "Creating test container..."
+            sudo docker run -d --name remediation-test-container --rm alpine sleep 3600 > /dev/null 2>&1 || true
+            sleep 2
+            _remediation_log "Stopping test container..."
+            sudo docker stop remediation-test-container > /dev/null 2>&1 || true
+            sleep 5
+            _remediation_log "Triggering service restart..."
+            if [[ -x "/usr/local/bin/trigger-service-restart.sh" ]]; then
+                sudo /usr/local/bin/trigger-service-restart.sh "remediation-test-container" "test" > /dev/null 2>&1 &
+                sleep 10
+                if sudo docker ps | grep -q remediation-test-container; then
+                    _remediation_log "Service auto-restart works"
+                    sudo docker stop remediation-test-container > /dev/null 2>&1 || true
+                else
+                    _remediation_warn "Service auto-restart test inconclusive"
+                    sudo docker rm -f remediation-test-container > /dev/null 2>&1 || true
+                fi
+            else
+                _remediation_warn "trigger-service-restart.sh not found, skipping"
+            fi
+        else
+            _remediation_warn "Docker not available, skipping"
+        fi
+        echo
+    fi
+
+    # Optional: Disk cleanup test
+    read -p "Run disk cleanup test? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        _remediation_log "Testing disk cleanup..."
+        local before_df
+        before_df=$(df -h / | tail -1 | awk '{print $5}' | sed 's/%//')
+        _remediation_log "Disk usage before cleanup: ${before_df}%"
+        if [[ -f "/opt/ansible/playbooks/remediation.yml" ]]; then
+            sudo ansible-playbook /opt/ansible/playbooks/remediation.yml -e "action=disk_cleanup" > /dev/null 2>&1 || true
+            sleep 5
+            local after_df
+            after_df=$(df -h / | tail -1 | awk '{print $5}' | sed 's/%//')
+            _remediation_log "Disk usage after cleanup: ${after_df}%"
+        else
+            _remediation_warn "Remediation playbook not found, skipping"
+        fi
+        echo
+    fi
+
+    # Optional: Cert renewal test
+    read -p "Run certificate renewal test? (dry run only) [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        _remediation_log "Testing certificate renewal (dry run)..."
+        if command -v certbot > /dev/null 2>&1; then
+            if sudo certbot renew --dry-run > /dev/null 2>&1; then
+                _remediation_log "Certificate renewal dry run successful"
+            else
+                _remediation_warn "Certbot dry run failed (may not have certs configured)"
+            fi
+        else
+            _remediation_warn "Certbot not installed, skipping"
+        fi
+        echo
+    fi
+
+    # Summary
+    echo -e "${BLUE}===========================================${NC}"
+    echo -e "${BLUE}  Test Summary${NC}"
+    echo -e "${BLUE}===========================================${NC}"
+
+    if [[ $failed -eq 0 ]]; then
+        _remediation_log "All tests passed!"
+    else
+        _remediation_error "$failed test(s) failed"
+    fi
+}
+
+_run_remediation_tests_remote() {
+    echo
+
+    if ! command -v ansible &>/dev/null; then
+        print_error "Ansible is not installed."
+        return
+    fi
+
+    local inventory_file="${SCRIPT_DIR}/inventory/hosts.yml"
+    if [[ ! -f "$inventory_file" ]]; then
+        print_error "No inventory found. Run Setup first."
+        return
+    fi
+
+    # Let user pick target host(s)
+    echo -e "${BOLD}Run tests on which hosts?${NC}"
+    echo "  1) All hosts"
+    echo "  2) Specific host"
+    echo
+    read -p "Choose [1-2]: " -r target_choice
+
+    local target="all"
+    if [[ "$target_choice" == "2" ]]; then
+        _select_host_ip
+        if [[ -n "$_SELECTED_IP" ]]; then
+            # Find the host name for this IP
+            target=$(grep -B1 "ansible_host: ${_SELECTED_IP}" "$inventory_file" 2>/dev/null | head -1 | awk '{print $1}' | tr -d ':' || echo "$_SELECTED_IP")
+        fi
+    fi
+
+    echo
+    print_info "Running remediation checks on: $target"
+    echo
+
+    # Run ad-hoc checks via ansible
+    echo -e "${BLUE}--- Checking webhook service ---${NC}"
+    ansible "$target" -m shell -a "systemctl is-active remediation-webhook 2>/dev/null || echo 'not running'" 2>/dev/null || true
+    echo
+
+    echo -e "${BLUE}--- Checking trigger scripts ---${NC}"
+    ansible "$target" -m shell -a "ls -la /usr/local/bin/trigger-*.sh 2>/dev/null || echo 'No trigger scripts found'" 2>/dev/null || true
+    echo
+
+    echo -e "${BLUE}--- Checking remediation playbook ---${NC}"
+    ansible "$target" -m shell -a "test -f /opt/ansible/playbooks/remediation.yml && echo 'Playbook exists' || echo 'Playbook not found'" 2>/dev/null || true
+    echo
+
+    echo -e "${BLUE}--- Checking log files ---${NC}"
+    ansible "$target" -m shell -a "ls -la /var/log/auto-remediation.log /var/log/remediation-webhook.log 2>/dev/null || echo 'No remediation logs found'" 2>/dev/null || true
+    echo
+
+    echo -e "${BLUE}--- Checking log rotation ---${NC}"
+    ansible "$target" -m shell -a "test -f /etc/logrotate.d/remediation && echo 'Log rotation configured' || echo 'No log rotation'" 2>/dev/null || true
+    echo
+
+    echo -e "${BLUE}--- Checking Uptime Kuma ---${NC}"
+    ansible "$target" -m shell -a "curl -sf http://localhost:3001 > /dev/null 2>&1 && echo 'Uptime Kuma accessible' || echo 'Uptime Kuma not accessible'" 2>/dev/null || true
+    echo
+
+    print_success "Remote remediation checks complete."
 }
 
 # =============================================================================

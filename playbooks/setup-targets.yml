@@ -54,11 +54,11 @@
 
     - name: Display target servers
       ansible.builtin.debug:
-        msg:
-          - "Configuring target servers:"
-          - "{% for host in ansible_play_hosts %}"
-          - "  - {{ hostvars[host]['inventory_hostname'] }}: {{ hostvars[host]['ansible_host'] }}"
-          - "{% endfor %}"
+        msg: |
+          Configuring target servers:
+          {% for host in ansible_play_hosts %}
+            - {{ hostvars[host]['inventory_hostname'] }}: {{ hostvars[host]['ansible_host'] }}
+          {% endfor %}
       run_once: true
 
     - name: Update apt cache
@@ -142,49 +142,48 @@
   post_tasks:
     - name: Display setup complete message
       ansible.builtin.debug:
-        msg:
-          - "═══════════════════════════════════════"
-          - "      Target Node Setup Complete!"
-          - "═══════════════════════════════════════"
-          - ""
-          - "Server: {{ inventory_hostname }}"
-          - "IP: {{ ansible_default_ipv4.address }}"
-          - ""
-          - "Services installed:"
-          - "  ✓ Docker & Docker Compose"
-          - "{% if target_dockge.enabled | default(true) %}"
-          - "  ✓ Dockge: http://{{ ansible_default_ipv4.address }}:{{ target_dockge.port }}"
-          - "{% endif %}"
-          - "{% if target_netdata.enabled | default(true) %}"
-          - "  ✓ Netdata: http://{{ ansible_default_ipv4.address }}:{{ target_netdata.port }}"
-          - "{% endif %}"
-          - "{% if target_logging.grafana.enabled | default(true) %}"
-          - "  ✓ Grafana: http://{{ ansible_default_ipv4.address }}:{{ target_logging.grafana.port }}"
-          - "{% endif %}"
-          - "{% if target_logging.loki.enabled | default(true) %}"
-          - "  ✓ Loki: http://{{ ansible_default_ipv4.address }}:{{ target_logging.loki.port }}"
-          - "{% endif %}"
-          - "{% if target_restic.enabled | default(false) %}"
-          - "  ✓ Restic Backups: Scheduled for {{ target_restic.schedule }}"
-          - "{% endif %}"
-          - "{% if target_security.fail2ban.enabled | default(true) %}"
-          - "  ✓ fail2ban: Active"
-          - "{% endif %}"
-          - "{% if target_security.ufw.enabled | default(true) %}"
-          - "  ✓ UFW Firewall: Active"
-          - "{% endif %}"
-          - "{% if target_security.lynis.enabled | default(true) %}"
-          - "  ✓ Lynis Security Auditing: Scheduled"
-          - "{% endif %}"
-          - ""
-          - "Next steps:"
-          - "  1. Access Dockge to manage container stacks"
-          - "  2. Check Netdata for system metrics"
-          - "{% if target_restic.enabled | default(false) %}"
-          - "  3. Verify backup repositories initialized"
-          - "{% endif %}"
-          - "  4. Configure monitoring from control node (Uptime Kuma)"
-          - ""
+        msg: |
+          ═══════════════════════════════════════
+                Target Node Setup Complete!
+          ═══════════════════════════════════════
+
+          Server: {{ inventory_hostname }}
+          IP: {{ ansible_default_ipv4.address }}
+
+          Services installed:
+            ✓ Docker & Docker Compose
+          {% if target_dockge.enabled | default(true) %}
+            ✓ Dockge: http://{{ ansible_default_ipv4.address }}:{{ target_dockge.port }}
+          {% endif %}
+          {% if target_netdata.enabled | default(true) %}
+            ✓ Netdata: http://{{ ansible_default_ipv4.address }}:{{ target_netdata.port }}
+          {% endif %}
+          {% if target_logging.grafana.enabled | default(true) %}
+            ✓ Grafana: http://{{ ansible_default_ipv4.address }}:{{ target_logging.grafana.port }}
+          {% endif %}
+          {% if target_logging.loki.enabled | default(true) %}
+            ✓ Loki: http://{{ ansible_default_ipv4.address }}:{{ target_logging.loki.port }}
+          {% endif %}
+          {% if target_restic.enabled | default(false) %}
+            ✓ Restic Backups: Scheduled for {{ target_restic.schedule }}
+          {% endif %}
+          {% if target_security.fail2ban.enabled | default(true) %}
+            ✓ fail2ban: Active
+          {% endif %}
+          {% if target_security.ufw.enabled | default(true) %}
+            ✓ UFW Firewall: Active
+          {% endif %}
+          {% if target_security.lynis.enabled | default(true) %}
+            ✓ Lynis Security Auditing: Scheduled
+          {% endif %}
+
+          Next steps:
+            1. Access Dockge to manage container stacks
+            2. Check Netdata for system metrics
+          {% if target_restic.enabled | default(false) %}
+            3. Verify backup repositories initialized
+          {% endif %}
+            4. Configure monitoring from control node (Uptime Kuma)
 
     - name: Save service URLs per node
       ansible.builtin.copy:
@@ -216,31 +215,29 @@
 
     - name: Create summary report (run_once)
       ansible.builtin.debug:
-        msg:
-          - ""
-          - "═══════════════════════════════════════════════════════════"
-          - "      All Target Nodes Configured Successfully!"
-          - "═══════════════════════════════════════════════════════════"
-          - ""
-          - "Configured {{ ansible_play_hosts | length }} server(s):"
-          - "{% for host in ansible_play_hosts %}"
-          - "  ✓ {{ hostvars[host]['inventory_hostname'] }} - {{ hostvars[host]['ansible_default_ipv4']['address'] }}"
-          - "{% endfor %}"
-          - ""
-          - "Recommended next steps:"
-          - "  1. Install centralized monitoring on control node:"
-          - "     ansible-playbook playbooks/setup-control.yml"
-          - ""
-          - "  2. Access services on each server:"
-          - "{% for host in ansible_play_hosts %}"
-          - "     {{ hostvars[host]['inventory_hostname'] }}:"
-          - "       - Dockge: http://{{ hostvars[host]['ansible_default_ipv4']['address'] }}:{{ target_dockge.port }}"
-          - "       - Netdata: http://{{ hostvars[host]['ansible_default_ipv4']['address'] }}:{{ target_netdata.port }}"
-          - "{% endfor %}"
-          - ""
-          - "  3. Useful commands:"
-          - "     ansible all -m shell -a 'docker ps'  # View containers"
-          - "     ansible all -m ping                  # Test connectivity"
-          - "     ansible-playbook playbooks/backup.yml  # Run backups"
-          - ""
+        msg: |
+          ═══════════════════════════════════════════════════════════
+                All Target Nodes Configured Successfully!
+          ═══════════════════════════════════════════════════════════
+
+          Configured {{ ansible_play_hosts | length }} server(s):
+          {% for host in ansible_play_hosts %}
+            ✓ {{ hostvars[host]['inventory_hostname'] }} - {{ hostvars[host]['ansible_default_ipv4']['address'] }}
+          {% endfor %}
+
+          Recommended next steps:
+            1. Install centralized monitoring on control node:
+               ansible-playbook playbooks/setup-control.yml
+
+            2. Access services on each server:
+          {% for host in ansible_play_hosts %}
+               {{ hostvars[host]['inventory_hostname'] }}:
+                 - Dockge: http://{{ hostvars[host]['ansible_default_ipv4']['address'] }}:{{ target_dockge.port }}
+                 - Netdata: http://{{ hostvars[host]['ansible_default_ipv4']['address'] }}:{{ target_netdata.port }}
+          {% endfor %}
+
+            3. Useful commands:
+               ansible all -m shell -a 'docker ps'  # View containers
+               ansible all -m ping                  # Test connectivity
+               ansible-playbook playbooks/backup.yml  # Run backups
       run_once: true
