@@ -242,7 +242,7 @@
           Loki: http://{{ ansible_default_ipv4.address }}:{{ logging.loki.port }}
           {% endif %}
           {% if reverse_proxy.enabled | default(false) %}
-          Reverse Proxy: http://{{ ansible_default_ipv4.address }}:{{ reverse_proxy.traefik.port if reverse_proxy.type == 'traefik' else reverse_proxy.npm.port }}
+          Traefik Dashboard: http://{{ ansible_default_ipv4.address }}:{{ reverse_proxy.traefik.dashboard_port }}
           {% endif %}
           {% if dns.enabled | default(false) %}
           Pi-hole Admin: http://{{ ansible_default_ipv4.address }}:{{ dns.pihole.port }}/admin

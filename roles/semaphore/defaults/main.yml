@@ -2,7 +2,7 @@
 # Semaphore UI default configuration
 
 semaphore:
-  enabled: false
+  enabled: true
   port: 3000
   # Database configuration
   database:

@@ -2,7 +2,7 @@
 # DNS Role Default Variables
 
 dns:
-  enabled: false
+  enabled: true
   stack_dir: /opt/dockge/stacks/dns
   network_name: dns
   private_domain: internal

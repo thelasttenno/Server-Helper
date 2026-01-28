@@ -3,7 +3,7 @@
 
 # Authentik Configuration
 authentik:
-  enabled: false
+  enabled: true
   version: "2024.12"
   http_port: 9000
   https_port: 9443

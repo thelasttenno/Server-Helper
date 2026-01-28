@@ -3,7 +3,7 @@
 # Default configuration values
 
 step_ca:
-  enabled: false
+  enabled: true
 
   # CA identity
   name: "Server-Helper Internal CA"

@@ -125,14 +125,14 @@ lvm_config:
 
 nas:
   enabled: true
-  
+
   # Multiple NAS shares supported
   shares:
     - ip: "192.168.1.100"
       share: "backup"
       mount: "/mnt/nas/backup"
-      username: "nasuser"
-      password: "changeme"
+      username: "{{ vault_nas_credentials[0].username }}"
+      password: "{{ vault_nas_credentials[0].password }}"
       options: "vers=3.0,_netdev,nofail"
     
     # Add more shares as needed
@@ -165,31 +165,31 @@ restic:
     nas:
       enabled: true
       path: "/mnt/nas/backup/restic"
-      password: "changeme-restic-password"
-    
+      password: "{{ vault_restic_passwords.nas }}"
+
     # AWS S3 backup
     s3:
       enabled: false
       bucket: "my-server-backups"
       endpoint: "s3.amazonaws.com"
       region: "us-east-1"
-      access_key: "AWS_ACCESS_KEY_ID"
-      secret_key: "AWS_SECRET_ACCESS_KEY"
-      password: "changeme-restic-password"
-    
+      access_key: "{{ vault_aws_credentials.access_key }}"
+      secret_key: "{{ vault_aws_credentials.secret_key }}"
+      password: "{{ vault_restic_passwords.s3 }}"
+
     # Backblaze B2 backup
     b2:
       enabled: false
       bucket: "my-server-backups"
-      account_id: "B2_ACCOUNT_ID"
-      account_key: "B2_ACCOUNT_KEY"
-      password: "changeme-restic-password"
-    
+      account_id: "{{ vault_b2_credentials.account_id }}"
+      account_key: "{{ vault_b2_credentials.account_key }}"
+      password: "{{ vault_restic_passwords.b2 }}"
+
     # Local backup
     local:
       enabled: true
       path: "/opt/backups/restic"
-      password: "changeme-restic-password"
+      password: "{{ vault_restic_passwords.local }}"
   
   # Paths to backup
   backup_paths:
@@ -266,10 +266,10 @@ netdata:
 uptime_kuma:
   enabled: true
   port: 3001
-  
-  # Initial admin credentials (change on first login!)
-  admin_username: "admin"
-  admin_password: "changeme"
+
+  # Initial admin credentials (stored in vault)
+  admin_username: "{{ vault_uptime_kuma_credentials.username }}"
+  admin_password: "{{ vault_uptime_kuma_credentials.password }}"
   
   # Monitors (configured after initial setup)
   monitors:
@@ -333,7 +333,7 @@ logging:
     version: latest
     port: 3000
     admin_user: admin
-    # Admin password stored in vault: vault_grafana_admin_password
+    admin_password: "{{ vault_grafana_admin_password }}"
 
     # Grafana plugins to install (comma-separated)
     plugins: ""
@@ -358,10 +358,10 @@ dockge:
   port: 5001
   stacks_dir: "/opt/dockge/stacks"
   data_dir: "/opt/dockge/data"
-  
-  # Initial admin credentials (change on first login!)
+
+  # Admin credentials (stored in vault)
   admin_username: "admin"
-  admin_password: "changeme"
+  admin_password: "{{ vault_dockge_credentials.password }}"
 
 # =============================================================================
 # SECURITY CONFIGURATION
@@ -873,7 +873,7 @@ control_grafana:
   version: "latest"
   port: 3000
   admin_user: "admin"
-  # Admin password stored in vault: vault_control_grafana_password
+  admin_password: "{{ vault_control_grafana_password }}"
   plugins: ""  # Comma-separated list
 
   # SMTP for alerts (optional)
@@ -897,8 +897,8 @@ control_netdata:
   enabled: true
   version: "latest"
   port: 19999
-  # API key for child nodes to connect (generate with: uuidgen)
-  stream_api_key: "11111111-2222-3333-4444-555555555555"
+  # API key for child nodes to connect (stored in vault)
+  stream_api_key: "{{ vault_netdata_stream_api_key }}"
 
 # Scanopy (Trivy) - Container security scanning
 control_scanopy:

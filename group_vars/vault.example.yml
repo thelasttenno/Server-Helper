@@ -105,6 +105,10 @@ vault_authentik_credentials:
 # Get token from: https://app.netdata.cloud → Connect Node
 vault_netdata_claim_token: ""
 
+# Netdata Stream API Key (for centralized metrics)
+# Generate with: uuidgen
+vault_netdata_stream_api_key: "11111111-2222-3333-4444-555555555555"
+
 # Uptime Kuma Push Monitor URLs
 # Create monitors in Uptime Kuma UI, then add URLs here
 vault_uptime_kuma_push_urls:

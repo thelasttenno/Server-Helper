@@ -138,7 +138,7 @@ vault_authentik_credentials:
 For services without native OAuth support (Netdata, Uptime Kuma, etc.):
 
 1. Create a Proxy Provider in Authentik
-2. Configure your reverse proxy (Traefik/Nginx) to forward auth to Authentik
+2. Configure your reverse proxy (Traefik) to forward auth to Authentik
 3. Authentik will handle authentication before passing requests to your service
 
 ## Files Created

@@ -92,7 +92,7 @@ Edit config file → Run one command → Have coffee
 │  └──────────────┘  └──────────────┘  └──────────────┘     │
 │                                                              │
 │  ┌──────────────────────────────────────────────────┐      │
-│  │  Optional: Traefik/Nginx Proxy Manager          │      │
+│  │  Optional: Traefik Reverse Proxy                │      │
 │  │  Optional: Authentik (SSO & Identity)           │      │
 │  └──────────────────────────────────────────────────┘      │
 └─────────────────────────────────────────────────────────────┘
@@ -110,7 +110,7 @@ Edit config file → Run one command → Have coffee
 - **Semaphore UI**: Web-based Ansible automation & playbook execution (~100MB RAM) (optional)
 - **Pi-hole + Unbound**: DNS & ad-blocking (~150MB RAM) (optional)
 - **Watchtower**: Auto-update containers (optional)
-- **Traefik/Nginx**: Reverse proxy (optional)
+- **Traefik**: Reverse proxy (optional)
 - **Authentik**: Identity provider & SSO (optional)
 
 **Total RAM**: ~550-800MB + containers (depending on enabled services)
@@ -1507,7 +1507,7 @@ semaphore:
 1. **Change Default Password**: Immediately after first login
 2. **Use Strong Encryption Key**: Never change `vault_semaphore_access_key_encryption` after initial setup
 3. **Limit Network Access**: Use firewall rules to restrict Semaphore port
-4. **Enable HTTPS**: Use reverse proxy (Traefik/Nginx) with SSL
+4. **Enable HTTPS**: Use reverse proxy (Traefik) with SSL
 5. **Regular Backups**: Backup Semaphore database regularly
 6. **LDAP/SSO**: Integrate with Authentik or LDAP for enterprise auth
 

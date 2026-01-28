@@ -8,97 +8,97 @@ A comprehensive overview of Server Helper's architecture, components, and how th
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           SERVER HELPER v1.0.0                               │
-│                                                                              │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│                           SERVER HELPER v1.0.0                              │
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────── ─┐   │
 │  │                         REVERSE PROXY LAYER                          │   │
 │  │                                                                      │   │
-│  │  ┌──────────────────────────────────────────────────────────────┐  │   │
-│  │  │                        TRAEFIK                                │  │   │
-│  │  │                                                               │  │   │
-│  │  │  Entrypoints:         Certificate Resolvers:                  │  │   │
-│  │  │    - :80 (web)          - letsencrypt (public domains)       │  │   │
-│  │  │    - :443 (websecure)   - step-ca (internal domains)         │  │   │
-│  │  │    - :8080 (dashboard)                                        │  │   │
-│  │  │                                                               │  │   │
-│  │  │  Middlewares: security-headers, rate-limit, internal-only    │  │   │
-│  │  └──────────────────────────────────────────────────────────────┘  │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                    │                                         │
-│  ┌─────────────────────────────────┼─────────────────────────────────────┐ │
+│  │  ┌────────────────────────────────────────────────────────────────┐  │   │
+│  │  │                        TRAEFIK                                 │  │   │
+│  │  │                                                                │  │   │
+│  │  │  Entrypoints:         Certificate Resolvers:                   │  │   │
+│  │  │    - :80 (web)          - letsencrypt (public domains)         │  │   │
+│  │  │    - :443 (websecure)   - step-ca (internal domains)           │  │   │
+│  │  │    - :8080 (dashboard)                                         │  │   │
+│  │  │                                                                │  │   │
+│  │  │  Middlewares: security-headers, rate-limit, internal-only      │  │   │
+│  │  └────────────────────────────────────────────────────────────────┘  │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                    │                                        │
+│  ┌─────────────────────────────────┼──────────────────────────────────────┐ │
 │  │                                 ▼                                      │ │
-│  │  ┌─────────────────────────────────────────────────────────────────┐ │ │
-│  │  │                    CERTIFICATE AUTHORITY                         │ │ │
-│  │  │                                                                  │ │ │
-│  │  │  ┌─────────────────┐              ┌─────────────────┐          │ │ │
-│  │  │  │  Let's Encrypt  │              │  Smallstep CA   │          │ │ │
-│  │  │  │  (External)     │              │  (Self-Hosted)  │          │ │ │
-│  │  │  │                 │              │                 │          │ │ │
-│  │  │  │  Public domains │              │ Internal domains│          │ │ │
-│  │  │  │  via DNS-01     │              │ via ACME        │          │ │ │
-│  │  │  └─────────────────┘              └─────────────────┘          │ │ │
-│  │  └─────────────────────────────────────────────────────────────────┘ │ │
-│  └───────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │  ┌───────────────────────────────────────────────────────────────────┐ │ │
+│  │  │                    CERTIFICATE AUTHORITY                          │ │ │
+│  │  │                                                                   │ │ │
+│  │  │  ┌─────────────────┐              ┌─────────────────┐             │ │ │
+│  │  │  │  Let's Encrypt  │              │  Smallstep CA   │             │ │ │
+│  │  │  │  (External)     │              │  (Self-Hosted)  │             │ │ │
+│  │  │  │                 │              │                 │             │ │ │
+│  │  │  │  Public domains │              │ Internal domains│             │ │ │
+│  │  │  │  via DNS-01     │              │ via ACME        │             │ │ │
+│  │  │  └─────────────────┘              └─────────────────┘             │ │ │
+│  │  └───────────────────────────────────────────────────────────────────┘ │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │                         APPLICATION LAYER                              │ │
 │  │                                                                        │ │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                │ │
-│  │  │   DOCKGE     │  │   NETDATA    │  │ UPTIME KUMA  │                │ │
-│  │  │   :5001      │  │   :19999     │  │   :3001      │                │ │
-│  │  │              │  │              │  │              │                │ │
-│  │  │ Container    │  │ System       │  │ Uptime       │                │ │
-│  │  │ Management   │  │ Metrics      │  │ Monitoring   │                │ │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘                │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                  │ │
+│  │  │   DOCKGE     │  │   NETDATA    │  │ UPTIME KUMA  │                  │ │
+│  │  │   :5001      │  │   :19999     │  │   :3001      │                  │ │
+│  │  │              │  │              │  │              │                  │ │
+│  │  │ Container    │  │ System       │  │ Uptime       │                  │ │
+│  │  │ Management   │  │ Metrics      │  │ Monitoring   │                  │ │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘                  │ │
 │  │                                                                        │ │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                │ │
-│  │  │    LOKI      │  │   GRAFANA    │  │   PI-HOLE    │                │ │
-│  │  │   :3100      │  │   :3000      │  │   :53/:8080  │                │ │
-│  │  │              │  │              │  │              │                │ │
-│  │  │ Log          │  │ Dashboards   │  │ DNS +        │                │ │
-│  │  │ Aggregation  │  │ Visualization│  │ Ad-blocking  │                │ │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘                │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                  │ │
+│  │  │    LOKI      │  │   GRAFANA    │  │   PI-HOLE    │                  │ │
+│  │  │   :3100      │  │   :3000      │  │   :53/:8080  │                  │ │
+│  │  │              │  │              │  │              │                  │ │
+│  │  │ Log          │  │ Dashboards   │  │ DNS +        │                  │ │
+│  │  │ Aggregation  │  │ Visualization│  │ Ad-blocking  │                  │ │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘                  │ │
 │  │                                                                        │ │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                │ │
-│  │  │  AUTHENTIK   │  │  SEMAPHORE   │  │   UNBOUND    │                │ │
-│  │  │ :9000/:9443  │  │   :3000      │  │   :5335      │                │ │
-│  │  │              │  │              │  │              │                │ │
-│  │  │ SSO +        │  │ Ansible      │  │ Recursive    │                │ │
-│  │  │ Identity     │  │ Web UI       │  │ DNS          │                │ │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘                │ │
-│  └───────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                  │ │
+│  │  │  AUTHENTIK   │  │  SEMAPHORE   │  │   UNBOUND    │                  │ │
+│  │  │ :9000/:9443  │  │   :3000      │  │   :5335      │                  │ │
+│  │  │              │  │              │  │              │                  │ │
+│  │  │ SSO +        │  │ Ansible      │  │ Recursive    │                  │ │
+│  │  │ Identity     │  │ Web UI       │  │ DNS          │                  │ │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘                  │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │                         SYSTEM LAYER                                   │ │
 │  │                                                                        │ │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                │ │
-│  │  │   RESTIC     │  │    LYNIS     │  │  FAIL2BAN    │                │ │
-│  │  │              │  │              │  │              │                │ │
-│  │  │ Encrypted    │  │ Security     │  │ Intrusion    │                │ │
-│  │  │ Backups      │  │ Auditing     │  │ Prevention   │                │ │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘                │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                  │ │
+│  │  │   RESTIC     │  │    LYNIS     │  │  FAIL2BAN    │                  │ │
+│  │  │              │  │              │  │              │                  │ │
+│  │  │ Encrypted    │  │ Security     │  │ Intrusion    │                  │ │
+│  │  │ Backups      │  │ Auditing     │  │ Prevention   │                  │ │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘                  │ │
 │  │                                                                        │ │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                │ │
-│  │  │     UFW      │  │   DOCKER     │  │ ANSIBLE-PULL │                │ │
-│  │  │              │  │              │  │              │                │ │
-│  │  │ Firewall     │  │ Container    │  │ Self-Update  │                │ │
-│  │  │              │  │ Runtime      │  │              │                │ │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘                │ │
-│  └───────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                  │ │
+│  │  │     UFW      │  │   DOCKER     │  │ ANSIBLE-PULL │                  │ │
+│  │  │              │  │              │  │              │                  │ │
+│  │  │ Firewall     │  │ Container    │  │ Self-Update  │                  │ │
+│  │  │              │  │ Runtime      │  │              │                  │ │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘                  │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │                         STORAGE LAYER                                  │ │
 │  │                                                                        │ │
-│  │  ┌──────────────────────────────────────────────────────────────────┐ │ │
+│  │  ┌───────────────────────────────────────────────────────────────────┐ │ │
 │  │  │                     BACKUP DESTINATIONS                           │ │ │
 │  │  │                                                                   │ │ │
-│  │  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐            │ │ │
-│  │  │  │   NAS   │  │  AWS S3 │  │   B2    │  │  Local  │            │ │ │
-│  │  │  │  (CIFS) │  │         │  │         │  │         │            │ │ │
-│  │  │  └─────────┘  └─────────┘  └─────────┘  └─────────┘            │ │ │
-│  │  └──────────────────────────────────────────────────────────────────┘ │ │
-│  └───────────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────────────┘
+│  │  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐               │ │ │
+│  │  │  │   NAS   │  │  AWS S3 │  │   B2    │  │  Local  │               │ │ │
+│  │  │  │  (CIFS) │  │         │  │         │  │         │               │ │ │
+│  │  │  └─────────┘  └─────────┘  └─────────┘  └─────────┘               │ │ │
+│  │  └───────────────────────────────────────────────────────────────────┘ │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -109,11 +109,11 @@ A comprehensive overview of Server Helper's architecture, components, and how th
 
 **Traefik** handles all incoming traffic:
 
-| Component | Port | Purpose |
-|-----------|------|---------|
-| Web Entrypoint | 80 | HTTP (redirects to HTTPS) |
-| WebSecure Entrypoint | 443 | HTTPS with TLS |
-| Dashboard | 8080 | Traefik management UI |
+| Component            | Port | Purpose                   |
+| -------------------- | ---- | ------------------------- |
+| Web Entrypoint       | 80   | HTTP (redirects to HTTPS) |
+| WebSecure Entrypoint | 443  | HTTPS with TLS            |
+| Dashboard            | 8080 | Traefik management UI     |
 
 **Certificate Resolvers:**
 
@@ -123,12 +123,14 @@ A comprehensive overview of Server Helper's architecture, components, and how th
 ### Certificate Authority Layer
 
 **Let's Encrypt (External):**
+
 - Public domains (`*.example.com`)
 - DNS-01 challenge via Cloudflare/Route53/etc.
 - 90-day certificates, auto-renewed
 - Browser-trusted by default
 
 **Smallstep CA (Self-Hosted):**
+
 - Internal domains (`*.internal`)
 - ACME protocol for Traefik integration
 - 30-day certificates, auto-renewed
@@ -136,29 +138,29 @@ A comprehensive overview of Server Helper's architecture, components, and how th
 
 ### Application Layer
 
-| Service | Port | Purpose | RAM |
-|---------|------|---------|-----|
-| Dockge | 5001 | Container stack management | ~50MB |
-| Netdata | 19999 | System metrics and monitoring | ~100MB |
-| Uptime Kuma | 3001 | Uptime monitoring and alerting | ~50MB |
-| Loki | 3100 | Log aggregation | ~150MB |
-| Grafana | 3000 | Dashboards and visualization | ~200MB |
-| Pi-hole | 53, 8080 | DNS and ad-blocking | ~100MB |
-| Unbound | 5335 | Recursive DNS resolver | ~50MB |
-| Authentik | 9000, 9443 | SSO and identity provider | ~300MB |
-| Semaphore | 3000 | Ansible web UI | ~100MB |
-| Smallstep CA | 9000 | Internal certificate authority | ~128MB |
+| Service      | Port       | Purpose                        | RAM    |
+| ------------ | ---------- | ------------------------------ | ------ |
+| Dockge       | 5001       | Container stack management     | ~50MB  |
+| Netdata      | 19999      | System metrics and monitoring  | ~100MB |
+| Uptime Kuma  | 3001       | Uptime monitoring and alerting | ~50MB  |
+| Loki         | 3100       | Log aggregation                | ~150MB |
+| Grafana      | 3000       | Dashboards and visualization   | ~200MB |
+| Pi-hole      | 53, 8080   | DNS and ad-blocking            | ~100MB |
+| Unbound      | 5335       | Recursive DNS resolver         | ~50MB  |
+| Authentik    | 9000, 9443 | SSO and identity provider      | ~300MB |
+| Semaphore    | 3000       | Ansible web UI                 | ~100MB |
+| Smallstep CA | 9000       | Internal certificate authority | ~128MB |
 
 ### System Layer
 
-| Service | Purpose | Type |
-|---------|---------|------|
-| Restic | Encrypted, deduplicated backups | Systemd Timer |
-| Lynis | Security auditing | Systemd Timer |
-| fail2ban | Intrusion prevention | Systemd Service |
-| UFW | Firewall management | Systemd Service |
-| Docker | Container runtime | Systemd Service |
-| ansible-pull | Self-updating | Systemd Timer |
+| Service      | Purpose                         | Type            |
+| ------------ | ------------------------------- | --------------- |
+| Restic       | Encrypted, deduplicated backups | Systemd Timer   |
+| Lynis        | Security auditing               | Systemd Timer   |
+| fail2ban     | Intrusion prevention            | Systemd Service |
+| UFW          | Firewall management             | Systemd Service |
+| Docker       | Container runtime               | Systemd Service |
+| ansible-pull | Self-updating                   | Systemd Timer   |
 
 ---
 
@@ -461,25 +463,25 @@ Server-Helper/
 
 ### Minimum Requirements
 
-| Component | RAM | CPU | Disk |
-|-----------|-----|-----|------|
-| Docker | 100MB | 0.1 | 5GB |
-| Dockge | 50MB | 0.1 | 100MB |
-| Netdata | 100MB | 0.2 | 500MB |
-| Uptime Kuma | 50MB | 0.1 | 100MB |
+| Component              | RAM             | CPU           | Disk          |
+| ---------------------- | --------------- | ------------- | ------------- |
+| Docker                 | 100MB           | 0.1           | 5GB           |
+| Dockge                 | 50MB            | 0.1           | 100MB         |
+| Netdata                | 100MB           | 0.2           | 500MB         |
+| Uptime Kuma            | 50MB            | 0.1           | 100MB         |
 | **Total (Core)** | **300MB** | **0.5** | **6GB** |
 
 ### Full Stack Requirements
 
-| Component | RAM | CPU | Disk |
-|-----------|-----|-----|------|
-| Core Services | 300MB | 0.5 | 6GB |
-| Loki + Grafana | 350MB | 0.3 | 10GB |
-| Pi-hole + Unbound | 150MB | 0.2 | 1GB |
-| Smallstep CA | 128MB | 0.1 | 500MB |
-| Traefik | 50MB | 0.1 | 100MB |
-| Authentik | 300MB | 0.3 | 2GB |
-| Semaphore | 100MB | 0.1 | 1GB |
+| Component              | RAM              | CPU            | Disk            |
+| ---------------------- | ---------------- | -------------- | --------------- |
+| Core Services          | 300MB            | 0.5            | 6GB             |
+| Loki + Grafana         | 350MB            | 0.3            | 10GB            |
+| Pi-hole + Unbound      | 150MB            | 0.2            | 1GB             |
+| Smallstep CA           | 128MB            | 0.1            | 500MB           |
+| Traefik                | 50MB             | 0.1            | 100MB           |
+| Authentik              | 300MB            | 0.3            | 2GB             |
+| Semaphore              | 100MB            | 0.1            | 1GB             |
 | **Total (Full)** | **~1.5GB** | **~1.5** | **~20GB** |
 
 ---

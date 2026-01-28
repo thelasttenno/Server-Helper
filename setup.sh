@@ -469,18 +469,18 @@ prompt_target_nodes() {
 
     # Check if adding to existing config
     if [[ "${USE_EXISTING_CONFIG:-}" == true ]] && [[ ${#EXISTING_HOSTNAMES[@]} -gt 0 ]]; then
-        print_info "Adding New Target Servers"
-        print_info "You have ${#EXISTING_HOSTNAMES[@]} existing server(s) configured"
+        print_info "Adding New Servers"
+        print_info "You already have ${#EXISTING_HOSTNAMES[@]} server(s) configured:"
         echo
-        echo -e "${BOLD}Existing servers:${NC}"
+        echo -e "${BOLD}Currently managed servers:${NC}"
         for i in "${!EXISTING_HOSTNAMES[@]}"; do
             echo "  - ${EXISTING_HOSTNAMES[$i]} (${EXISTING_HOSTS[$i]})"
         done
         echo
-        print_info "Enter details for NEW servers to add"
+        print_info "Now let's add your new servers"
     else
-        print_info "Target Server Configuration"
-        print_info "Enter details for servers you want to manage with Ansible"
+        print_info "Server Setup"
+        print_info "Tell us about the servers you want to manage"
     fi
     echo
 
@@ -491,9 +491,9 @@ prompt_target_nodes() {
 
     # Prompt for number of targets
     if [[ "${USE_EXISTING_CONFIG:-}" == true ]]; then
-        read -p "How many NEW target servers do you want to add? [1]: " NUM_TARGETS
+        read -p "How many new servers do you want to add? [1]: " NUM_TARGETS
     else
-        read -p "How many target servers do you want to configure? [1]: " NUM_TARGETS
+        read -p "How many servers do you want to manage? [1]: " NUM_TARGETS
     fi
     NUM_TARGETS=${NUM_TARGETS:-1}
 
@@ -505,29 +505,32 @@ prompt_target_nodes() {
 
     # SSH authentication method
     echo
-    echo -e "${BOLD}SSH Authentication:${NC}"
-    read -p "Use SSH key authentication? (recommended) (Y/n): " -r USE_SSH_KEYS_INPUT
+    echo -e "${BOLD}How to Connect to Servers:${NC}"
+    echo "  SSH keys are like a secure digital key that lets you connect without typing"
+    echo "  a password each time. This is more secure and convenient."
+    echo
+    read -p "Use secure key-based login? (recommended) (Y/n): " -r USE_SSH_KEYS_INPUT
     echo
     USE_SSH_KEYS=${USE_SSH_KEYS_INPUT:-y}
     USE_SSH_KEYS=$(echo "$USE_SSH_KEYS" | tr '[:upper:]' '[:lower:]')
 
     if [[ "$USE_SSH_KEYS" =~ ^[yY]([eE][sS])?$ ]]; then
         USE_SSH_KEYS="yes"
-        print_success "Using SSH key authentication"
+        print_success "Using secure key-based login"
 
         # Check if SSH key exists
         if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
-            print_warning "No SSH key found at ~/.ssh/id_rsa.pub"
-            read -p "Generate SSH key pair now? (Y/n): " -r GEN_KEY
+            print_warning "No SSH key found on this computer"
+            read -p "Create a new SSH key now? (Y/n): " -r GEN_KEY
             echo
             if [[ ! $GEN_KEY =~ ^[Nn]$ ]]; then
                 ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""
-                print_success "SSH key generated"
+                print_success "SSH key created"
             fi
         fi
     else
         USE_SSH_KEYS="no"
-        print_warning "Password authentication will be used (less secure)"
+        print_warning "Password login will be used (less secure, you'll type password each time)"
     fi
 
     # Collect target server details
@@ -536,50 +539,51 @@ prompt_target_nodes() {
         echo -e "${BOLD}Target Server $((i+1)) of ${NUM_TARGETS}:${NC}"
 
         # Hostname
-        read -p "Hostname/identifier [server-$(printf "%02d" $((i+1)))]: " TARGET_HOSTNAME
+        read -p "Friendly name for this server (used in dashboards) [server-$(printf "%02d" $((i+1)))]: " TARGET_HOSTNAME
         TARGET_HOSTNAME=${TARGET_HOSTNAME:-server-$(printf "%02d" $((i+1)))}
         TARGET_HOSTNAMES+=("$TARGET_HOSTNAME")
 
         # IP/Hostname
-        read -p "IP address or DNS name: " TARGET_HOST
+        read -p "Server address (IP like 192.168.1.10 or domain name): " TARGET_HOST
         while [[ -z "$TARGET_HOST" ]]; do
-            print_error "IP address or DNS name is required"
-            read -p "IP address or DNS name: " TARGET_HOST
+            print_error "Server address is required"
+            read -p "Server address (IP like 192.168.1.10 or domain name): " TARGET_HOST
         done
         TARGET_HOSTS+=("$TARGET_HOST")
 
         # SSH user
-        read -p "SSH username [ansible]: " TARGET_USER
+        read -p "Username to log into this server [ansible]: " TARGET_USER
         TARGET_USER=${TARGET_USER:-ansible}
         TARGET_USERS+=("$TARGET_USER")
 
         # Test SSH connectivity and copy keys if needed
-        print_info "Testing SSH connectivity to ${TARGET_HOST}..."
+        print_info "Testing connection to ${TARGET_HOST}..."
         if [[ "$USE_SSH_KEYS" == "yes" ]]; then
             if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}" "echo 'Connected'" &>/dev/null; then
-                print_success "SSH key already configured for ${TARGET_HOSTNAME}"
+                print_success "Can connect to ${TARGET_HOSTNAME} without password"
             else
-                print_warning "SSH key not configured for ${TARGET_HOSTNAME}"
-                read -p "Copy SSH key to ${TARGET_HOST} now? (requires password) (Y/n): " -r COPY_KEY
+                print_warning "Cannot connect to ${TARGET_HOSTNAME} yet - need to set up SSH key"
+                read -p "Set up passwordless login to ${TARGET_HOST} now? (you'll enter password once) (Y/n): " -r COPY_KEY
                 echo
                 if [[ ! $COPY_KEY =~ ^[Nn]$ ]]; then
-                    print_info "Copying SSH key to ${TARGET_USER}@${TARGET_HOST}..."
-                    print_info "You will be prompted for the password on ${TARGET_HOST}"
+                    print_info "Setting up secure login to ${TARGET_USER}@${TARGET_HOST}..."
+                    print_info "Enter the password for ${TARGET_USER} on ${TARGET_HOST} when prompted:"
                     if ssh-copy-id -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}"; then
-                        print_success "SSH key copied successfully to ${TARGET_HOSTNAME}"
+                        print_success "Passwordless login configured for ${TARGET_HOSTNAME}"
                     else
-                        print_error "Failed to copy SSH key to ${TARGET_HOSTNAME}"
-                        print_info "You may need to:"
-                        print_info "  1. Enable password auth on target: sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config && sudo systemctl restart sshd"
-                        print_info "  2. Or manually copy the key: ssh-copy-id ${TARGET_USER}@${TARGET_HOST}"
+                        print_error "Could not set up passwordless login to ${TARGET_HOSTNAME}"
+                        print_info "Possible fixes:"
+                        print_info "  1. Make sure the server allows password login temporarily"
+                        print_info "  2. Check that ${TARGET_USER} exists on the server"
+                        print_info "  3. Manually run: ssh-copy-id ${TARGET_USER}@${TARGET_HOST}"
                     fi
                 else
-                    print_warning "Skipping SSH key copy for ${TARGET_HOSTNAME}"
-                    print_info "You can manually run: ssh-copy-id ${TARGET_USER}@${TARGET_HOST}"
+                    print_warning "Skipping SSH key setup for ${TARGET_HOSTNAME}"
+                    print_info "You can set it up later with: ssh-copy-id ${TARGET_USER}@${TARGET_HOST}"
                 fi
             fi
         else
-            print_warning "Skipping connectivity test (password auth mode)"
+            print_warning "Skipping connection test (using password login mode)"
         fi
     done
 
@@ -596,155 +600,290 @@ prompt_config() {
     echo
 
     # System configuration
-    echo -e "${BOLD}System Configuration:${NC}"
-    read -p "Default hostname prefix [server]: " HOSTNAME_PREFIX
+    echo -e "${BOLD}Basic Settings:${NC}"
+    echo "  Server names will start with this prefix (e.g., 'web' gives web-01, web-02)"
+    read -p "Server name prefix [server]: " HOSTNAME_PREFIX
     HOSTNAME_PREFIX=${HOSTNAME_PREFIX:-server}
 
-    read -p "Timezone [America/New_York]: " TIMEZONE
-    TIMEZONE=${TIMEZONE:-America/New_York}
+    echo
+    echo "  Your timezone for logs and scheduled tasks (e.g., America/Los_Angeles, Europe/London)"
+    read -p "Timezone [America/Vancouver]: " TIMEZONE
+    TIMEZONE=${TIMEZONE:-America/Vancouver}
 
     # NAS configuration
     echo
-    echo -e "${BOLD}NAS Configuration:${NC}"
-    read -p "Enable NAS mounts? (y/N): " -r ENABLE_NAS
+    echo -e "${BOLD}Network Storage (NAS):${NC}"
+    echo "  A NAS is a network-attached storage device (like a Synology or QNAP)"
+    echo "  that can store backups and shared files on your local network."
+    echo
+    read -p "Do you have a NAS to connect to? (y/N): " -r ENABLE_NAS
     echo
     ENABLE_NAS=${ENABLE_NAS:-n}
 
     if [[ $ENABLE_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then
-        read -p "NAS IP address [192.168.1.100]: " NAS_IP
+        read -p "NAS address (IP like 192.168.1.100) [192.168.1.100]: " NAS_IP
         NAS_IP=${NAS_IP:-192.168.1.100}
 
-        read -p "NAS share name [backup]: " NAS_SHARE
+        read -p "Shared folder name on the NAS [backup]: " NAS_SHARE
         NAS_SHARE=${NAS_SHARE:-backup}
 
-        read -p "NAS mount point [/mnt/nas/backup]: " NAS_MOUNT
+        read -p "Where to access NAS files on your server [/mnt/nas/backup]: " NAS_MOUNT
         NAS_MOUNT=${NAS_MOUNT:-/mnt/nas/backup}
 
-        read -p "NAS username: " NAS_USER
-        read -sp "NAS password: " NAS_PASS
+        read -p "NAS login username: " NAS_USER
+        read -sp "NAS login password: " NAS_PASS
         echo
     fi
 
     # Backup configuration
     echo
-    echo -e "${BOLD}Backup Configuration:${NC}"
-    read -p "Enable backups (Restic)? (Y/n): " -r ENABLE_BACKUPS
+    echo -e "${BOLD}Automatic Backups:${NC}"
+    echo "  Restic creates encrypted, deduplicated backups of your important files."
+    echo "  Backups can be stored locally, on NAS, or in cloud storage (AWS S3)."
+    echo
+    read -p "Enable automatic backups? (Y/n): " -r ENABLE_BACKUPS
     echo
     ENABLE_BACKUPS=${ENABLE_BACKUPS:-y}
 
     if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then
-        read -p "Backup schedule (cron format) [0 2 * * *]: " BACKUP_SCHEDULE
+        echo "  When should backups run? Default is 2:00 AM daily."
+        echo "  Format: minute hour day month weekday (cron format)"
+        echo "  Examples: '0 2 * * *' = 2:00 AM daily, '0 3 * * 0' = 3:00 AM Sundays"
+        read -p "Backup schedule [0 2 * * *]: " BACKUP_SCHEDULE
         BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}
 
-        read -p "Enable NAS backup destination? (Y/n): " -r BACKUP_NAS
+        echo
+        read -p "Save backups to your NAS? (Y/n): " -r BACKUP_NAS
         echo
         BACKUP_NAS=${BACKUP_NAS:-y}
 
         if [[ $BACKUP_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then
-            read -sp "Restic NAS repository password: " RESTIC_NAS_PASS
+            echo "  Create a password to encrypt your NAS backups (remember this!):"
+            read -sp "Backup encryption password for NAS: " RESTIC_NAS_PASS
             echo
         fi
 
-        read -p "Enable local backup destination? (Y/n): " -r BACKUP_LOCAL
+        read -p "Save backups on the server itself? (Y/n): " -r BACKUP_LOCAL
         echo
         BACKUP_LOCAL=${BACKUP_LOCAL:-y}
 
         if [[ $BACKUP_LOCAL =~ ^[Yy]([Ee][Ss])?$ ]]; then
-            read -sp "Restic local repository password: " RESTIC_LOCAL_PASS
+            echo "  Create a password to encrypt your local backups (remember this!):"
+            read -sp "Backup encryption password for local storage: " RESTIC_LOCAL_PASS
             echo
         fi
 
-        read -p "Enable S3 backup destination? (y/N): " -r BACKUP_S3
+        echo
+        echo "  AWS S3 provides offsite cloud backup storage (requires AWS account)."
+        read -p "Save backups to Amazon S3 cloud storage? (y/N): " -r BACKUP_S3
         echo
         BACKUP_S3=${BACKUP_S3:-n}
 
         if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then
-            read -p "S3 bucket name: " S3_BUCKET
-            read -p "S3 region [us-east-1]: " S3_REGION
+            read -p "S3 bucket name (the storage container name in AWS): " S3_BUCKET
+            read -p "AWS region where bucket is located [us-east-1]: " S3_REGION
             S3_REGION=${S3_REGION:-us-east-1}
-            read -p "AWS access key ID: " AWS_ACCESS_KEY
-            read -sp "AWS secret access key: " AWS_SECRET_KEY
+            read -p "AWS Access Key ID (from your AWS account): " AWS_ACCESS_KEY
+            read -sp "AWS Secret Access Key: " AWS_SECRET_KEY
             echo
-            read -sp "Restic S3 repository password: " RESTIC_S3_PASS
+            echo "  Create a password to encrypt your cloud backups (remember this!):"
+            read -sp "Backup encryption password for S3: " RESTIC_S3_PASS
             echo
         fi
     fi
 
     # Monitoring configuration
     echo
-    echo -e "${BOLD}Monitoring Configuration:${NC}"
-    read -p "Enable Netdata? (Y/n): " -r ENABLE_NETDATA
+    echo -e "${BOLD}Server Monitoring (Netdata):${NC}"
+    echo "  Netdata shows real-time CPU, memory, disk, and network usage in a"
+    echo "  beautiful web dashboard. Great for spotting problems before they happen."
+    echo
+    read -p "Enable server monitoring dashboard? (Y/n): " -r ENABLE_NETDATA
     echo
     ENABLE_NETDATA=${ENABLE_NETDATA:-y}
 
     if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then
-        read -p "Netdata port [19999]: " NETDATA_PORT
+        echo "  Port number for the monitoring dashboard (access via http://server:PORT)"
+        read -p "Monitoring dashboard port [19999]: " NETDATA_PORT
         NETDATA_PORT=${NETDATA_PORT:-19999}
 
-        read -p "Netdata Cloud claim token (optional): " NETDATA_CLAIM_TOKEN
+        echo
+        echo "  Netdata Cloud lets you view all servers from app.netdata.cloud (optional)"
+        echo "  Get a claim token from https://app.netdata.cloud (leave empty to skip)"
+        read -p "Netdata Cloud token (press Enter to skip): " NETDATA_CLAIM_TOKEN
     fi
 
     # Logging configuration
     echo
-    echo -e "${BOLD}Logging Configuration:${NC}"
-    read -p "Enable Loki + Promtail + Grafana logging stack? (Y/n): " -r ENABLE_LOGGING
+    echo -e "${BOLD}Log Collection & Visualization:${NC}"
+    echo "  This installs a complete logging system:"
+    echo "  - Promtail: Collects logs from your containers and system"
+    echo "  - Loki: Stores and indexes all your logs"
+    echo "  - Grafana: Beautiful dashboards to search and visualize logs"
+    echo
+    read -p "Enable log collection and dashboards? (Y/n): " -r ENABLE_LOGGING
     echo
     ENABLE_LOGGING=${ENABLE_LOGGING:-y}
 
     if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then
-        read -p "Grafana port [3000]: " GRAFANA_PORT
+        echo "  Grafana is where you'll view your logs and create dashboards"
+        read -p "Grafana dashboard port [3000]: " GRAFANA_PORT
         GRAFANA_PORT=${GRAFANA_PORT:-3000}
 
-        read -p "Loki port [3100]: " LOKI_PORT
+        echo "  Set a password for the Grafana admin account (username: admin)"
+        read -sp "Grafana admin password [auto-generate]: " GRAFANA_ADMIN_PASSWORD
+        echo
+        if [[ -z "$GRAFANA_ADMIN_PASSWORD" ]]; then
+            GRAFANA_ADMIN_PASSWORD=$(openssl rand -base64 16)
+            print_info "Generated Grafana admin password (will be shown at end)"
+        fi
+
+        echo "  Loki is the log storage backend (usually doesn't need changing)"
+        read -p "Loki log storage port [3100]: " LOKI_PORT
         LOKI_PORT=${LOKI_PORT:-3100}
     fi
 
     # Note: Centralized monitoring (Uptime Kuma, central Grafana/Loki/Netdata)
     # is installed on command node via setup-control.yml after target setup
 
+    # Note: DNS (Pi-hole + Unbound) is a centralized service
+    # and will be configured in the control node setup phase
+
     # Container management
     echo
-    echo -e "${BOLD}Container Management:${NC}"
-    read -p "Enable Dockge? (Y/n): " -r ENABLE_DOCKGE
+    echo -e "${BOLD}Docker Container Manager (Dockge):${NC}"
+    echo "  Dockge is a simple web interface to manage your Docker containers."
+    echo "  Start, stop, view logs, and deploy new apps - all from your browser."
+    echo
+    read -p "Enable container management dashboard? (Y/n): " -r ENABLE_DOCKGE
     echo
     ENABLE_DOCKGE=${ENABLE_DOCKGE:-y}
 
     if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then
-        read -p "Dockge port [5001]: " DOCKGE_PORT
+        read -p "Container manager port [5001]: " DOCKGE_PORT
         DOCKGE_PORT=${DOCKGE_PORT:-5001}
+
+        echo "  Set a password for the Dockge admin account (username: admin)"
+        read -sp "Dockge admin password [auto-generate]: " DOCKGE_ADMIN_PASSWORD
+        echo
+        if [[ -z "$DOCKGE_ADMIN_PASSWORD" ]]; then
+            DOCKGE_ADMIN_PASSWORD=$(openssl rand -base64 16)
+            print_info "Generated Dockge admin password (will be shown at end)"
+        fi
     fi
 
     # Security configuration
     echo
-    echo -e "${BOLD}Security Configuration:${NC}"
-    read -p "Enable fail2ban? (Y/n): " -r ENABLE_FAIL2BAN
+    echo -e "${BOLD}Security Settings:${NC}"
+    echo
+    echo "  Fail2ban automatically blocks IP addresses that try to break into your server"
+    echo "  (e.g., after too many failed login attempts)."
+    read -p "Enable automatic intrusion blocking? (Y/n): " -r ENABLE_FAIL2BAN
     echo
     ENABLE_FAIL2BAN=${ENABLE_FAIL2BAN:-y}
 
-    read -p "Enable UFW firewall? (Y/n): " -r ENABLE_UFW
+    echo "  UFW (Uncomplicated Firewall) blocks unwanted network connections and only"
+    echo "  allows traffic to services you've enabled (SSH, web dashboards, etc.)."
+    read -p "Enable firewall protection? (Y/n): " -r ENABLE_UFW
     echo
     ENABLE_UFW=${ENABLE_UFW:-y}
 
-    read -p "Enable SSH hardening? (Y/n): " -r ENABLE_SSH_HARDENING
+    echo "  SSH hardening makes remote login more secure by disabling weak options."
+    read -p "Enable secure remote login settings? (Y/n): " -r ENABLE_SSH_HARDENING
     echo
     ENABLE_SSH_HARDENING=${ENABLE_SSH_HARDENING:-y}
 
     if [[ $ENABLE_SSH_HARDENING =~ ^[Yy]([Ee][Ss])?$ ]]; then
-        read -p "SSH port [22]: " SSH_PORT
+        echo "  Port 22 is the default. Changing it can reduce automated attacks,"
+        echo "  but you'll need to remember to use the new port when connecting."
+        read -p "Remote login (SSH) port [22]: " SSH_PORT
         SSH_PORT=${SSH_PORT:-22}
 
-        read -p "Disable SSH password authentication? (Y/n): " -r SSH_NO_PASSWORD
+        echo
+        echo "  Disabling password login means only SSH keys can be used (more secure)."
+        echo "  Make sure your SSH key is working before enabling this!"
+        read -p "Require key-based login only (disable passwords)? (Y/n): " -r SSH_NO_PASSWORD
         echo
         SSH_NO_PASSWORD=${SSH_NO_PASSWORD:-y}
 
-        read -p "Disable SSH root login? (Y/n): " -r SSH_NO_ROOT
+        echo "  Disabling root login forces users to log in with a regular account first."
+        read -p "Block direct root login? (Y/n): " -r SSH_NO_ROOT
         echo
         SSH_NO_ROOT=${SSH_NO_ROOT:-y}
     fi
 
-    read -p "Enable Lynis security scanning? (Y/n): " -r ENABLE_LYNIS
+    echo "  Lynis scans your server for security issues and gives recommendations."
+    read -p "Enable weekly security scans? (Y/n): " -r ENABLE_LYNIS
     echo
     ENABLE_LYNIS=${ENABLE_LYNIS:-y}
+
+    # Advanced Services Section
+    echo
+    echo -e "${BOLD}Advanced Services (Optional):${NC}"
+    echo "  These are optional advanced services. Press Enter to skip if unsure."
+    echo
+
+    # System Users Configuration
+    echo -e "${BOLD}System User Management:${NC}"
+    echo "  Create a dedicated admin user on target servers for better security."
+    read -p "Create a dedicated admin user? (y/N): " -r ENABLE_SYSTEM_USERS
+    echo
+    ENABLE_SYSTEM_USERS=${ENABLE_SYSTEM_USERS:-n}
+
+    if [[ $ENABLE_SYSTEM_USERS =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        read -p "Admin username [admin]: " ADMIN_USERNAME
+        ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+
+        echo "  Set password for admin user:"
+        read -sp "Admin password: " ADMIN_PASSWORD
+        echo
+
+        read -p "Admin SSH public key (press Enter to skip): " ADMIN_SSH_KEY
+    fi
+
+    # LVM Configuration
+    echo
+    echo -e "${BOLD}Disk Management (LVM):${NC}"
+    echo "  Auto-extend Ubuntu LVM to use full disk space."
+    read -p "Enable auto LVM extension? (Y/n): " -r ENABLE_LVM_CONFIG
+    echo
+    ENABLE_LVM_CONFIG=${ENABLE_LVM_CONFIG:-y}
+
+    # Self-Update (Ansible Pull)
+    echo
+    echo -e "${BOLD}Self-Update (Ansible Pull):${NC}"
+    echo "  Automatically keep your server configuration up to date."
+    echo "  Runs daily to pull latest changes from your Git repository."
+    read -p "Enable automatic self-updates? (Y/n): " -r ENABLE_SELF_UPDATE
+    echo
+    ENABLE_SELF_UPDATE=${ENABLE_SELF_UPDATE:-y}
+
+    if [[ $ENABLE_SELF_UPDATE =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        echo "  When should self-updates run? (default: 5:00 AM daily)"
+        read -p "Update schedule [0 5 * * *]: " SELF_UPDATE_SCHEDULE
+        SELF_UPDATE_SCHEDULE=${SELF_UPDATE_SCHEDULE:-0 5 * * *}
+
+        read -p "Check only (don't apply changes)? (y/N): " -r SELF_UPDATE_CHECK_ONLY
+        SELF_UPDATE_CHECK_ONLY=${SELF_UPDATE_CHECK_ONLY:-n}
+    fi
+
+    # Note: DNS, Traefik, Watchtower, Authentik, Step-CA, and Semaphore are
+    # centralized services configured in the control node setup phase
+
+    # Uptime Kuma on Target Nodes
+    echo
+    echo -e "${BOLD}Uptime Kuma (Local Monitoring):${NC}"
+    echo "  Install Uptime Kuma on target servers for local uptime monitoring."
+    echo "  (Central Uptime Kuma is installed separately on control node)"
+    echo
+    read -p "Enable Uptime Kuma on target servers? (y/N): " -r ENABLE_UPTIME_KUMA
+    echo
+    ENABLE_UPTIME_KUMA=${ENABLE_UPTIME_KUMA:-n}
+
+    if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        read -p "Uptime Kuma port [3001]: " UPTIME_KUMA_PORT
+        UPTIME_KUMA_PORT=${UPTIME_KUMA_PORT:-3001}
+    fi
 
     # Inventory configuration
     echo
@@ -957,6 +1096,7 @@ logging:
     version: latest
     port: ${GRAFANA_PORT:-3000}
     admin_user: admin
+    admin_password: "{{ vault_grafana_admin_password }}"
     plugins: ""
     smtp:
       enabled: false
@@ -983,6 +1123,7 @@ security:
 $(if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${DOCKGE_PORT}"; fi)
 $(if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${NETDATA_PORT}"; fi)
 $(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${GRAFANA_PORT}"; echo "    - ${LOKI_PORT}"; fi)
+$(if [[ ${ENABLE_UPTIME_KUMA:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${UPTIME_KUMA_PORT:-3001}"; fi)
 
   ssh_hardening: $(if [[ $ENABLE_SSH_HARDENING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
   ssh_port: ${SSH_PORT:-22}
@@ -999,26 +1140,67 @@ $(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${GRAFANA_PORT
   auto_reboot: false
   auto_reboot_time: "03:00"
 
-# Optional Services
+# Note: DNS (Pi-hole + Unbound) is a centralized service
+# Configured during control node setup (offer_control_node_setup)
+dns:
+  enabled: false
+
+# System Users Configuration
+system_users:
+  create_admin_user: $(if [[ ${ENABLE_SYSTEM_USERS:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+$(if [[ ${ENABLE_SYSTEM_USERS:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOUSERS
+  admin_user: "${ADMIN_USERNAME:-admin}"
+  admin_password: "{{ vault_system_users.admin_password }}"
+  admin_groups:
+    - sudo
+    - docker
+  admin_passwordless_sudo: true
+  admin_ssh_key: "{{ vault_system_users.admin_ssh_key }}"
+EOUSERS
+fi)
+  disable_root_password: true
+
+# LVM Configuration
+lvm_config:
+  auto_extend_ubuntu: $(if [[ ${ENABLE_LVM_CONFIG:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  custom_lvs: []
+  create_lvs: []
+
+# Note: Authentik, Step-CA, and Semaphore are control node services
+# They are configured during control node setup (offer_control_node_setup)
+
+# Uptime Kuma (Local Instance)
+uptime_kuma:
+  enabled: $(if [[ ${ENABLE_UPTIME_KUMA:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  port: ${UPTIME_KUMA_PORT:-3001}
+
+# Lynis Security Auditing
+lynis:
+  enabled: $(if [[ ${ENABLE_LYNIS:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  schedule: "Sun *-*-* 03:00:00"
+  scan_dir: "/var/log/lynis"
+  retention_days: 90
+
+# Note: Watchtower is a centralized service
+# Configured during control node setup (offer_control_node_setup)
 watchtower:
   enabled: false
-  schedule: "0 4 * * *"
-  cleanup: true
-  monitor_only: false
 
+# Note: Reverse Proxy (Traefik) is a centralized service
+# Configured during control node setup (offer_control_node_setup)
 reverse_proxy:
   enabled: false
 
-# Self-Update Configuration
+# Self-Update Configuration (Ansible Pull)
 self_update:
-  enabled: true
-  schedule: "0 5 * * *"
+  enabled: $(if [[ ${ENABLE_SELF_UPDATE:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  schedule: "${SELF_UPDATE_SCHEDULE:-0 5 * * *}"
   git_repo: "https://github.com/thelasttenno/Server-Helper.git"
   branch: "main"
   version: "v1.0.0"
   playbook: "playbooks/setup.yml"
   log_file: "/var/log/ansible-pull.log"
-  check_only: false
+  check_only: $(if [[ ${SELF_UPDATE_CHECK_ONLY:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
 
 # Docker Configuration
 docker:
@@ -1127,7 +1309,7 @@ vault_b2_credentials:
 # Service Admin Credentials
 vault_dockge_credentials:
   username: "admin"
-  password: "changeme-on-first-login"
+  password: "${DOCKGE_ADMIN_PASSWORD:-changeme-on-first-login}"
 
 vault_uptime_kuma_credentials:
   username: "admin"
@@ -1135,12 +1317,13 @@ vault_uptime_kuma_credentials:
 
 # Monitoring & Observability
 vault_netdata_claim_token: "${NETDATA_CLAIM_TOKEN}"
+vault_netdata_stream_api_key: "${NETDATA_STREAM_API_KEY:-11111111-2222-3333-4444-555555555555}"
 
-# Grafana Admin Password (change on first login)
-vault_grafana_admin_password: "admin"
+# Grafana Admin Password
+vault_grafana_admin_password: "${GRAFANA_ADMIN_PASSWORD:-admin}"
 
 # Control Node Grafana (for centralized monitoring)
-vault_control_grafana_password: "admin"
+vault_control_grafana_password: "${CONTROL_GRAFANA_PASSWORD:-admin}"
 
 vault_uptime_kuma_push_urls:
   nas: ""
@@ -1167,12 +1350,13 @@ vault_telegram_credentials:
 
 vault_slack_webhook: ""
 
-# Reverse Proxy / SSL
-vault_letsencrypt_email: ""
+# System Users
+vault_system_users:
+  admin_password: "${ADMIN_PASSWORD:-}"
+  admin_ssh_key: "${ADMIN_SSH_KEY:-}"
 
-vault_cloudflare_credentials:
-  api_token: ""
-  zone_id: ""
+# Note: DNS, Traefik, Watchtower, Authentik, Step-CA, and Semaphore secrets
+# are added during control node setup via update_vault_for_control_services()
 EOF
 
     # Encrypt the vault file
@@ -1298,6 +1482,11 @@ run_playbook() {
         if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Restic Backups"; fi
         if [[ $ENABLE_FAIL2BAN =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - fail2ban (Security)"; fi
         if [[ $ENABLE_UFW =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - UFW Firewall"; fi
+        if [[ ${ENABLE_UPTIME_KUMA:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Uptime Kuma (Monitoring)"; fi
+        if [[ ${ENABLE_SYSTEM_USERS:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - System Users (Admin Account)"; fi
+        if [[ ${ENABLE_LVM_CONFIG:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - LVM Config (Disk Management)"; fi
+        if [[ ${ENABLE_NAS:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - NAS Mounts (Network Storage)"; fi
+        if [[ ${ENABLE_SELF_UPDATE:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Self-Update (Ansible Pull)"; fi
     elif [[ "${RERUN_EXISTING:-}" == true ]]; then
         echo "(Re-running with existing configuration from group_vars/all.yml)"
     fi
@@ -1351,29 +1540,204 @@ offer_control_node_setup() {
     echo "  - Grafana: Central dashboards for logs and metrics"
     echo "  - Loki: Aggregate logs from all target Promtail instances"
     echo "  - Netdata Parent: Aggregate metrics from all target Netdata instances"
-    echo "  - Scanopy/Trivy: Container security scanning"
-    echo "  - PruneMate: Automated Docker cleanup"
+    echo
+    echo "  ${BOLD}Centralized Infrastructure Services:${NC}"
+    echo "  - DNS (Pi-hole + Unbound): Network-wide ad-blocking and DNS"
+    echo "  - Traefik: Reverse proxy with automatic SSL certificates"
+    echo "  - Watchtower: Auto-update Docker containers across all servers"
+    echo "  - Authentik: Single Sign-On (SSO) for all your apps"
+    echo "  - Step-CA: Internal Certificate Authority for HTTPS"
+    echo "  - Semaphore: Web UI for running Ansible playbooks"
     echo
     echo "  ${BOLD}Target Server Streaming:${NC}"
     echo "  - Targets can stream metrics/logs to this control node"
     echo "  - All data visible in central Grafana"
     echo
 
-    read -p "Install centralized monitoring on this control node? (Y/n): " -r INSTALL_CONTROL
+    read -p "Install central monitoring dashboard on this computer? (Y/n): " -r INSTALL_CONTROL
     echo
 
     if [[ ! $INSTALL_CONTROL =~ ^[Nn]$ ]]; then
         # Get control node IP for target streaming config
         local control_ip
         control_ip=$(hostname -I | awk '{print $1}')
-        read -p "Control node IP for target streaming [${control_ip}]: " CONTROL_NODE_IP
+        echo "  This is the IP address that target servers will send data to:"
+        read -p "This computer's IP address [${control_ip}]: " CONTROL_NODE_IP
         CONTROL_NODE_IP=${CONTROL_NODE_IP:-$control_ip}
 
-        read -p "Enable target Promtail → Central Loki streaming? (Y/n): " -r ENABLE_CENTRAL_LOKI
+        echo
+        echo "  Send logs from all servers to one central location?"
+        read -p "Enable centralized log collection? (Y/n): " -r ENABLE_CENTRAL_LOKI
         ENABLE_CENTRAL_LOKI=${ENABLE_CENTRAL_LOKI:-y}
 
-        read -p "Enable target Netdata → Central Netdata streaming? (Y/n): " -r ENABLE_CENTRAL_NETDATA
+        echo "  Send metrics from all servers to one central dashboard?"
+        read -p "Enable centralized metrics dashboard? (Y/n): " -r ENABLE_CENTRAL_NETDATA
         ENABLE_CENTRAL_NETDATA=${ENABLE_CENTRAL_NETDATA:-y}
+
+        # Generate Netdata stream API key for centralized metrics
+        if [[ $ENABLE_CENTRAL_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            NETDATA_STREAM_API_KEY=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || openssl rand -hex 16)
+            print_info "Generated Netdata stream API key for secure metrics streaming"
+        fi
+
+        # Generate control node Grafana password
+        echo "  Set a password for the central Grafana dashboard (username: admin)"
+        read -sp "Central Grafana admin password [auto-generate]: " CONTROL_GRAFANA_PASSWORD
+        echo
+        if [[ -z "$CONTROL_GRAFANA_PASSWORD" ]]; then
+            CONTROL_GRAFANA_PASSWORD=$(openssl rand -base64 16)
+            print_info "Generated central Grafana admin password (will be shown at end)"
+        fi
+
+        # Centralized Services Section
+        echo
+        echo -e "${BOLD}Additional Centralized Services (Optional):${NC}"
+        echo
+
+        # Authentik (Identity Provider) - Control Node
+        echo -e "${BOLD}Authentik (Single Sign-On):${NC}"
+        echo "  Centralized identity management and SSO for all your applications."
+        echo "  Requires more resources (2GB+ RAM recommended)."
+        read -p "Enable Authentik identity provider? (y/N): " -r ENABLE_AUTHENTIK
+        echo
+        ENABLE_AUTHENTIK=${ENABLE_AUTHENTIK:-n}
+
+        if [[ $ENABLE_AUTHENTIK =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            read -p "Authentik web port [9000]: " AUTHENTIK_PORT
+            AUTHENTIK_PORT=${AUTHENTIK_PORT:-9000}
+
+            read -p "Admin email: " AUTHENTIK_ADMIN_EMAIL
+            echo "  Set Authentik admin password:"
+            read -sp "Admin password: " AUTHENTIK_ADMIN_PASSWORD
+            echo
+        fi
+
+        # Step-CA (Certificate Authority) - Control Node
+        echo
+        echo -e "${BOLD}Step-CA (Internal Certificate Authority):${NC}"
+        echo "  Centralized CA to issue SSL certificates for all internal services."
+        read -p "Enable internal certificate authority? (y/N): " -r ENABLE_STEP_CA
+        echo
+        ENABLE_STEP_CA=${ENABLE_STEP_CA:-n}
+
+        if [[ $ENABLE_STEP_CA =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            read -p "CA name [Server-Helper Internal CA]: " STEP_CA_NAME
+            STEP_CA_NAME=${STEP_CA_NAME:-Server-Helper Internal CA}
+
+            read -p "Step-CA port [9000]: " STEP_CA_PORT
+            STEP_CA_PORT=${STEP_CA_PORT:-9000}
+
+            echo "  Set password for CA (used to sign certificates):"
+            read -sp "CA password: " STEP_CA_PASSWORD
+            echo
+        fi
+
+        # Semaphore (Ansible UI) - Control Node
+        echo
+        echo -e "${BOLD}Semaphore (Ansible Web UI):${NC}"
+        echo "  Web interface to run Ansible playbooks against your targets."
+        read -p "Enable Semaphore Ansible UI? (y/N): " -r ENABLE_SEMAPHORE
+        echo
+        ENABLE_SEMAPHORE=${ENABLE_SEMAPHORE:-n}
+
+        if [[ $ENABLE_SEMAPHORE =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            read -p "Semaphore web port [3000]: " SEMAPHORE_PORT
+            SEMAPHORE_PORT=${SEMAPHORE_PORT:-3000}
+
+            read -p "Admin username [admin]: " SEMAPHORE_ADMIN_USER
+            SEMAPHORE_ADMIN_USER=${SEMAPHORE_ADMIN_USER:-admin}
+
+            read -p "Admin email: " SEMAPHORE_ADMIN_EMAIL
+            echo "  Set Semaphore admin password:"
+            read -sp "Admin password: " SEMAPHORE_ADMIN_PASSWORD
+            echo
+
+            # Generate encryption key for Semaphore
+            SEMAPHORE_ACCESS_KEY_ENCRYPTION=$(openssl rand -base64 32)
+        fi
+
+        # DNS (Pi-hole + Unbound) - Control Node
+        echo
+        echo -e "${BOLD}DNS Server (Pi-hole + Unbound):${NC}"
+        echo "  Centralized ad-blocking and DNS for your entire network."
+        echo "  Point your router/devices to this server for network-wide ad-blocking."
+        read -p "Enable centralized DNS server? (y/N): " -r ENABLE_DNS
+        echo
+        ENABLE_DNS=${ENABLE_DNS:-n}
+
+        if [[ $ENABLE_DNS =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo "  Port for Pi-hole web dashboard"
+            read -p "Pi-hole dashboard port [8080]: " PIHOLE_PORT
+            PIHOLE_PORT=${PIHOLE_PORT:-8080}
+
+            echo "  Domain name for your internal network (e.g., 'home' or 'internal')"
+            read -p "Private domain [internal]: " DNS_PRIVATE_DOMAIN
+            DNS_PRIVATE_DOMAIN=${DNS_PRIVATE_DOMAIN:-internal}
+
+            echo "  Create a password for the Pi-hole admin dashboard:"
+            read -sp "Pi-hole admin password: " PIHOLE_PASSWORD
+            echo
+
+            echo
+            echo "  Unbound can forward to public DNS or resolve directly (more private)"
+            read -p "Use direct DNS resolution (no forwarding to Google/Cloudflare)? (Y/n): " -r DNS_DIRECT_RESOLVE
+            DNS_DIRECT_RESOLVE=${DNS_DIRECT_RESOLVE:-y}
+        fi
+
+        # Traefik (Reverse Proxy) - Control Node
+        echo
+        echo -e "${BOLD}Reverse Proxy (Traefik):${NC}"
+        echo "  Centralized HTTPS/SSL termination and routing for all services."
+        echo "  Automatically obtains Let's Encrypt certificates for your domains."
+        read -p "Enable centralized reverse proxy? (y/N): " -r ENABLE_REVERSE_PROXY
+        echo
+        ENABLE_REVERSE_PROXY=${ENABLE_REVERSE_PROXY:-n}
+
+        if [[ $ENABLE_REVERSE_PROXY =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            read -p "Your domain name (e.g., example.com): " TRAEFIK_DOMAIN
+
+            read -p "Email for Let's Encrypt certificates: " TRAEFIK_ACME_EMAIL
+
+            read -p "Traefik dashboard port [8080]: " TRAEFIK_DASHBOARD_PORT
+            TRAEFIK_DASHBOARD_PORT=${TRAEFIK_DASHBOARD_PORT:-8080}
+
+            echo "  Use Cloudflare for DNS challenge (recommended for wildcard certs)?"
+            read -p "Enable Cloudflare DNS challenge? (y/N): " -r TRAEFIK_CLOUDFLARE
+            TRAEFIK_CLOUDFLARE=${TRAEFIK_CLOUDFLARE:-n}
+
+            if [[ $TRAEFIK_CLOUDFLARE =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                read -p "Cloudflare API token: " CF_API_TOKEN
+                read -p "Cloudflare Zone ID: " CF_ZONE_ID
+            fi
+        fi
+
+        # Watchtower (Auto Container Updates) - Control Node
+        echo
+        echo -e "${BOLD}Watchtower (Auto Container Updates):${NC}"
+        echo "  Centralized auto-update for Docker containers on control node."
+        echo "  Can monitor and update containers automatically."
+        read -p "Enable Watchtower auto-updates? (y/N): " -r ENABLE_WATCHTOWER
+        echo
+        ENABLE_WATCHTOWER=${ENABLE_WATCHTOWER:-n}
+
+        if [[ $ENABLE_WATCHTOWER =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo "  When should Watchtower check for updates?"
+            echo "  Format: cron expression (default: 4:00 AM daily)"
+            read -p "Update schedule [0 4 * * *]: " WATCHTOWER_SCHEDULE
+            WATCHTOWER_SCHEDULE=${WATCHTOWER_SCHEDULE:-0 4 * * *}
+
+            read -p "Monitor only (notify but don't update)? (y/N): " -r WATCHTOWER_MONITOR_ONLY
+            WATCHTOWER_MONITOR_ONLY=${WATCHTOWER_MONITOR_ONLY:-n}
+
+            read -p "Remove old images after update? (Y/n): " -r WATCHTOWER_CLEANUP
+            WATCHTOWER_CLEANUP=${WATCHTOWER_CLEANUP:-y}
+        fi
+
+        # Write control node service configs to all.yml
+        update_config_for_control_services
+
+        # Update vault with control node service secrets
+        update_vault_for_control_services
 
         print_info "Installing control node services..."
 
@@ -1436,11 +1800,241 @@ control_loki:
 
 control_netdata:
   port: 19999
-  stream_api_key: "11111111-2222-3333-4444-555555555555"
+  stream_api_key: "{{ vault_netdata_stream_api_key }}"
 
 control_grafana:
   port: 3000
 EOF
+}
+
+# Update config file with control node services
+update_config_for_control_services() {
+    local config_file="group_vars/all.yml"
+
+    # Only add if any control-node-only services are enabled
+    if [[ ${ENABLE_DNS:-n} =~ ^[Yy]([Ee][Ss])?$ ]] || \
+       [[ ${ENABLE_REVERSE_PROXY:-n} =~ ^[Yy]([Ee][Ss])?$ ]] || \
+       [[ ${ENABLE_WATCHTOWER:-n} =~ ^[Yy]([Ee][Ss])?$ ]] || \
+       [[ ${ENABLE_AUTHENTIK:-n} =~ ^[Yy]([Ee][Ss])?$ ]] || \
+       [[ ${ENABLE_STEP_CA:-n} =~ ^[Yy]([Ee][Ss])?$ ]] || \
+       [[ ${ENABLE_SEMAPHORE:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+
+        cat >> "$config_file" <<EOF
+
+# =============================================================================
+# CENTRALIZED INFRASTRUCTURE SERVICES (Control Node Only)
+# =============================================================================
+# Added by setup.sh for control node services
+
+EOF
+
+        # Authentik configuration
+        if [[ ${ENABLE_AUTHENTIK:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            cat >> "$config_file" <<EOF
+# Authentik (Identity Provider)
+authentik:
+  enabled: true
+  version: "2024.12"
+  http_port: ${AUTHENTIK_PORT:-9000}
+  https_port: 9443
+  db_user: authentik
+  db_name: authentik
+  email:
+    enabled: false
+
+EOF
+        fi
+
+        # Step-CA configuration
+        if [[ ${ENABLE_STEP_CA:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            cat >> "$config_file" <<EOF
+# Step-CA (Certificate Authority)
+step_ca:
+  enabled: true
+  name: "${STEP_CA_NAME:-Server-Helper Internal CA}"
+  port: ${STEP_CA_PORT:-9000}
+  provisioner_name: "admin"
+  default_cert_duration: "720h"
+  max_cert_duration: "2160h"
+  acme:
+    enabled: true
+
+EOF
+        fi
+
+        # Semaphore configuration
+        if [[ ${ENABLE_SEMAPHORE:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            cat >> "$config_file" <<EOF
+# Semaphore (Ansible UI)
+semaphore:
+  enabled: true
+  port: ${SEMAPHORE_PORT:-3000}
+  database:
+    dialect: postgres
+    host: semaphore-db
+    port: 5432
+    name: semaphore
+    user: semaphore
+  admin:
+    username: "${SEMAPHORE_ADMIN_USER:-admin}"
+    email: "${SEMAPHORE_ADMIN_EMAIL:-admin@example.com}"
+
+EOF
+        fi
+
+        # DNS (Pi-hole + Unbound) configuration
+        if [[ ${ENABLE_DNS:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            cat >> "$config_file" <<EOF
+# DNS (Pi-hole + Unbound) - Centralized
+dns:
+  enabled: true
+  stack_dir: /opt/dockge/stacks/dns
+  network_name: dns
+  private_domain: "${DNS_PRIVATE_DOMAIN:-internal}"
+  local_domain: local
+
+  pihole:
+    version: latest
+    port: ${PIHOLE_PORT:-8080}
+    theme: default-dark
+
+  unbound:
+    version: latest
+    forward_zone: $(if [[ ${DNS_DIRECT_RESOLVE:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "false"; else echo "true"; fi)
+
+EOF
+        fi
+
+        # Traefik (Reverse Proxy) configuration
+        if [[ ${ENABLE_REVERSE_PROXY:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            cat >> "$config_file" <<EOF
+# Reverse Proxy (Traefik) - Centralized
+reverse_proxy:
+  enabled: true
+  domain: "${TRAEFIK_DOMAIN:-}"
+  acme_email: "${TRAEFIK_ACME_EMAIL:-}"
+  dashboard_port: ${TRAEFIK_DASHBOARD_PORT:-8080}
+  cloudflare:
+    enabled: $(if [[ ${TRAEFIK_CLOUDFLARE:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+
+EOF
+        fi
+
+        # Watchtower configuration
+        if [[ ${ENABLE_WATCHTOWER:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            cat >> "$config_file" <<EOF
+# Watchtower (Auto Container Updates) - Centralized
+watchtower:
+  enabled: true
+  schedule: "${WATCHTOWER_SCHEDULE:-0 4 * * *}"
+  cleanup: $(if [[ ${WATCHTOWER_CLEANUP:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  monitor_only: $(if [[ ${WATCHTOWER_MONITOR_ONLY:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+
+EOF
+        fi
+    fi
+}
+
+# Update vault file with control node service secrets
+update_vault_for_control_services() {
+    local vault_file="group_vars/vault.yml"
+    local vault_password_file=".vault_password"
+
+    # Only proceed if any control node services are enabled
+    if [[ ! ${ENABLE_DNS:-n} =~ ^[Yy]([Ee][Ss])?$ ]] && \
+       [[ ! ${ENABLE_REVERSE_PROXY:-n} =~ ^[Yy]([Ee][Ss])?$ ]] && \
+       [[ ! ${ENABLE_AUTHENTIK:-n} =~ ^[Yy]([Ee][Ss])?$ ]] && \
+       [[ ! ${ENABLE_STEP_CA:-n} =~ ^[Yy]([Ee][Ss])?$ ]] && \
+       [[ ! ${ENABLE_SEMAPHORE:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        return 0
+    fi
+
+    # Check if vault password file exists
+    if [[ ! -f "$vault_password_file" ]]; then
+        print_warning "Vault password file not found, skipping vault update"
+        return 1
+    fi
+
+    # Decrypt vault to temp file
+    local temp_vault
+    temp_vault=$(mktemp)
+
+    if ! ansible-vault decrypt "$vault_file" --vault-password-file="$vault_password_file" --output="$temp_vault" 2>/dev/null; then
+        print_warning "Failed to decrypt vault, skipping vault update"
+        rm -f "$temp_vault"
+        return 1
+    fi
+
+    # Append control node service secrets
+    cat >> "$temp_vault" <<EOF
+
+# =============================================================================
+# CONTROL NODE SERVICE SECRETS
+# =============================================================================
+# Added by setup.sh for control node services
+
+EOF
+
+    # Authentik secrets
+    if [[ ${ENABLE_AUTHENTIK:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        cat >> "$temp_vault" <<EOF
+vault_authentik_credentials:
+  admin_email: "${AUTHENTIK_ADMIN_EMAIL}"
+  admin_password: "${AUTHENTIK_ADMIN_PASSWORD}"
+  secret_key: "$(openssl rand -base64 32)"
+  postgres_password: "$(openssl rand -base64 16)"
+
+EOF
+    fi
+
+    # Step-CA secrets
+    if [[ ${ENABLE_STEP_CA:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        cat >> "$temp_vault" <<EOF
+vault_step_ca_password: "${STEP_CA_PASSWORD}"
+vault_step_ca_provisioner_password: "${STEP_CA_PASSWORD}"
+
+EOF
+    fi
+
+    # Semaphore secrets
+    if [[ ${ENABLE_SEMAPHORE:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        cat >> "$temp_vault" <<EOF
+vault_semaphore_db_password: "$(openssl rand -base64 16)"
+vault_semaphore_admin_password: "${SEMAPHORE_ADMIN_PASSWORD}"
+vault_semaphore_access_key_encryption: "${SEMAPHORE_ACCESS_KEY_ENCRYPTION:-$(openssl rand -base64 32)}"
+
+EOF
+    fi
+
+    # DNS secrets
+    if [[ ${ENABLE_DNS:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        cat >> "$temp_vault" <<EOF
+vault_dns:
+  pihole_password: "${PIHOLE_PASSWORD}"
+
+EOF
+    fi
+
+    # Traefik/Cloudflare secrets
+    if [[ ${ENABLE_REVERSE_PROXY:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        cat >> "$temp_vault" <<EOF
+vault_letsencrypt_email: "${TRAEFIK_ACME_EMAIL:-}"
+
+vault_cloudflare_credentials:
+  api_token: "${CF_API_TOKEN:-}"
+  zone_id: "${CF_ZONE_ID:-}"
+
+EOF
+    fi
+
+    # Re-encrypt the vault
+    if ansible-vault encrypt "$temp_vault" --vault-password-file="$vault_password_file" --output="$vault_file"; then
+        print_success "Vault updated with control node service secrets"
+    else
+        print_warning "Failed to re-encrypt vault"
+    fi
+
+    rm -f "$temp_vault"
 }
 
 # Show completion message with service URLs
@@ -1475,6 +2069,9 @@ show_completion_message() {
                 echo -e "  ${GREEN}Grafana:${NC}     http://${host_ip}:${GRAFANA_PORT:-3000}"
                 echo -e "  ${GREEN}Loki:${NC}        http://${host_ip}:${LOKI_PORT:-3100}"
             fi
+            if [[ ${ENABLE_UPTIME_KUMA:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                echo -e "  ${GREEN}Uptime Kuma:${NC} http://${host_ip}:${UPTIME_KUMA_PORT:-3001}"
+            fi
         fi
         echo
     done
@@ -1486,11 +2083,43 @@ show_completion_message() {
         echo -e "  ${GREEN}Uptime Kuma:${NC} http://${CONTROL_NODE_IP}:3001"
         echo -e "  ${GREEN}Loki:${NC}        http://${CONTROL_NODE_IP}:3100"
         echo -e "  ${GREEN}Netdata:${NC}     http://${CONTROL_NODE_IP}:19999"
+        if [[ ${ENABLE_AUTHENTIK:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo -e "  ${GREEN}Authentik:${NC}   http://${CONTROL_NODE_IP}:${AUTHENTIK_PORT:-9000}"
+        fi
+        if [[ ${ENABLE_STEP_CA:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo -e "  ${GREEN}Step-CA:${NC}     https://${CONTROL_NODE_IP}:${STEP_CA_PORT:-9000}"
+        fi
+        if [[ ${ENABLE_SEMAPHORE:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo -e "  ${GREEN}Semaphore:${NC}   http://${CONTROL_NODE_IP}:${SEMAPHORE_PORT:-3000}"
+        fi
+        if [[ ${ENABLE_DNS:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo -e "  ${GREEN}Pi-hole:${NC}     http://${CONTROL_NODE_IP}:${PIHOLE_PORT:-8080}/admin"
+        fi
+        if [[ ${ENABLE_REVERSE_PROXY:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo -e "  ${GREEN}Traefik:${NC}     http://${CONTROL_NODE_IP}:${TRAEFIK_DASHBOARD_PORT:-8080}"
+        fi
+        echo
+    fi
+
+    # Show generated passwords if any
+    if [[ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]] || [[ -n "${DOCKGE_ADMIN_PASSWORD:-}" ]] || [[ -n "${CONTROL_GRAFANA_PASSWORD:-}" ]]; then
+        echo -e "${BOLD}Generated Credentials (save these!):${NC}"
+        if [[ -n "${DOCKGE_ADMIN_PASSWORD:-}" ]]; then
+            echo -e "  ${YELLOW}Dockge:${NC}          admin / ${DOCKGE_ADMIN_PASSWORD}"
+        fi
+        if [[ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]]; then
+            echo -e "  ${YELLOW}Grafana:${NC}         admin / ${GRAFANA_ADMIN_PASSWORD}"
+        fi
+        if [[ -n "${CONTROL_GRAFANA_PASSWORD:-}" ]]; then
+            echo -e "  ${YELLOW}Central Grafana:${NC} admin / ${CONTROL_GRAFANA_PASSWORD}"
+        fi
+        echo
+        print_warning "These passwords are stored encrypted in group_vars/vault.yml"
         echo
     fi
 
     print_info "Next steps:"
-    echo "  1. Change default admin passwords on first login"
+    echo "  1. Save the generated credentials shown above"
     if [[ -z "${CONTROL_NODE_IP:-}" ]]; then
         echo "  2. Run setup-control.yml to install centralized monitoring"
     else

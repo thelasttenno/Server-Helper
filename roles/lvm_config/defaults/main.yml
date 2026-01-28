@@ -2,6 +2,8 @@
 # LVM Configuration Role - Default Variables
 
 lvm_config:
+  enabled: true
+
   # Automatically extend Ubuntu default LV to use all available space
   auto_extend_ubuntu: true
 

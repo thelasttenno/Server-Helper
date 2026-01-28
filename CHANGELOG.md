@@ -375,11 +375,6 @@ This is a **complete rewrite** from bash scripts to Ansible playbooks. This is a
   - Dashboard UI
   - Docker integration
 
-- **Nginx Proxy Manager**:
-  - Alternative to Traefik
-  - Web-based configuration
-  - Let's Encrypt integration
-
 #### Self-Update
 
 - **ansible-pull Integration**:
@@ -430,7 +425,7 @@ This is a **complete rewrite** from bash scripts to Ansible playbooks. This is a
 - `uptime-kuma` - Uptime monitoring
 - `restic` - Backup system
 - `lynis` - Security auditing
-- `reverse-proxy` - Traefik/Nginx (optional)
+- `reverse-proxy` - Traefik (optional)
 - `watchtower` - Auto-updates (optional)
 - `self-update` - ansible-pull setup
 
