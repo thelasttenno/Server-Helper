@@ -11,8 +11,6 @@
 #   - Restic: Encrypted backups (per-server)
 #   - Security: fail2ban, UFW firewall, SSH hardening
 #   - Lynis: Security auditing (per-server)
-#   - Authentik: SSO & Identity Provider (optional)
-#   - Semaphore UI: Ansible automation web interface (optional)
 #
 # NOT installed on target nodes:
 #   - Uptime Kuma: Install on control node with setup-control.yml
@@ -71,51 +69,45 @@
 
   roles:
     # ==============================================
-    # Base System Setup
+    # Base System Setup & Docker Installation
     # ==============================================
-    - role: common
-      tags: ['common', 'base']
+    - role: system_setup
+      tags: ['system', 'setup', 'docker', 'base']
 
     # ==============================================
     # Storage Configuration (Optional)
     # ==============================================
     - role: lvm_config
       tags: ['lvm', 'storage', 'partitioning']
-      when: lvm_config.enabled | default(false)
+      when: target_lvm_config.enabled | default(false)
 
     # ==============================================
     # User Management (Optional)
     # ==============================================
     - role: system_users
       tags: ['users', 'security', 'sudo']
-      when: system_users.create_admin_user | default(false)
-
-    # ==============================================
-    # Docker Installation
-    # ==============================================
-    - role: system_setup
-      tags: ['system', 'setup', 'docker']
+      when: target_system_users.create_admin_user | default(false)
 
     # ==============================================
     # NAS Mounts (Optional)
     # ==============================================
     - role: nas_mounts
       tags: ['nas', 'storage']
-      when: nas_mounts.enabled | default(false)
+      when: target_nas_mounts.enabled | default(false)
 
     # ==============================================
     # Security Hardening
     # ==============================================
     - role: security
       tags: ['security', 'hardening', 'firewall', 'ssh']
-      when: security is defined
+      when: target_security is defined
 
     # ==============================================
     # Container Management - Dockge
     # ==============================================
     - role: dockge
       tags: ['dockge', 'docker', 'containers']
-      when: dockge.enabled | default(true)
+      when: target_dockge.enabled | default(true)
 
     # ==============================================
     # Monitoring - Netdata Only
@@ -124,49 +116,28 @@
     # ==============================================
     - role: netdata
       tags: ['monitoring', 'netdata', 'metrics']
-      when: monitoring.netdata.enabled | default(true)
+      when: target_netdata.enabled | default(true)
 
     # ==============================================
     # Logging & Visualization - Loki + Promtail + Grafana
     # ==============================================
     - role: logging
       tags: ['logging', 'loki', 'promtail', 'grafana', 'visualization']
-      when: logging.loki.enabled | default(true) or logging.grafana.enabled | default(true)
+      when: target_logging.loki.enabled | default(true) or target_logging.grafana.enabled | default(true)
 
     # ==============================================
     # Backups - Restic
     # ==============================================
-    - role: backups
+    - role: restic
       tags: ['backups', 'restic']
-      when: backups.enabled | default(false)
+      when: target_restic.enabled | default(false)
 
     # ==============================================
     # Reverse Proxy (Optional)
     # ==============================================
     - role: proxy
       tags: ['proxy', 'traefik', 'nginx']
-      when: reverse_proxy.enabled | default(false)
-
-    # ==============================================
-    # Authentication & SSO - Authentik
-    # ==============================================
-    - role: authentik
-      tags: ['authentik', 'sso', 'auth', 'security']
-      when: authentik.enabled | default(false)
-
-    # ==============================================
-    # DNS & Service Discovery - Pi-hole + Unbound
-    # ==============================================
-    - role: dns
-      tags: ['dns', 'pihole', 'unbound', 'discovery']
-      when: dns.enabled | default(false)
-
-    # ==============================================
-    # Ansible Automation - Semaphore UI
-    # ==============================================
-    - role: semaphore
-      tags: ['semaphore', 'automation', 'ansible']
-      when: semaphore.enabled | default(false)
+      when: target_reverse_proxy.enabled | default(false)
 
   post_tasks:
     - name: Display setup complete message
@@ -181,42 +152,35 @@
           - ""
           - "Services installed:"
           - "  ✓ Docker & Docker Compose"
-          - "{% if dockge.enabled | default(true) %}"
-          - "  ✓ Dockge: http://{{ ansible_default_ipv4.address }}:{{ dockge.port }}"
+          - "{% if target_dockge.enabled | default(true) %}"
+          - "  ✓ Dockge: http://{{ ansible_default_ipv4.address }}:{{ target_dockge.port }}"
           - "{% endif %}"
-          - "{% if monitoring.netdata.enabled | default(true) %}"
-          - "  ✓ Netdata: http://{{ ansible_default_ipv4.address }}:{{ monitoring.netdata.port }}"
+          - "{% if target_netdata.enabled | default(true) %}"
+          - "  ✓ Netdata: http://{{ ansible_default_ipv4.address }}:{{ target_netdata.port }}"
           - "{% endif %}"
-          - "{% if logging.grafana.enabled | default(true) %}"
-          - "  ✓ Grafana: http://{{ ansible_default_ipv4.address }}:{{ logging.grafana.port }}"
+          - "{% if target_logging.grafana.enabled | default(true) %}"
+          - "  ✓ Grafana: http://{{ ansible_default_ipv4.address }}:{{ target_logging.grafana.port }}"
           - "{% endif %}"
-          - "{% if logging.loki.enabled | default(true) %}"
-          - "  ✓ Loki: http://{{ ansible_default_ipv4.address }}:{{ logging.loki.port }}"
+          - "{% if target_logging.loki.enabled | default(true) %}"
+          - "  ✓ Loki: http://{{ ansible_default_ipv4.address }}:{{ target_logging.loki.port }}"
           - "{% endif %}"
-          - "{% if dns.enabled | default(false) %}"
-          - "  ✓ Pi-hole DNS: http://{{ ansible_default_ipv4.address }}:{{ dns.pihole.port }}/admin"
-          - "  ✓ DNS Server: {{ ansible_default_ipv4.address }}:53"
+          - "{% if target_restic.enabled | default(false) %}"
+          - "  ✓ Restic Backups: Scheduled for {{ target_restic.schedule }}"
           - "{% endif %}"
-          - "{% if semaphore.enabled | default(false) %}"
-          - "  ✓ Semaphore UI: http://{{ ansible_default_ipv4.address }}:{{ semaphore.port }}"
-          - "{% endif %}"
-          - "{% if backups.enabled | default(false) %}"
-          - "  ✓ Restic Backups: Scheduled for {{ restic.schedule }}"
-          - "{% endif %}"
-          - "{% if security.fail2ban_enabled | default(true) %}"
+          - "{% if target_security.fail2ban.enabled | default(true) %}"
           - "  ✓ fail2ban: Active"
           - "{% endif %}"
-          - "{% if security.ufw_enabled | default(true) %}"
+          - "{% if target_security.ufw.enabled | default(true) %}"
           - "  ✓ UFW Firewall: Active"
           - "{% endif %}"
-          - "{% if security.lynis_enabled | default(true) %}"
+          - "{% if target_security.lynis.enabled | default(true) %}"
           - "  ✓ Lynis Security Auditing: Scheduled"
           - "{% endif %}"
           - ""
           - "Next steps:"
           - "  1. Access Dockge to manage container stacks"
           - "  2. Check Netdata for system metrics"
-          - "{% if backups.enabled | default(false) %}"
+          - "{% if target_restic.enabled | default(false) %}"
           - "  3. Verify backup repositories initialized"
           - "{% endif %}"
           - "  4. Configure monitoring from control node (Uptime Kuma)"
@@ -229,32 +193,25 @@
           # Server: {{ inventory_hostname }}
           # Generated: {{ ansible_date_time.iso8601 }}
 
-          {% if dockge.enabled | default(true) %}
-          Dockge: http://{{ ansible_default_ipv4.address }}:{{ dockge.port }}
+          {% if target_dockge.enabled | default(true) %}
+          Dockge: http://{{ ansible_default_ipv4.address }}:{{ target_dockge.port }}
           {% endif %}
-          {% if monitoring.netdata.enabled | default(true) %}
-          Netdata: http://{{ ansible_default_ipv4.address }}:{{ monitoring.netdata.port }}
+          {% if target_netdata.enabled | default(true) %}
+          Netdata: http://{{ ansible_default_ipv4.address }}:{{ target_netdata.port }}
           {% endif %}
-          {% if logging.grafana.enabled | default(true) %}
-          Grafana: http://{{ ansible_default_ipv4.address }}:{{ logging.grafana.port }}
+          {% if target_logging.grafana.enabled | default(true) %}
+          Grafana: http://{{ ansible_default_ipv4.address }}:{{ target_logging.grafana.port }}
           {% endif %}
-          {% if logging.loki.enabled | default(true) %}
-          Loki: http://{{ ansible_default_ipv4.address }}:{{ logging.loki.port }}
+          {% if target_logging.loki.enabled | default(true) %}
+          Loki: http://{{ ansible_default_ipv4.address }}:{{ target_logging.loki.port }}
           {% endif %}
-          {% if reverse_proxy.enabled | default(false) %}
-          Traefik Dashboard: http://{{ ansible_default_ipv4.address }}:{{ reverse_proxy.traefik.dashboard_port }}
-          {% endif %}
-          {% if dns.enabled | default(false) %}
-          Pi-hole Admin: http://{{ ansible_default_ipv4.address }}:{{ dns.pihole.port }}/admin
-          DNS Server: {{ ansible_default_ipv4.address }}:53
-          {% endif %}
-          {% if semaphore.enabled | default(false) %}
-          Semaphore UI: http://{{ ansible_default_ipv4.address }}:{{ semaphore.port }}
+          {% if target_reverse_proxy.enabled | default(false) %}
+          Traefik Dashboard: http://{{ ansible_default_ipv4.address }}:{{ target_reverse_proxy.traefik.dashboard_port }}
           {% endif %}
 
           Monitoring:
           - Centralized Uptime Kuma: Install on control node with playbooks/setup-control.yml
-        dest: "{{ base_install_dir }}/service_urls.txt"
+        dest: "{{ target_base_dir }}/service_urls.txt"
         mode: '0644'
 
     - name: Create summary report (run_once)
@@ -277,8 +234,8 @@
           - "  2. Access services on each server:"
           - "{% for host in ansible_play_hosts %}"
           - "     {{ hostvars[host]['inventory_hostname'] }}:"
-          - "       - Dockge: http://{{ hostvars[host]['ansible_default_ipv4']['address'] }}:{{ dockge.port }}"
-          - "       - Netdata: http://{{ hostvars[host]['ansible_default_ipv4']['address'] }}:{{ monitoring.netdata.port }}"
+          - "       - Dockge: http://{{ hostvars[host]['ansible_default_ipv4']['address'] }}:{{ target_dockge.port }}"
+          - "       - Netdata: http://{{ hostvars[host]['ansible_default_ipv4']['address'] }}:{{ target_netdata.port }}"
           - "{% endfor %}"
           - ""
           - "  3. Useful commands:"

@@ -58,12 +58,12 @@
   ansible.builtin.copy:
     content: |
       {
-        "log-driver": "{{ docker.log_driver }}",
+        "log-driver": "{{ target_docker.log_driver }}",
         "log-opts": {
-          "max-size": "{{ docker.log_max_size }}",
-          "max-file": "{{ docker.log_max_file }}"
+          "max-size": "{{ target_docker.log_max_size }}",
+          "max-file": "{{ target_docker.log_max_file }}"
         },
-        "storage-driver": "{{ docker.storage_driver }}"
+        "storage-driver": "{{ target_docker.storage_driver }}"
       }
     dest: /etc/docker/daemon.json
     mode: '0644'

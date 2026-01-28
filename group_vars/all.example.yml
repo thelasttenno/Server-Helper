@@ -9,14 +9,14 @@
 # Base installation directory
 base_install_dir: "/opt"
 
-# Server hostname
-hostname: "server-01"
+# Server hostname (can be overridden per-host in inventory)
+server_hostname: "server-01"
 
 # Timezone (use 'timedatectl list-timezones' to see available)
-timezone: "America/New_York"
+server_timezone: "America/New_York"
 
 # Locale settings
-locale: "en_US.UTF-8"
+server_locale: "en_US.UTF-8"
 
 # =============================================================================
 # MULTI-SERVER CONFIGURATION (Optional)
@@ -38,7 +38,7 @@ locale: "en_US.UTF-8"
 #      - Secondary: /mnt/nas/backup/server02
 #
 #   4. Hostnames: Set unique hostnames for each server
-#      - Define in inventory/hosts.yml: hostname: "docker-server-02"
+#      - Define in inventory/hosts.yml: server_hostname: "docker-server-02"
 #
 #   5. Monitoring: Central Uptime Kuma can monitor all servers
 #      - Configure monitors pointing to each server's IP
@@ -46,14 +46,14 @@ locale: "en_US.UTF-8"
 # EXAMPLE inventory/hosts.yml override:
 #   server02:
 #     ansible_host: 192.168.1.101
-#     hostname: "docker-server-02"
+#     server_hostname: "docker-server-02"
 #     server_id: "02"
 #     dockge:
 #       port: 5002
 #     monitoring:
 #       netdata:
 #         port: 19998
-#     backups:
+#     restic:
 #       schedule: "0 4 * * *"
 # =============================================================================
 

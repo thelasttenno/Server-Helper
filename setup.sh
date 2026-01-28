@@ -1228,10 +1228,7 @@ notifications:
   telegram:
     enabled: false
 
-# Logging
-logging:
-  level: "INFO"
-  retention_days: 30
+# Note: Main logging config is defined earlier with loki/promtail/grafana settings
 
 # Performance
 performance:

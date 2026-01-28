@@ -50,11 +50,11 @@ all:
 
       # Optional: Override hostname for this server
       # (If not set, uses the key name "server01")
-      # hostname: "docker-server-01"
+      # server_hostname: "docker-server-01"
 
       # Optional: Set timezone for this server
       # (Overrides group_vars/all.yml setting)
-      # timezone: "America/New_York"
+      # server_timezone: "America/New_York"
 
       # Optional: Customize service ports per server
       # dockge:
@@ -86,7 +86,7 @@ all:
     #   ansible_become: yes
     #
     #   # Server identification
-    #   hostname: "docker-server-02"
+    #   server_hostname: "docker-server-02"
     #   server_role: "secondary"  # Optional: 'primary' or 'secondary' for your reference
     #   server_id: "02"           # Optional: Used in backup paths for separation
     #
@@ -100,7 +100,7 @@ all:
     #       port: 19998  # Different from primary (19999)
     #
     #   # Stagger backup schedules to reduce NAS load
-    #   backups:
+    #   restic:
     #     schedule: "0 4 * * *"  # 4 AM (primary runs at 2 AM)
     #     destinations:
     #       nas:
@@ -163,7 +163,7 @@ all:
     #     server02:
     #   vars:
     #     # Production-specific settings
-    #     backups:
+    #     restic:
     #       enabled: true
     #     monitoring:
     #       netdata:
@@ -174,7 +174,7 @@ all:
     #     server03:
     #   vars:
     #     # Development-specific settings
-    #     backups:
+    #     restic:
     #       enabled: false  # Don't backup dev servers
 
     # --------------------------------------------------------------------------
