@@ -36,6 +36,17 @@ cd "$SCRIPT_DIR"
 # Log file
 LOG_FILE="${SCRIPT_DIR}/setup.log"
 
+# Existing configuration files
+INVENTORY_FILE="inventory/hosts.yml"
+CONFIG_FILE="group_vars/all.yml"
+VAULT_FILE="group_vars/vault.yml"
+
+# Arrays for existing and new servers
+EXISTING_HOSTS=()
+EXISTING_HOSTNAMES=()
+EXISTING_USERS=()
+EXISTING_CONFIG_FOUND=false
+
 # Function to print colored messages
 print_header() {
     echo -e "\n${BLUE}${BOLD}╔════════════════════════════════════════╗${NC}"
@@ -105,6 +116,272 @@ detect_os() {
             exit 1
         fi
     fi
+}
+
+# Check for existing configuration
+check_existing_config() {
+    print_header
+    print_info "Checking for existing configuration..."
+
+    if [[ -f "$INVENTORY_FILE" ]] && [[ -f "$CONFIG_FILE" ]]; then
+        EXISTING_CONFIG_FOUND=true
+        print_success "Existing configuration found!"
+        echo
+
+        # Parse existing inventory to get servers
+        parse_existing_inventory
+
+        if [[ ${#EXISTING_HOSTNAMES[@]} -gt 0 ]]; then
+            echo -e "${BOLD}Configured servers:${NC}"
+            for i in "${!EXISTING_HOSTNAMES[@]}"; do
+                echo "  - ${EXISTING_HOSTNAMES[$i]} (${EXISTING_HOSTS[$i]})"
+            done
+            echo
+
+            # Offer options
+            echo -e "${BOLD}What would you like to do?${NC}"
+            echo "  1) Health check existing servers"
+            echo "  2) Add new servers to existing configuration"
+            echo "  3) Re-run setup on existing servers"
+            echo "  4) Start fresh (backup and recreate all config)"
+            echo
+            read -p "Choose an option [1-4]: " -r SETUP_MODE
+            echo
+
+            case "$SETUP_MODE" in
+                1)
+                    health_check_servers
+                    exit 0
+                    ;;
+                2)
+                    # Keep existing config, add new servers
+                    USE_EXISTING_CONFIG=true
+                    print_info "Will add new servers to existing configuration"
+                    ;;
+                3)
+                    # Use existing servers, re-run playbook
+                    USE_EXISTING_CONFIG=true
+                    RERUN_EXISTING=true
+                    TARGET_HOSTS=("${EXISTING_HOSTS[@]}")
+                    TARGET_HOSTNAMES=("${EXISTING_HOSTNAMES[@]}")
+                    TARGET_USERS=("${EXISTING_USERS[@]}")
+                    print_info "Will re-run setup on ${#TARGET_HOSTS[@]} existing server(s)"
+                    ;;
+                4)
+                    # Backup and start fresh
+                    backup_existing_config
+                    USE_EXISTING_CONFIG=false
+                    print_info "Starting fresh configuration"
+                    ;;
+                *)
+                    print_warning "Invalid option, defaulting to health check"
+                    health_check_servers
+                    exit 0
+                    ;;
+            esac
+        fi
+    else
+        print_info "No existing configuration found, starting fresh setup"
+        USE_EXISTING_CONFIG=false
+    fi
+}
+
+# Parse existing inventory file to extract servers
+parse_existing_inventory() {
+    if [[ ! -f "$INVENTORY_FILE" ]]; then
+        return
+    fi
+
+    # Reset arrays
+    EXISTING_HOSTS=()
+    EXISTING_HOSTNAMES=()
+    EXISTING_USERS=()
+
+    # Parse YAML inventory (simple parsing for our format)
+    local in_hosts=false
+    local current_host=""
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Check if we're in the hosts section
+        if [[ "$line" =~ ^[[:space:]]*hosts:[[:space:]]*$ ]]; then
+            in_hosts=true
+            continue
+        fi
+
+        # Check if we've left the hosts section
+        if [[ "$in_hosts" == true ]] && [[ "$line" =~ ^[[:space:]]*[a-z]+:[[:space:]]*$ ]] && [[ ! "$line" =~ ansible_ ]]; then
+            if [[ ! "$line" =~ ^[[:space:]]{4} ]]; then
+                in_hosts=false
+                continue
+            fi
+        fi
+
+        if [[ "$in_hosts" == true ]]; then
+            # Match host definition (4 spaces + hostname + colon)
+            if [[ "$line" =~ ^[[:space:]]{4}([a-zA-Z0-9_-]+):[[:space:]]*$ ]]; then
+                current_host="${BASH_REMATCH[1]}"
+                EXISTING_HOSTNAMES+=("$current_host")
+            fi
+
+            # Match ansible_host
+            if [[ "$line" =~ ansible_host:[[:space:]]*([0-9.a-zA-Z_-]+) ]]; then
+                EXISTING_HOSTS+=("${BASH_REMATCH[1]}")
+            fi
+
+            # Match ansible_user
+            if [[ "$line" =~ ansible_user:[[:space:]]*([a-zA-Z0-9_-]+) ]]; then
+                EXISTING_USERS+=("${BASH_REMATCH[1]}")
+            fi
+        fi
+    done < "$INVENTORY_FILE"
+
+    # Ensure arrays are same length (fill missing users with default)
+    while [[ ${#EXISTING_USERS[@]} -lt ${#EXISTING_HOSTNAMES[@]} ]]; do
+        EXISTING_USERS+=("ansible")
+    done
+}
+
+# Health check all configured servers
+health_check_servers() {
+    print_header
+    print_info "Running health checks on configured servers..."
+    echo
+
+    local healthy=0
+    local unhealthy=0
+
+    for i in "${!EXISTING_HOSTNAMES[@]}"; do
+        local hostname="${EXISTING_HOSTNAMES[$i]}"
+        local host="${EXISTING_HOSTS[$i]}"
+        local user="${EXISTING_USERS[$i]}"
+
+        echo -e "${BOLD}Checking ${hostname} (${host})...${NC}"
+
+        # SSH connectivity check
+        if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no "${user}@${host}" "echo 'ok'" &>/dev/null; then
+            echo -e "  ${GREEN}✓${NC} SSH connectivity: OK"
+
+            # Check Docker
+            if ssh -o BatchMode=yes -o ConnectTimeout=10 "${user}@${host}" "docker ps" &>/dev/null; then
+                echo -e "  ${GREEN}✓${NC} Docker: Running"
+            else
+                echo -e "  ${YELLOW}⚠${NC} Docker: Not running or not installed"
+            fi
+
+            # Check Netdata
+            if ssh -o BatchMode=yes -o ConnectTimeout=10 "${user}@${host}" "curl -s http://localhost:19999/api/v1/info" &>/dev/null; then
+                echo -e "  ${GREEN}✓${NC} Netdata: Running"
+            else
+                echo -e "  ${YELLOW}⚠${NC} Netdata: Not accessible"
+            fi
+
+            # Check Dockge
+            if ssh -o BatchMode=yes -o ConnectTimeout=10 "${user}@${host}" "curl -s http://localhost:5001" &>/dev/null; then
+                echo -e "  ${GREEN}✓${NC} Dockge: Running"
+            else
+                echo -e "  ${YELLOW}⚠${NC} Dockge: Not accessible"
+            fi
+
+            # Check disk space
+            local disk_usage
+            disk_usage=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "${user}@${host}" "df -h / | tail -1 | awk '{print \$5}'" 2>/dev/null | tr -d '%')
+            if [[ -n "$disk_usage" ]]; then
+                if [[ "$disk_usage" -gt 90 ]]; then
+                    echo -e "  ${RED}✗${NC} Disk usage: ${disk_usage}% (CRITICAL)"
+                elif [[ "$disk_usage" -gt 80 ]]; then
+                    echo -e "  ${YELLOW}⚠${NC} Disk usage: ${disk_usage}% (Warning)"
+                else
+                    echo -e "  ${GREEN}✓${NC} Disk usage: ${disk_usage}%"
+                fi
+            fi
+
+            # Check memory
+            local mem_usage
+            mem_usage=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "${user}@${host}" "free | grep Mem | awk '{print int(\$3/\$2 * 100)}'" 2>/dev/null)
+            if [[ -n "$mem_usage" ]]; then
+                if [[ "$mem_usage" -gt 90 ]]; then
+                    echo -e "  ${RED}✗${NC} Memory usage: ${mem_usage}% (CRITICAL)"
+                elif [[ "$mem_usage" -gt 80 ]]; then
+                    echo -e "  ${YELLOW}⚠${NC} Memory usage: ${mem_usage}% (Warning)"
+                else
+                    echo -e "  ${GREEN}✓${NC} Memory usage: ${mem_usage}%"
+                fi
+            fi
+
+            ((healthy++))
+        else
+            echo -e "  ${RED}✗${NC} SSH connectivity: FAILED"
+            ((unhealthy++))
+        fi
+        echo
+    done
+
+    echo -e "${BOLD}Summary:${NC}"
+    echo -e "  ${GREEN}Healthy:${NC} ${healthy}"
+    echo -e "  ${RED}Unhealthy:${NC} ${unhealthy}"
+    echo
+
+    if [[ $unhealthy -gt 0 ]]; then
+        print_warning "Some servers failed health checks"
+        read -p "Would you like to re-run setup on failed servers? (y/N): " -r
+        echo
+        if [[ $REPLY =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            print_info "Run: ansible-playbook playbooks/setup-targets.yml --limit <hostname>"
+        fi
+    else
+        print_success "All servers are healthy!"
+    fi
+}
+
+# Backup existing configuration
+backup_existing_config() {
+    local backup_dir="backups/config_$(date +%Y%m%d_%H%M%S)"
+    print_info "Backing up existing configuration to ${backup_dir}..."
+
+    mkdir -p "$backup_dir"
+
+    if [[ -f "$INVENTORY_FILE" ]]; then
+        cp "$INVENTORY_FILE" "$backup_dir/"
+    fi
+
+    if [[ -f "$CONFIG_FILE" ]]; then
+        cp "$CONFIG_FILE" "$backup_dir/"
+    fi
+
+    if [[ -f "$VAULT_FILE" ]]; then
+        cp "$VAULT_FILE" "$backup_dir/"
+    fi
+
+    if [[ -f ".vault_password" ]]; then
+        cp ".vault_password" "$backup_dir/"
+    fi
+
+    print_success "Configuration backed up to ${backup_dir}"
+}
+
+# Merge new servers with existing inventory
+merge_inventory() {
+    if [[ "$USE_EXISTING_CONFIG" != true ]] || [[ ! -f "$INVENTORY_FILE" ]]; then
+        return
+    fi
+
+    print_info "Merging new servers with existing inventory..."
+
+    # Capture new server count before merge
+    local new_count=${#TARGET_HOSTS[@]}
+    local existing_count=${#EXISTING_HOSTNAMES[@]}
+
+    # Combine existing and new servers
+    local all_hosts=("${EXISTING_HOSTS[@]}" "${TARGET_HOSTS[@]}")
+    local all_hostnames=("${EXISTING_HOSTNAMES[@]}" "${TARGET_HOSTNAMES[@]}")
+    local all_users=("${EXISTING_USERS[@]}" "${TARGET_USERS[@]}")
+
+    # Update TARGET arrays with combined values
+    TARGET_HOSTS=("${all_hosts[@]}")
+    TARGET_HOSTNAMES=("${all_hostnames[@]}")
+    TARGET_USERS=("${all_users[@]}")
+
+    print_success "Merged ${existing_count} existing + ${new_count} new = ${#all_hostnames[@]} total servers"
 }
 
 # Install system dependencies
@@ -189,18 +466,42 @@ install_galaxy_deps() {
 # Prompt for target nodes
 prompt_target_nodes() {
     print_header
-    print_info "Target Server Configuration"
-    print_info "Enter details for servers you want to manage with Ansible"
+
+    # Check if adding to existing config
+    if [[ "${USE_EXISTING_CONFIG:-}" == true ]] && [[ ${#EXISTING_HOSTNAMES[@]} -gt 0 ]]; then
+        print_info "Adding New Target Servers"
+        print_info "You have ${#EXISTING_HOSTNAMES[@]} existing server(s) configured"
+        echo
+        echo -e "${BOLD}Existing servers:${NC}"
+        for i in "${!EXISTING_HOSTNAMES[@]}"; do
+            echo "  - ${EXISTING_HOSTNAMES[$i]} (${EXISTING_HOSTS[$i]})"
+        done
+        echo
+        print_info "Enter details for NEW servers to add"
+    else
+        print_info "Target Server Configuration"
+        print_info "Enter details for servers you want to manage with Ansible"
+    fi
     echo
 
-    # Initialize arrays
+    # Initialize arrays for NEW servers only
     TARGET_HOSTS=()
     TARGET_HOSTNAMES=()
     TARGET_USERS=()
 
     # Prompt for number of targets
-    read -p "How many target servers do you want to configure? [1]: " NUM_TARGETS
+    if [[ "${USE_EXISTING_CONFIG:-}" == true ]]; then
+        read -p "How many NEW target servers do you want to add? [1]: " NUM_TARGETS
+    else
+        read -p "How many target servers do you want to configure? [1]: " NUM_TARGETS
+    fi
     NUM_TARGETS=${NUM_TARGETS:-1}
+
+    # Allow 0 if just re-running on existing
+    if [[ "$NUM_TARGETS" == "0" ]] && [[ "${USE_EXISTING_CONFIG:-}" == true ]]; then
+        print_info "No new servers to add"
+        return
+    fi
 
     # SSH authentication method
     echo
@@ -383,7 +684,23 @@ prompt_config() {
         read -p "Netdata Cloud claim token (optional): " NETDATA_CLAIM_TOKEN
     fi
 
-    # Note: Uptime Kuma is installed on command node only via setup-control.yml
+    # Logging configuration
+    echo
+    echo -e "${BOLD}Logging Configuration:${NC}"
+    read -p "Enable Loki + Promtail + Grafana logging stack? (Y/n): " -r ENABLE_LOGGING
+    echo
+    ENABLE_LOGGING=${ENABLE_LOGGING:-y}
+
+    if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        read -p "Grafana port [3000]: " GRAFANA_PORT
+        GRAFANA_PORT=${GRAFANA_PORT:-3000}
+
+        read -p "Loki port [3100]: " LOKI_PORT
+        LOKI_PORT=${LOKI_PORT:-3100}
+    fi
+
+    # Note: Centralized monitoring (Uptime Kuma, central Grafana/Loki/Netdata)
+    # is installed on command node via setup-control.yml after target setup
 
     # Container management
     echo
@@ -620,6 +937,30 @@ fi)
 
 # Uptime Kuma is installed on command node only (setup-control.yml)
 
+# Logging Configuration (Loki + Promtail + Grafana)
+logging:
+  stack_dir: /opt/dockge/stacks/logging
+
+  loki:
+    enabled: $(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+    version: latest
+    port: ${LOKI_PORT:-3100}
+    retention_period: "744h"
+
+  promtail:
+    enabled: $(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+    version: latest
+    additional_jobs: []
+
+  grafana:
+    enabled: $(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+    version: latest
+    port: ${GRAFANA_PORT:-3000}
+    admin_user: admin
+    plugins: ""
+    smtp:
+      enabled: false
+
 # Container Management
 dockge:
   enabled: $(if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
@@ -641,6 +982,7 @@ security:
     - ${SSH_PORT:-22}
 $(if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${DOCKGE_PORT}"; fi)
 $(if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${NETDATA_PORT}"; fi)
+$(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${GRAFANA_PORT}"; echo "    - ${LOKI_PORT}"; fi)
 
   ssh_hardening: $(if [[ $ENABLE_SSH_HARDENING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
   ssh_port: ${SSH_PORT:-22}
@@ -794,6 +1136,12 @@ vault_uptime_kuma_credentials:
 # Monitoring & Observability
 vault_netdata_claim_token: "${NETDATA_CLAIM_TOKEN}"
 
+# Grafana Admin Password (change on first login)
+vault_grafana_admin_password: "admin"
+
+# Control Node Grafana (for centralized monitoring)
+vault_control_grafana_password: "admin"
+
 vault_uptime_kuma_push_urls:
   nas: ""
   dockge: ""
@@ -939,12 +1287,20 @@ run_playbook() {
     print_info "Running Ansible playbook..."
     echo
 
-    print_warning "This will configure ${#TARGET_HOSTS[@]} target server(s) with:"
-    if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Dockge (Container Management)"; fi
-    if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Netdata (Monitoring)"; fi
-    if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Restic Backups"; fi
-    if [[ $ENABLE_FAIL2BAN =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - fail2ban (Security)"; fi
-    if [[ $ENABLE_UFW =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - UFW Firewall"; fi
+    print_warning "This will configure ${#TARGET_HOSTS[@]} target server(s)"
+
+    # Show service list if we have config variables (fresh install)
+    if [[ -n "${ENABLE_DOCKGE:-}" ]]; then
+        echo "Services to be configured:"
+        if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Dockge (Container Management)"; fi
+        if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Netdata (Monitoring)"; fi
+        if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Loki + Promtail + Grafana (Logging)"; fi
+        if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Restic Backups"; fi
+        if [[ $ENABLE_FAIL2BAN =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - fail2ban (Security)"; fi
+        if [[ $ENABLE_UFW =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - UFW Firewall"; fi
+    elif [[ "${RERUN_EXISTING:-}" == true ]]; then
+        echo "(Re-running with existing configuration from group_vars/all.yml)"
+    fi
     echo
     print_info "Target servers:"
     for i in "${!TARGET_HOSTS[@]}"; do
@@ -967,8 +1323,10 @@ run_playbook() {
     if ansible-playbook playbooks/setup-targets.yml -v; then
         print_success "Target node playbook completed successfully!"
 
-        # Offer to install control node services
-        offer_control_node_setup
+        # Offer to install control node services (skip for re-runs unless adding servers)
+        if [[ "${RERUN_EXISTING:-}" != true ]]; then
+            offer_control_node_setup
+        fi
 
         show_completion_message
     else
@@ -988,33 +1346,57 @@ offer_control_node_setup() {
     print_info "Target servers are now configured. You can optionally install"
     print_info "centralized monitoring services on this control node:"
     echo
-    echo "  ${BOLD}Centralized Uptime Kuma:${NC}"
-    echo "  - Monitor ALL target servers from a single dashboard"
-    echo "  - Centralized alerting (email, Discord, Telegram, etc.)"
-    echo "  - Recommended for multi-server deployments"
+    echo "  ${BOLD}Centralized Monitoring Stack:${NC}"
+    echo "  - Uptime Kuma: Monitor ALL target servers from a single dashboard"
+    echo "  - Grafana: Central dashboards for logs and metrics"
+    echo "  - Loki: Aggregate logs from all target Promtail instances"
+    echo "  - Netdata Parent: Aggregate metrics from all target Netdata instances"
+    echo "  - Scanopy/Trivy: Container security scanning"
+    echo "  - PruneMate: Automated Docker cleanup"
+    echo
+    echo "  ${BOLD}Target Server Streaming:${NC}"
+    echo "  - Targets can stream metrics/logs to this control node"
+    echo "  - All data visible in central Grafana"
     echo
 
     read -p "Install centralized monitoring on this control node? (Y/n): " -r INSTALL_CONTROL
     echo
 
     if [[ ! $INSTALL_CONTROL =~ ^[Nn]$ ]]; then
+        # Get control node IP for target streaming config
+        local control_ip
+        control_ip=$(hostname -I | awk '{print $1}')
+        read -p "Control node IP for target streaming [${control_ip}]: " CONTROL_NODE_IP
+        CONTROL_NODE_IP=${CONTROL_NODE_IP:-$control_ip}
+
+        read -p "Enable target Promtail → Central Loki streaming? (Y/n): " -r ENABLE_CENTRAL_LOKI
+        ENABLE_CENTRAL_LOKI=${ENABLE_CENTRAL_LOKI:-y}
+
+        read -p "Enable target Netdata → Central Netdata streaming? (Y/n): " -r ENABLE_CENTRAL_NETDATA
+        ENABLE_CENTRAL_NETDATA=${ENABLE_CENTRAL_NETDATA:-y}
+
         print_info "Installing control node services..."
 
         # Run control node playbook
         if ansible-playbook playbooks/setup-control.yml -v; then
             print_success "Control node services installed!"
             echo
-            print_info "Access centralized Uptime Kuma:"
-            print_info "  http://localhost:${CONTROL_UPTIME_KUMA_PORT:-3001}"
+            print_info "Access centralized services:"
+            echo "  - Grafana:       http://${CONTROL_NODE_IP}:3000 (admin/admin)"
+            echo "  - Uptime Kuma:   http://${CONTROL_NODE_IP}:3001"
+            echo "  - Loki:          http://${CONTROL_NODE_IP}:3100"
+            echo "  - Netdata:       http://${CONTROL_NODE_IP}:19999"
             echo
-            print_info "Configure monitors for your target servers:"
-            for i in "${!TARGET_HOSTS[@]}"; do
-                local host_ip="${TARGET_HOSTS[$i]}"
-                echo "  - Netdata: http://${host_ip}:${NETDATA_PORT}"
-                echo "  - Dockge: http://${host_ip}:${DOCKGE_PORT}"
-                echo "  - SSH: ${host_ip}:22"
-            done
-            echo
+
+            # Update config with streaming settings if enabled
+            if [[ $ENABLE_CENTRAL_LOKI =~ ^[Yy]([Ee][Ss])?$ ]] || [[ $ENABLE_CENTRAL_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                print_info "Updating target configuration for centralized streaming..."
+                update_config_for_streaming
+                print_success "Target streaming configuration updated"
+                echo
+                print_warning "Re-run setup on targets to enable streaming:"
+                print_info "  ansible-playbook playbooks/setup-targets.yml"
+            fi
         else
             print_warning "Control node setup failed (optional)"
             print_info "You can run it manually later with:"
@@ -1025,6 +1407,40 @@ offer_control_node_setup() {
         print_info "You can install them later with:"
         print_info "  ansible-playbook playbooks/setup-control.yml"
     fi
+}
+
+# Update config file with streaming settings
+update_config_for_streaming() {
+    local config_file="group_vars/all.yml"
+
+    # Append streaming configuration
+    cat >> "$config_file" <<EOF
+
+# =============================================================================
+# CENTRALIZED MONITORING (Control Node)
+# =============================================================================
+# Added by setup.sh for centralized monitoring
+control_node_ip: "${CONTROL_NODE_IP}"
+
+# Target Promtail -> Central Loki
+target_promtail:
+  send_to_central: $(if [[ $ENABLE_CENTRAL_LOKI =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+
+# Target Netdata -> Central Netdata Parent
+target_netdata:
+  stream_to_parent: $(if [[ $ENABLE_CENTRAL_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+
+# Control Node Service Configuration
+control_loki:
+  port: 3100
+
+control_netdata:
+  port: 19999
+  stream_api_key: "11111111-2222-3333-4444-555555555555"
+
+control_grafana:
+  port: 3000
+EOF
 }
 
 # Show completion message with service URLs
@@ -1041,23 +1457,65 @@ show_completion_message() {
         local host_ip="${TARGET_HOSTS[$i]}"
 
         echo -e "${BOLD}${host_name} (${host_ip}):${NC}"
-        if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then
-            echo -e "  ${GREEN}Dockge:${NC}      http://${host_ip}:${DOCKGE_PORT}"
-        fi
-        if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then
-            echo -e "  ${GREEN}Netdata:${NC}     http://${host_ip}:${NETDATA_PORT}"
+
+        # For re-runs or when config variables exist, show service URLs
+        if [[ "${RERUN_EXISTING:-}" == true ]]; then
+            # Use default ports for re-runs
+            echo -e "  ${GREEN}Dockge:${NC}      http://${host_ip}:5001"
+            echo -e "  ${GREEN}Netdata:${NC}     http://${host_ip}:19999"
+            echo -e "  ${GREEN}Grafana:${NC}     http://${host_ip}:3000"
+        else
+            if [[ ${ENABLE_DOCKGE:-} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                echo -e "  ${GREEN}Dockge:${NC}      http://${host_ip}:${DOCKGE_PORT:-5001}"
+            fi
+            if [[ ${ENABLE_NETDATA:-} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                echo -e "  ${GREEN}Netdata:${NC}     http://${host_ip}:${NETDATA_PORT:-19999}"
+            fi
+            if [[ ${ENABLE_LOGGING:-} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                echo -e "  ${GREEN}Grafana:${NC}     http://${host_ip}:${GRAFANA_PORT:-3000}"
+                echo -e "  ${GREEN}Loki:${NC}        http://${host_ip}:${LOKI_PORT:-3100}"
+            fi
         fi
         echo
     done
 
+    # Show control node services if installed
+    if [[ -n "${CONTROL_NODE_IP:-}" ]]; then
+        echo -e "${BOLD}Control Node (${CONTROL_NODE_IP}):${NC}"
+        echo -e "  ${GREEN}Grafana:${NC}     http://${CONTROL_NODE_IP}:3000 (admin/admin)"
+        echo -e "  ${GREEN}Uptime Kuma:${NC} http://${CONTROL_NODE_IP}:3001"
+        echo -e "  ${GREEN}Loki:${NC}        http://${CONTROL_NODE_IP}:3100"
+        echo -e "  ${GREEN}Netdata:${NC}     http://${CONTROL_NODE_IP}:19999"
+        echo
+    fi
+
     print_info "Next steps:"
     echo "  1. Change default admin passwords on first login"
-    echo "  2. Run setup-control.yml to install Uptime Kuma on this command node"
-    if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then
+    if [[ -z "${CONTROL_NODE_IP:-}" ]]; then
+        echo "  2. Run setup-control.yml to install centralized monitoring"
+    else
+        echo "  2. Configure Grafana dashboards and Uptime Kuma monitors"
+    fi
+    if [[ ${ENABLE_BACKUPS:-} =~ ^[Yy]([Ee][Ss])?$ ]] || [[ "${RERUN_EXISTING:-}" == true ]]; then
         echo "  3. Verify backup repositories are initialized"
     fi
     echo "  4. Review security settings and firewall rules"
     echo
+
+    # Show streaming info if enabled
+    if [[ "${ENABLE_CENTRAL_LOKI:-}" =~ ^[Yy]([Ee][Ss])?$ ]] || [[ "${ENABLE_CENTRAL_NETDATA:-}" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        print_info "Centralized Monitoring:"
+        if [[ "${ENABLE_CENTRAL_LOKI:-}" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo "  - Promtail on targets → Loki at ${CONTROL_NODE_IP}:3100"
+        fi
+        if [[ "${ENABLE_CENTRAL_NETDATA:-}" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo "  - Netdata on targets → Parent at ${CONTROL_NODE_IP}:19999"
+        fi
+        echo
+        print_warning "Re-run on targets to enable streaming:"
+        echo "  ansible-playbook playbooks/setup-targets.yml"
+        echo
+    fi
 
     print_info "Useful commands (from command node):"
     echo "  - View service status: ansible all -m shell -a 'docker ps'"
@@ -1069,8 +1527,7 @@ show_completion_message() {
 
     print_info "Documentation:"
     echo "  - README: ${SCRIPT_DIR}/README.md"
-    echo "  - Vault Guide: ${SCRIPT_DIR}/VAULT_GUIDE.md"
-    echo "  - Migration Guide: ${SCRIPT_DIR}/MIGRATION.md"
+    echo "  - Quick Reference: ${SCRIPT_DIR}/docs/quick-reference.md"
     echo
 }
 
@@ -1088,23 +1545,46 @@ main() {
     check_sudo
     detect_os
 
+    # Check for existing configuration (health check, add servers, re-run, or fresh)
+    check_existing_config
+
     # Install dependencies on COMMAND NODE
     install_system_deps
     install_python_deps
     install_galaxy_deps
 
-    # Configuration
-    prompt_target_nodes  # NEW: Prompt for target servers first
-    prompt_config        # Then prompt for service configuration
-    create_inventory     # Create inventory with target nodes
-    create_config        # Create service configuration
-    create_vault         # Create encrypted vault
+    # Configuration - skip if re-running on existing servers
+    if [[ "${RERUN_EXISTING:-}" != true ]]; then
+        # Prompt for new target servers (unless using existing only)
+        if [[ "${USE_EXISTING_CONFIG:-}" != true ]] || [[ "${SETUP_MODE:-}" == "2" ]]; then
+            prompt_target_nodes
+        fi
+
+        # Merge with existing if adding servers
+        if [[ "${USE_EXISTING_CONFIG:-}" == true ]] && [[ "${SETUP_MODE:-}" == "2" ]]; then
+            merge_inventory
+        fi
+
+        # Prompt for service configuration (skip if using existing config for re-run)
+        if [[ "${USE_EXISTING_CONFIG:-}" != true ]]; then
+            prompt_config
+        fi
+
+        # Create/update inventory and config files
+        create_inventory
+        if [[ "${USE_EXISTING_CONFIG:-}" != true ]]; then
+            create_config
+            create_vault
+        fi
+    fi
 
     # Pre-flight checks
     preflight_checks
 
-    # Offer to run bootstrap playbook
-    offer_bootstrap
+    # Offer to run bootstrap playbook (skip for re-runs)
+    if [[ "${RERUN_EXISTING:-}" != true ]]; then
+        offer_bootstrap
+    fi
 
     # Run playbook
     run_playbook

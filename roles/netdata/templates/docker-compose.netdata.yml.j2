@@ -1,5 +1,8 @@
 # Netdata Stack - System Monitoring
 # Deployed via Dockge
+{% if target_netdata.stream_to_parent | default(false) and control_node_ip | default('') | length > 0 %}
+# Configured as CHILD node - streaming to parent at {{ control_node_ip }}:{{ control_netdata.port | default(19999) }}
+{% endif %}
 
 version: '3.8'
 
@@ -26,6 +29,9 @@ services:
       - /sys:/host/sys:ro
       - /etc/os-release:/host/etc/os-release:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+{% if target_netdata.stream_to_parent | default(false) and control_node_ip | default('') | length > 0 %}
+      - ./stream.conf:/etc/netdata/stream.conf:ro
+{% endif %}
     environment:
       - DOCKER_HOST=/var/run/docker.sock
 {% if monitoring.netdata.claim_token | default('') | length > 0 %}

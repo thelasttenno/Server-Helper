@@ -6,7 +6,13 @@ positions:
   filename: /tmp/positions.yaml
 
 clients:
+{% if target_promtail.send_to_central | default(false) and control_node_ip | default('') | length > 0 %}
+  # Sending logs to centralized Loki on control node
+  - url: http://{{ control_node_ip }}:{{ control_loki.port | default(3100) }}/loki/api/v1/push
+{% else %}
+  # Sending logs to local Loki
   - url: http://loki:3100/loki/api/v1/push
+{% endif %}
 
 scrape_configs:
   # Docker container logs

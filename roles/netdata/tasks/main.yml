@@ -16,6 +16,17 @@
     mode: '0644'
   when: monitoring.netdata.enabled | default(true)
 
+- name: Deploy Netdata stream.conf for parent streaming
+  ansible.builtin.template:
+    src: stream.conf.j2
+    dest: "{{ dockge_stacks_dir }}/netdata/stream.conf"
+    mode: '0644'
+  when:
+    - monitoring.netdata.enabled | default(true)
+    - target_netdata.stream_to_parent | default(false)
+    - control_node_ip | default('') | length > 0
+  notify: restart netdata
+
 - name: Start Netdata container
   community.docker.docker_compose:
     project_src: "{{ dockge_stacks_dir }}/netdata"
@@ -147,3 +158,14 @@
       - "  - Docker containers (tracks all running containers)"
       - "Health checks run every {{ monitoring.netdata.alarms.check_interval_minutes | default(5) }} minutes"
   when: monitoring.netdata.enabled | default(true)
+
+- name: Display Netdata streaming status
+  debug:
+    msg:
+      - "Netdata is streaming to parent node!"
+      - "Parent: {{ control_node_ip }}:{{ control_netdata.port | default(19999) }}"
+      - "This node's metrics will appear in the parent's dashboard"
+  when:
+    - monitoring.netdata.enabled | default(true)
+    - target_netdata.stream_to_parent | default(false)
+    - control_node_ip | default('') | length > 0

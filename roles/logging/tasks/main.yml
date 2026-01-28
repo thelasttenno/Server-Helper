@@ -96,7 +96,7 @@
   delay: 5
   when: logging.grafana.enabled | default(true)
 
-- name: Display logging stack information
+- name: Display logging stack information (local mode)
   ansible.builtin.debug:
     msg:
       - "Logging stack deployed successfully!"
@@ -110,3 +110,17 @@
       - "1. Access Grafana and explore pre-configured Loki datasource"
       - "2. Create dashboards or import existing ones"
       - "3. Use Explore feature to query logs"
+  when: not (target_promtail.send_to_central | default(false))
+
+- name: Display logging stack information (central mode)
+  ansible.builtin.debug:
+    msg:
+      - "Promtail deployed - sending logs to central Loki!"
+      - "Central Loki: http://{{ control_node_ip }}:{{ control_loki.port | default(3100) }}"
+      - "Promtail: Running on host {{ hostname | default(ansible_hostname) }}"
+      - ""
+      - "Logs from this host will appear in the central Grafana dashboard"
+      - "Access central Grafana at: http://{{ control_node_ip }}:{{ control_grafana.port | default(3000) }}"
+  when:
+    - target_promtail.send_to_central | default(false)
+    - control_node_ip | default('') | length > 0

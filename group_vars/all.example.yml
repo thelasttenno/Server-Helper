@@ -854,6 +854,85 @@ notifications:
     chat_id: ""
 
 # =============================================================================
+# CONTROL NODE CONFIGURATION (Centralized Services)
+# =============================================================================
+# These services run ONLY on the control node and aggregate data from all targets.
+# Configure these when running: ansible-playbook playbooks/setup-control.yml
+
+control_node_install_dir: "/opt/server-helper-control"
+
+# Centralized Uptime Kuma - monitors all target servers
+control_uptime_kuma:
+  enabled: true
+  version: "latest"
+  port: 3001
+
+# Centralized Grafana - dashboards for all servers
+control_grafana:
+  enabled: true
+  version: "latest"
+  port: 3000
+  admin_user: "admin"
+  # Admin password stored in vault: vault_control_grafana_password
+  plugins: ""  # Comma-separated list
+
+  # SMTP for alerts (optional)
+  smtp:
+    enabled: false
+    host: "smtp.gmail.com"
+    port: 587
+    user: ""
+    from_address: ""
+    from_name: "Grafana Control"
+
+# Centralized Loki - aggregates logs from all target Promtail instances
+control_loki:
+  enabled: true
+  version: "latest"
+  port: 3100
+  retention_period: "744h"  # 31 days
+
+# Centralized Netdata Parent - aggregates metrics from all target Netdata children
+control_netdata:
+  enabled: true
+  version: "latest"
+  port: 19999
+  # API key for child nodes to connect (generate with: uuidgen)
+  stream_api_key: "11111111-2222-3333-4444-555555555555"
+
+# Scanopy (Trivy) - Container security scanning
+control_scanopy:
+  enabled: true
+  trivy_version: "latest"
+  port: 8080
+
+# PruneMate - Automated Docker cleanup
+control_prunemate:
+  enabled: true
+  schedule: "0 3 * * 0"  # Weekly Sunday 3 AM
+
+# =============================================================================
+# TARGET NODE STREAMING CONFIGURATION
+# =============================================================================
+# Configure target nodes to send data to the central control node.
+# Set control_node_ip to your control node's IP address.
+
+control_node_ip: ""  # e.g., "192.168.1.100"
+
+# Target Promtail -> Central Loki
+target_promtail:
+  send_to_central: false  # Set true to send logs to central Loki
+  # When true, Promtail on targets will push logs to:
+  # http://{{ control_node_ip }}:{{ control_loki.port }}/loki/api/v1/push
+
+# Target Netdata -> Central Netdata Parent
+target_netdata:
+  stream_to_parent: false  # Set true to stream metrics to parent
+  # When true, Netdata children will stream to:
+  # {{ control_node_ip }}:{{ control_netdata.port }}
+  # Using API key: {{ control_netdata.stream_api_key }}
+
+# =============================================================================
 # ADVANCED SETTINGS
 # =============================================================================
 

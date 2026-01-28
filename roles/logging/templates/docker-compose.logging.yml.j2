@@ -1,5 +1,12 @@
 # Logging & Visualization Stack - Loki + Promtail + Grafana
 # Deployed via Dockge
+#
+{% if target_promtail.send_to_central | default(false) and control_node_ip | default('') | length > 0 %}
+# MODE: Centralized - Promtail sends logs to central Loki at {{ control_node_ip }}:{{ control_loki.port | default(3100) }}
+# Local Loki and Grafana can be disabled since logs go to the control node
+{% else %}
+# MODE: Local - Full logging stack running on this host
+{% endif %}
 
 version: '3.8'
 
