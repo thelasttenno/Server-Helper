@@ -3045,8 +3045,8 @@ vault_system_users:
 EOF
 
     # Encrypt the vault file
-    ansible-vault encrypt "$vault_temp" --vault-password-file="$vault_password_file" --output="$vault_file"
-    rm -f "$vault_temp"
+    ansible-vault encrypt "$temp_vault" --vault-password-file="$vault_password_file" --output="$vault_file"
+    rm -f "$temp_vault"
 
     print_success "Encrypted vault file created: $vault_file"
     print_warning "Keep your vault password file secure: $vault_password_file"
