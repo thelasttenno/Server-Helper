@@ -1,0 +1,195 @@
+---
+# Server Helper v1.0.0 - Bootstrap Playbook
+# ==========================================
+# This playbook prepares fresh target nodes for Ansible management.
+# Run this ONCE on new nodes before running the main setup playbook.
+#
+# Prerequisites:
+#   - Target node has SSH running
+#   - You have root access OR a user with sudo privileges
+#   - Python 3 is installed (or use raw module tasks)
+#
+# Usage:
+#   ansible-playbook playbooks/bootstrap.yml --ask-become-pass
+#   OR
+#   ansible-playbook playbooks/bootstrap.yml -K
+#
+
+- name: Bootstrap Target Nodes for Ansible Management
+  hosts: all
+  gather_facts: false
+  become: true
+
+  vars_prompt:
+    - name: ansible_admin_user
+      prompt: "Enter username for Ansible admin user"
+      private: false
+      default: "ansible"
+
+    - name: ansible_admin_password
+      prompt: "Set password for Ansible admin user (leave empty to skip)"
+      private: true
+      default: ""
+
+    - name: add_ssh_key
+      prompt: "Add your SSH public key from command node? (yes/no)"
+      private: false
+      default: "yes"
+
+  tasks:
+    # ==============================================
+    # Pre-flight: Install Python 3 for Ansible
+    # ==============================================
+    - name: Check if Python 3 is installed
+      raw: which python3
+      register: python_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Install Python 3 using raw module
+      raw: |
+        apt-get update -qq
+        apt-get install -y python3 python3-apt
+      when: python_check.rc != 0
+      changed_when: true
+
+    # Now we can gather facts since Python is available
+    - name: Gather facts
+      ansible.builtin.setup:
+
+    # ==============================================
+    # System Updates
+    # ==============================================
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    - name: Upgrade all packages
+      ansible.builtin.apt:
+        upgrade: dist
+        update_cache: true
+      when: ansible_os_family == "Debian"
+      register: upgrade_result
+
+    # ==============================================
+    # Install Essential Packages
+    # ==============================================
+    - name: Install essential packages
+      ansible.builtin.apt:
+        name:
+          - openssh-server
+          - sudo
+          - curl
+          - wget
+          - git
+          - vim
+          - htop
+          - python3
+          - python3-apt
+        state: present
+      when: ansible_os_family == "Debian"
+
+    # ==============================================
+    # SSH Server Configuration
+    # ==============================================
+    - name: Ensure SSH server is enabled and running
+      ansible.builtin.systemd:
+        name: ssh
+        enabled: true
+        state: started
+
+    # ==============================================
+    # Create Admin User
+    # ==============================================
+    - name: Create Ansible admin user
+      ansible.builtin.user:
+        name: "{{ ansible_admin_user }}"
+        comment: "Ansible Admin User"
+        shell: /bin/bash
+        create_home: true
+        groups: sudo
+        append: true
+        state: present
+
+    - name: Set password for admin user
+      ansible.builtin.user:
+        name: "{{ ansible_admin_user }}"
+        password: "{{ ansible_admin_password | password_hash('sha512') }}"
+      when: ansible_admin_password | length > 0
+
+    - name: Configure passwordless sudo for admin user
+      ansible.builtin.copy:
+        content: "{{ ansible_admin_user }} ALL=(ALL) NOPASSWD:ALL\n"
+        dest: "/etc/sudoers.d/{{ ansible_admin_user }}"
+        mode: '0440'
+        validate: 'visudo -cf %s'
+
+    # ==============================================
+    # SSH Key Configuration
+    # ==============================================
+    - name: Add SSH authorized key for admin user
+      ansible.posix.authorized_key:
+        user: "{{ ansible_admin_user }}"
+        state: present
+        key: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/id_rsa.pub') }}"
+      when: add_ssh_key | lower == 'yes'
+
+    - name: Display SSH key instructions if skipped
+      ansible.builtin.debug:
+        msg:
+          - "SSH key was not added automatically."
+          - "To add your SSH key later, run on command node:"
+          - "  ssh-copy-id {{ ansible_admin_user }}@{{ ansible_host }}"
+      when: add_ssh_key | lower != 'yes'
+
+    # ==============================================
+    # Basic Security Hardening
+    # ==============================================
+    - name: Configure SSH to disable root login (recommended)
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin'
+        line: 'PermitRootLogin no'
+        state: present
+        validate: 'sshd -t -f %s'
+      notify: Restart SSH
+
+    - name: Configure SSH to disable password authentication (if key was added)
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+        state: present
+        validate: 'sshd -t -f %s'
+      when: add_ssh_key | lower == 'yes'
+      notify: Restart SSH
+
+    # ==============================================
+    # Display Bootstrap Summary
+    # ==============================================
+    - name: Display bootstrap completion message
+      ansible.builtin.debug:
+        msg:
+          - "═══════════════════════════════════════"
+          - "      Bootstrap Complete!"
+          - "═══════════════════════════════════════"
+          - ""
+          - "Node Information:"
+          - "  Hostname: {{ ansible_hostname }}"
+          - "  IP Address: {{ ansible_default_ipv4.address }}"
+          - "  Admin User: {{ ansible_admin_user }}"
+          - "  Python: {{ ansible_python_version }}"
+          - ""
+          - "Next steps:"
+          - "  1. Update inventory/hosts.yml with this node"
+          - "  2. Test connectivity: ansible {{ ansible_hostname }} -m ping"
+          - "  3. Run main setup: ansible-playbook playbooks/setup.yml"
+          - ""
+
+  handlers:
+    - name: Restart SSH
+      ansible.builtin.systemd:
+        name: ssh
+        state: restarted

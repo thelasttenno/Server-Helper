@@ -1,16 +1,37 @@
 ---
-# Netdata Role - Configure alarms and notifications
-# This role configures Netdata health alarms and Uptime Kuma integration
+# Netdata Role - Deploy and configure Netdata monitoring
+# This role deploys Netdata container and configures health alarms
+
+- name: Create Netdata stack directory
+  ansible.builtin.file:
+    path: "{{ dockge_stacks_dir }}/netdata"
+    state: directory
+    mode: '0755'
+  when: monitoring.netdata.enabled | default(true)
+
+- name: Deploy Netdata docker-compose file
+  ansible.builtin.template:
+    src: docker-compose.netdata.yml.j2
+    dest: "{{ dockge_stacks_dir }}/netdata/compose.yaml"
+    mode: '0644'
+  when: monitoring.netdata.enabled | default(true)
+
+- name: Start Netdata container
+  community.docker.docker_compose:
+    project_src: "{{ dockge_stacks_dir }}/netdata"
+    state: present
+    pull: true
+  when: monitoring.netdata.enabled | default(true)
 
 - name: Wait for Netdata container to be healthy
   uri:
-    url: "http://localhost:{{ netdata.port }}/api/v1/info"
+    url: "http://localhost:{{ monitoring.netdata.port }}/api/v1/info"
     status_code: 200
   register: netdata_health
   until: netdata_health.status == 200
   retries: 30
   delay: 5
-  when: netdata.enabled | default(true)
+  when: monitoring.netdata.enabled | default(true)
 
 - name: Create Netdata config directories
   file:
@@ -21,7 +42,7 @@
     - "{{ dockge.data_dir }}/stacks/netdata/config"
     - "{{ dockge.data_dir }}/stacks/netdata/config/health.d"
     - "{{ dockge.data_dir }}/stacks/netdata/config/health_alarm_notify.conf.d"
-  when: netdata.enabled | default(true)
+  when: monitoring.netdata.enabled | default(true)
 
 - name: Configure CPU alarm
   template:
@@ -29,8 +50,8 @@
     dest: "{{ dockge.data_dir }}/stacks/netdata/config/health.d/cpu.conf"
     mode: '0644'
   when: 
-    - netdata.enabled | default(true)
-    - netdata.alarms.enabled | default(true)
+    - monitoring.netdata.enabled | default(true)
+    - monitoring.netdata.alarms.enabled | default(true)
   notify: restart netdata
 
 - name: Configure RAM alarm
@@ -39,8 +60,8 @@
     dest: "{{ dockge.data_dir }}/stacks/netdata/config/health.d/ram.conf"
     mode: '0644'
   when: 
-    - netdata.enabled | default(true)
-    - netdata.alarms.enabled | default(true)
+    - monitoring.netdata.enabled | default(true)
+    - monitoring.netdata.alarms.enabled | default(true)
   notify: restart netdata
 
 - name: Configure disk alarm
@@ -49,8 +70,8 @@
     dest: "{{ dockge.data_dir }}/stacks/netdata/config/health.d/disk.conf"
     mode: '0644'
   when: 
-    - netdata.enabled | default(true)
-    - netdata.alarms.enabled | default(true)
+    - monitoring.netdata.enabled | default(true)
+    - monitoring.netdata.alarms.enabled | default(true)
   notify: restart netdata
 
 - name: Configure Docker container monitoring
@@ -59,8 +80,8 @@
     dest: "{{ dockge.data_dir }}/stacks/netdata/config/health.d/docker.conf"
     mode: '0644'
   when: 
-    - netdata.enabled | default(true)
-    - netdata.alarms.enabled | default(true)
+    - monitoring.netdata.enabled | default(true)
+    - monitoring.netdata.alarms.enabled | default(true)
   notify: restart netdata
 
 - name: Create Uptime Kuma notification script
@@ -69,9 +90,9 @@
     dest: /usr/local/bin/netdata_notify_uptime_kuma.sh
     mode: '0755'
   when:
-    - netdata.enabled | default(true)
-    - netdata.alarms.enabled | default(true)
-    - netdata.alarms.uptime_kuma_urls.cpu | default('') | length > 0
+    - monitoring.netdata.enabled | default(true)
+    - monitoring.netdata.alarms.enabled | default(true)
+    - monitoring.netdata.alarms.uptime_kuma_urls.cpu | default('') | length > 0
 
 - name: Configure Netdata alarm notifications
   template:
@@ -79,8 +100,8 @@
     dest: "{{ dockge.data_dir }}/stacks/netdata/config/health_alarm_notify.conf.d/uptime_kuma.conf"
     mode: '0644'
   when:
-    - netdata.enabled | default(true)
-    - netdata.alarms.enabled | default(true)
+    - monitoring.netdata.enabled | default(true)
+    - monitoring.netdata.alarms.enabled | default(true)
   notify: restart netdata
 
 - name: Create Netdata API health check script
@@ -88,7 +109,7 @@
     src: check_netdata_health.sh.j2
     dest: /usr/local/bin/check_netdata_health.sh
     mode: '0755'
-  when: netdata.enabled | default(true)
+  when: monitoring.netdata.enabled | default(true)
 
 - name: Create systemd timer for Netdata health checks
   template:
@@ -96,8 +117,8 @@
     dest: /etc/systemd/system/netdata-health-check.timer
     mode: '0644'
   when:
-    - netdata.enabled | default(true)
-    - netdata.alarms.enabled | default(true)
+    - monitoring.netdata.enabled | default(true)
+    - monitoring.netdata.alarms.enabled | default(true)
   notify:
     - reload systemd
     - enable netdata health check timer
@@ -108,8 +129,8 @@
     dest: /etc/systemd/system/netdata-health-check.service
     mode: '0644'
   when:
-    - netdata.enabled | default(true)
-    - netdata.alarms.enabled | default(true)
+    - monitoring.netdata.enabled | default(true)
+    - monitoring.netdata.alarms.enabled | default(true)
   notify:
     - reload systemd
     - enable netdata health check timer
@@ -118,11 +139,11 @@
   debug:
     msg:
       - "Netdata is configured!"
-      - "Access at: http://{{ ansible_host }}:{{ netdata.port }}"
+      - "Access at: http://{{ ansible_host }}:{{ monitoring.netdata.port }}"
       - "Alarms configured for:"
-      - "  - CPU usage (warning: {{ netdata.alarms.cpu_warning }}%, critical: {{ netdata.alarms.cpu_critical }}%)"
-      - "  - RAM usage (warning: {{ netdata.alarms.ram_warning }}%, critical: {{ netdata.alarms.ram_critical }}%)"
-      - "  - Disk usage (warning: {{ netdata.alarms.disk_warning }}%, critical: {{ netdata.alarms.disk_critical }}%)"
+      - "  - CPU usage (warning: {{ monitoring.netdata.alarms.cpu_warning }}%, critical: {{ monitoring.netdata.alarms.cpu_critical }}%)"
+      - "  - RAM usage (warning: {{ monitoring.netdata.alarms.ram_warning }}%, critical: {{ monitoring.netdata.alarms.ram_critical }}%)"
+      - "  - Disk usage (warning: {{ monitoring.netdata.alarms.disk_warning }}%, critical: {{ monitoring.netdata.alarms.disk_critical }}%)"
       - "  - Docker containers (tracks all running containers)"
-      - "Health checks run every {{ netdata.alarms.check_interval_minutes | default(5) }} minutes"
-  when: netdata.enabled | default(true)
+      - "Health checks run every {{ monitoring.netdata.alarms.check_interval_minutes | default(5) }} minutes"
+  when: monitoring.netdata.enabled | default(true)

@@ -1,0 +1,36 @@
+---
+# Default variables for logging role
+
+logging:
+  # Stack directory
+  stack_dir: /opt/dockge/stacks/logging
+
+  # Loki configuration
+  loki:
+    enabled: true
+    version: latest
+    port: 3100
+    retention_period: "744h"  # 31 days
+
+  # Promtail configuration
+  promtail:
+    enabled: true
+    version: latest
+    additional_jobs: []
+
+  # Grafana configuration
+  grafana:
+    enabled: true
+    version: latest
+    port: 3000
+    admin_user: admin
+    plugins: ""  # Comma-separated list of plugins to install
+
+    # SMTP configuration (optional)
+    smtp:
+      enabled: false
+      host: smtp.gmail.com
+      port: 587
+      user: ""
+      from_address: ""
+      from_name: "Grafana"

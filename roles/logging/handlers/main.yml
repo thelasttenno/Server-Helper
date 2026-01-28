@@ -1,0 +1,8 @@
+---
+# Handlers for logging role
+
+- name: Restart logging stack
+  community.docker.docker_compose:
+    project_src: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}"
+    state: present
+    restarted: true

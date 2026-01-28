@@ -1,0 +1,73 @@
+---
+# Semaphore UI deployment tasks
+
+- name: Check if Semaphore is enabled
+  ansible.builtin.debug:
+    msg: "Semaphore UI is {{ 'enabled' if semaphore.enabled else 'disabled' }}"
+
+- name: Skip Semaphore deployment if disabled
+  ansible.builtin.meta: end_play
+  when: not semaphore.enabled
+
+- name: Create Semaphore directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ semaphore_data_dir }}"
+    - "{{ semaphore_playbooks_dir }}"
+    - "{{ semaphore_config_dir }}"
+
+- name: Deploy Semaphore Docker Compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /opt/semaphore/docker-compose.yml
+    mode: '0644'
+  notify: Restart Semaphore
+
+- name: Create Semaphore network
+  community.docker.docker_network:
+    name: semaphore
+    driver: bridge
+    state: present
+
+- name: Start Semaphore containers
+  community.docker.docker_compose_v2:
+    project_src: /opt/semaphore
+    state: present
+  register: semaphore_deployment
+
+- name: Wait for Semaphore to be healthy
+  ansible.builtin.uri:
+    url: "http://localhost:{{ semaphore.port }}/api/ping"
+    status_code: 200
+    timeout: 5
+  register: semaphore_health
+  until: semaphore_health.status == 200
+  retries: 30
+  delay: 5
+  changed_when: false
+
+- name: Display Semaphore access information
+  ansible.builtin.debug:
+    msg:
+      - "Semaphore UI is now running!"
+      - "Access URL: http://{{ ansible_default_ipv4.address }}:{{ semaphore.port }}"
+      - "Default username: {{ semaphore.admin.username }}"
+      - "Default password: (stored in vault)"
+      - ""
+      - "IMPORTANT: Please change the default admin password after first login!"
+      - ""
+      - "Playbooks directory: {{ semaphore_playbooks_dir }}"
+      - "Copy your Ansible playbooks to this directory to use them in Semaphore."
+      - ""
+      - "Database: {{ semaphore.database.dialect }}"
+      - "For more information, visit: https://docs.ansible-semaphore.com/"
+
+- name: Create Semaphore setup guide
+  ansible.builtin.template:
+    src: semaphore-setup-guide.md.j2
+    dest: /root/semaphore-setup-guide.md
+    mode: '0644'
+  when: semaphore_deployment.changed

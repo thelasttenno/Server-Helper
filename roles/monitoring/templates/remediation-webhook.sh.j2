@@ -1,0 +1,76 @@
+#!/bin/bash
+# Remediation Webhook Handler
+# Listens for HTTP requests and triggers automated remediation
+
+PORT={{ monitoring.remediation_webhook_port | default(9090) }}
+LOG_FILE=/var/log/remediation-webhook.log
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+handle_request() {
+    local action="$1"
+    local service="$2"
+    local severity="$3"
+
+    log "Received remediation request: action=$action, service=$service, severity=$severity"
+
+    case "$action" in
+        service_restart)
+            log "Triggering service restart for: $service"
+            /usr/local/bin/trigger-service-restart.sh "$service" "$severity" &
+            ;;
+        disk_cleanup)
+            log "Triggering disk cleanup"
+            /usr/local/bin/trigger-disk-cleanup.sh "$severity" &
+            ;;
+        cert_renewal)
+            log "Triggering certificate renewal"
+            /usr/local/bin/trigger-cert-renewal.sh &
+            ;;
+        health_check)
+            log "Running health check"
+            ansible-playbook {{ base_install_dir }}/ansible/playbooks/remediation.yml \
+                -e "action=health_check" >> "$LOG_FILE" 2>&1 &
+            ;;
+        *)
+            log "Unknown action: $action"
+            return 1
+            ;;
+    esac
+
+    return 0
+}
+
+# Simple HTTP server using socat or nc
+log "Starting remediation webhook handler on port $PORT"
+
+while true; do
+    {
+        read -r REQUEST
+
+        # Parse query parameters
+        if [[ "$REQUEST" =~ action=([^&\ ]+) ]]; then
+            ACTION="${BASH_REMATCH[1]}"
+        fi
+
+        if [[ "$REQUEST" =~ service=([^&\ ]+) ]]; then
+            SERVICE="${BASH_REMATCH[1]}"
+        fi
+
+        if [[ "$REQUEST" =~ severity=([^&\ ]+) ]]; then
+            SEVERITY="${BASH_REMATCH[1]}"
+        fi
+
+        # Handle the request
+        if handle_request "${ACTION:-health_check}" "${SERVICE:-unknown}" "${SEVERITY:-warning}"; then
+            echo -e "HTTP/1.1 200 OK\r\n\r\n{\"status\":\"accepted\",\"action\":\"$ACTION\"}"
+        else
+            echo -e "HTTP/1.1 400 Bad Request\r\n\r\n{\"status\":\"error\",\"message\":\"Invalid action\"}"
+        fi
+
+    } | nc -l -p "$PORT" -q 1
+
+    sleep 1
+done

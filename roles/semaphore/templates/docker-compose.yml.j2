@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+{% if semaphore.database.dialect == 'postgres' %}
+  semaphore-db:
+    image: postgres:15-alpine
+    container_name: semaphore-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: {{ semaphore.database.user }}
+      POSTGRES_PASSWORD: {{ vault_semaphore_db_password }}
+      POSTGRES_DB: {{ semaphore.database.name }}
+    volumes:
+      - semaphore-db-data:/var/lib/postgresql/data
+    networks:
+      - semaphore
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ semaphore.database.user }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+{% elif semaphore.database.dialect == 'mysql' %}
+  semaphore-db:
+    image: mysql:8.0
+    container_name: semaphore-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: {{ vault_semaphore_db_root_password }}
+      MYSQL_DATABASE: {{ semaphore.database.name }}
+      MYSQL_USER: {{ semaphore.database.user }}
+      MYSQL_PASSWORD: {{ vault_semaphore_db_password }}
+    volumes:
+      - semaphore-db-data:/var/lib/mysql
+    networks:
+      - semaphore
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+{% endif %}
+  semaphore:
+    image: semaphoreui/semaphore:latest
+    container_name: semaphore
+    restart: unless-stopped
+    ports:
+      - "{{ semaphore.port }}:3000"
+    environment:
+      SEMAPHORE_DB_DIALECT: {{ semaphore.database.dialect }}
+{% if semaphore.database.dialect in ['postgres', 'mysql'] %}
+      SEMAPHORE_DB_HOST: {{ semaphore.database.host }}
+      SEMAPHORE_DB_PORT: {{ semaphore.database.port }}
+      SEMAPHORE_DB_USER: {{ semaphore.database.user }}
+      SEMAPHORE_DB_PASS: {{ vault_semaphore_db_password }}
+      SEMAPHORE_DB_NAME: {{ semaphore.database.name }}
+{% else %}
+      SEMAPHORE_DB: /data/semaphore.db
+{% endif %}
+      SEMAPHORE_PLAYBOOK_PATH: /tmp/semaphore
+      SEMAPHORE_ADMIN_PASSWORD: {{ vault_semaphore_admin_password }}
+      SEMAPHORE_ADMIN_NAME: {{ semaphore.admin.username }}
+      SEMAPHORE_ADMIN_EMAIL: {{ semaphore.admin.email }}
+      SEMAPHORE_ADMIN: {{ semaphore.admin.username }}
+      SEMAPHORE_ACCESS_KEY_ENCRYPTION: {{ vault_semaphore_access_key_encryption }}
+{% if semaphore.web_host is defined %}
+      SEMAPHORE_WEB_ROOT: {{ semaphore.web_host }}
+{% endif %}
+{% if semaphore.ldap is defined and semaphore.ldap.enabled %}
+      SEMAPHORE_LDAP_ACTIVATED: 'yes'
+      SEMAPHORE_LDAP_HOST: {{ semaphore.ldap.server }}
+      SEMAPHORE_LDAP_BINDDN: {{ semaphore.ldap.binddn }}
+      SEMAPHORE_LDAP_BINDPASSWORD: {{ vault_semaphore_ldap_password }}
+      SEMAPHORE_LDAP_SEARCHDN: {{ semaphore.ldap.searchdn }}
+{% endif %}
+{% if semaphore.email is defined and semaphore.email.enabled %}
+      SEMAPHORE_EMAIL_SENDER: {{ semaphore.email.sender }}
+      SEMAPHORE_EMAIL_HOST: {{ semaphore.email.host }}
+      SEMAPHORE_EMAIL_PORT: {{ semaphore.email.port }}
+      SEMAPHORE_EMAIL_USERNAME: {{ semaphore.email.username }}
+      SEMAPHORE_EMAIL_PASSWORD: {{ vault_semaphore_smtp_password }}
+{% endif %}
+{% if semaphore.telegram is defined and semaphore.telegram.enabled %}
+      SEMAPHORE_TELEGRAM_TOKEN: {{ vault_semaphore_telegram_token }}
+      SEMAPHORE_TELEGRAM_CHAT: {{ vault_semaphore_telegram_chat }}
+{% endif %}
+{% if semaphore.slack is defined and semaphore.slack.enabled %}
+      SEMAPHORE_SLACK_URL: {{ vault_semaphore_slack_webhook }}
+{% endif %}
+    volumes:
+      - {{ semaphore_data_dir }}:/data
+      - {{ semaphore_playbooks_dir }}:/playbooks
+      - {{ semaphore_config_dir }}:/etc/semaphore
+{% if semaphore.database.dialect == 'bolt' %}
+      - semaphore-db-data:/data
+{% endif %}
+    networks:
+      - semaphore
+{% if semaphore.database.dialect in ['postgres', 'mysql'] %}
+    depends_on:
+      semaphore-db:
+        condition: service_healthy
+{% endif %}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  semaphore:
+    name: semaphore
+    driver: bridge
+
+volumes:
+{% if semaphore.database.dialect in ['postgres', 'mysql', 'bolt'] %}
+  semaphore-db-data:
+    name: semaphore-db-data
+{% endif %}

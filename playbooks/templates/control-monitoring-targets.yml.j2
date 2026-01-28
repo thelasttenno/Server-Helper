@@ -1,0 +1,39 @@
+# Server Helper - Monitoring Targets Configuration
+# Generated: {{ ansible_date_time.iso8601 }}
+# This file lists all target servers being monitored by this control node
+
+---
+control_node:
+  hostname: {{ ansible_hostname }}
+  ip: {{ ansible_default_ipv4.address }}
+  monitoring:
+    uptime_kuma_port: {{ control_uptime_kuma.port }}
+    scanopy_port: {{ control_scanopy.port }}
+
+target_servers:
+{% for host in target_servers %}
+  - hostname: {{ hostvars[host]['ansible_hostname'] | default(host) }}
+    ip: {{ hostvars[host]['ansible_default_ipv4']['address'] | default('unknown') }}
+    services:
+      - name: "Dockge"
+        url: "http://{{ hostvars[host]['ansible_default_ipv4']['address'] | default(host) }}:{{ dockge.port }}"
+      - name: "Netdata"
+        url: "http://{{ hostvars[host]['ansible_default_ipv4']['address'] | default(host) }}:{{ monitoring.netdata.port }}"
+{% endfor %}
+
+# Uptime Kuma Monitoring Setup
+# -----------------------------
+# Add these monitors to Uptime Kuma:
+#
+# For each target server, create:
+# 1. HTTP(s) monitor for Dockge on port {{ dockge.port }}
+# 2. HTTP(s) monitor for Netdata health API on port {{ monitoring.netdata.port }}
+# 3. Ping monitor for server availability
+#
+# Recommended URLs:
+{% for host in target_servers %}
+# {{ hostvars[host]['ansible_hostname'] | default(host) }}:
+#   - Dockge: http://{{ hostvars[host]['ansible_default_ipv4']['address'] | default(host) }}:{{ dockge.port }}
+#   - Netdata: http://{{ hostvars[host]['ansible_default_ipv4']['address'] | default(host) }}:{{ monitoring.netdata.port }}/api/v1/info
+#   - SSH: {{ hostvars[host]['ansible_default_ipv4']['address'] | default(host) }}:22
+{% endfor %}

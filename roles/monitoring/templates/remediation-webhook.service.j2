@@ -1,0 +1,23 @@
+[Unit]
+Description=Automated Remediation Webhook Handler
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/remediation-webhook-handler.sh
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/remediation-webhook.log
+StandardError=append:/var/log/remediation-webhook.log
+User=root
+
+# Security hardening
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/log /tmp /opt
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

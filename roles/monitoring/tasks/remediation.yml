@@ -1,0 +1,65 @@
+---
+# Monitoring Remediation Integration
+# Creates webhook endpoints and triggers for automated remediation
+
+- name: Create remediation webhook handler
+  template:
+    src: remediation-webhook.sh.j2
+    dest: /usr/local/bin/remediation-webhook-handler.sh
+    mode: '0755'
+
+- name: Create systemd service for webhook handler
+  template:
+    src: remediation-webhook.service.j2
+    dest: /etc/systemd/system/remediation-webhook.service
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart remediation webhook
+
+- name: Enable and start webhook handler service
+  systemd:
+    name: remediation-webhook
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Create Uptime Kuma push monitor configurations
+  template:
+    src: uptime-kuma-monitors.json.j2
+    dest: /root/uptime-kuma-monitors.json
+    mode: '0644'
+
+- name: Create remediation trigger scripts
+  template:
+    src: "{{ item.template }}"
+    dest: "/usr/local/bin/{{ item.name }}"
+    mode: '0755'
+  loop:
+    - { name: 'trigger-service-restart.sh', template: 'trigger-service-restart.sh.j2' }
+    - { name: 'trigger-disk-cleanup.sh', template: 'trigger-disk-cleanup.sh.j2' }
+    - { name: 'trigger-cert-renewal.sh', template: 'trigger-cert-renewal.sh.j2' }
+
+- name: Configure systemd service restart policies
+  template:
+    src: docker-auto-restart.conf.j2
+    dest: /etc/systemd/system/docker.service.d/auto-restart.conf
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart docker
+
+- name: Create cron job for automated health checks
+  cron:
+    name: "Automated system health check"
+    minute: "*/15"
+    hour: "*"
+    job: "/usr/local/bin/ansible-playbook /opt/ansible/playbooks/remediation.yml -e 'action=health_check' >> /var/log/auto-remediation.log 2>&1"
+    user: root
+  when: monitoring.auto_remediation.enabled | default(true)
+
+- name: Create log rotation for remediation logs
+  template:
+    src: remediation-logrotate.j2
+    dest: /etc/logrotate.d/remediation
+    mode: '0644'

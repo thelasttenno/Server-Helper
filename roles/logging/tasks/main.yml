@@ -1,0 +1,112 @@
+---
+# Logging & Visualization Stack Setup
+# Installs Loki + Promtail + Grafana for centralized logging
+
+- name: Create logging stack directory
+  ansible.builtin.file:
+    path: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Create Grafana provisioning directories
+  ansible.builtin.file:
+    path: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}/grafana-provisioning/{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  loop:
+    - datasources
+    - dashboards
+
+- name: Deploy Loki configuration
+  ansible.builtin.template:
+    src: loki-config.yml.j2
+    dest: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}/loki-config.yml"
+    mode: '0644'
+    owner: root
+    group: root
+  notify: Restart logging stack
+
+- name: Deploy Promtail configuration
+  ansible.builtin.template:
+    src: promtail-config.yml.j2
+    dest: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}/promtail-config.yml"
+    mode: '0644'
+    owner: root
+    group: root
+  notify: Restart logging stack
+
+- name: Deploy Grafana datasource provisioning
+  ansible.builtin.template:
+    src: grafana-provisioning/datasources/loki.yml.j2
+    dest: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}/grafana-provisioning/datasources/loki.yml"
+    mode: '0644'
+    owner: root
+    group: root
+  notify: Restart logging stack
+
+- name: Deploy Grafana dashboard provisioning
+  ansible.builtin.template:
+    src: grafana-provisioning/dashboards/dashboards.yml.j2
+    dest: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}/grafana-provisioning/dashboards/dashboards.yml"
+    mode: '0644'
+    owner: root
+    group: root
+  notify: Restart logging stack
+
+- name: Deploy logging docker-compose file
+  ansible.builtin.template:
+    src: docker-compose.logging.yml.j2
+    dest: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}/docker-compose.yml"
+    mode: '0644'
+    owner: root
+    group: root
+  notify: Restart logging stack
+
+- name: Ensure monitoring network exists
+  community.docker.docker_network:
+    name: monitoring
+    state: present
+
+- name: Start logging stack
+  community.docker.docker_compose:
+    project_src: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}"
+    state: present
+    pull: true
+  register: logging_output
+
+- name: Wait for Loki to be ready
+  ansible.builtin.uri:
+    url: "http://localhost:{{ logging.loki.port | default('3100') }}/ready"
+    method: GET
+    status_code: 200
+  retries: 30
+  delay: 5
+  when: logging.loki.enabled | default(true)
+
+- name: Wait for Grafana to be ready
+  ansible.builtin.uri:
+    url: "http://localhost:{{ logging.grafana.port | default('3000') }}/api/health"
+    method: GET
+    status_code: 200
+  retries: 30
+  delay: 5
+  when: logging.grafana.enabled | default(true)
+
+- name: Display logging stack information
+  ansible.builtin.debug:
+    msg:
+      - "Logging stack deployed successfully!"
+      - "Grafana: http://{{ ansible_default_ipv4.address }}:{{ logging.grafana.port | default('3000') }}"
+      - "  Username: {{ logging.grafana.admin_user | default('admin') }}"
+      - "  Password: [stored in vault]"
+      - "Loki: http://{{ ansible_default_ipv4.address }}:{{ logging.loki.port | default('3100') }}"
+      - "Promtail: Running on host {{ hostname | default(ansible_hostname) }}"
+      - ""
+      - "Next steps:"
+      - "1. Access Grafana and explore pre-configured Loki datasource"
+      - "2. Create dashboards or import existing ones"
+      - "3. Use Explore feature to query logs"

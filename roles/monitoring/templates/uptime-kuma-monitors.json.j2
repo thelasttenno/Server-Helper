@@ -1,0 +1,64 @@
+{
+  "monitors": [
+    {
+      "name": "Docker Service Health",
+      "type": "docker",
+      "docker_host": "unix:///var/run/docker.sock",
+      "interval": 60,
+      "retryInterval": 60,
+      "maxretries": 3,
+      "notificationIDList": [],
+      "description": "Monitors Docker daemon and automatically restarts if failed"
+    },
+    {
+      "name": "Disk Space Root",
+      "type": "push",
+      "interval": 300,
+      "description": "Push monitor for disk space alerts. Triggers cleanup at 80%.",
+      "accepted_statuscodes": ["200-299"]
+    },
+    {
+      "name": "Certificate Expiration",
+      "type": "push",
+      "interval": 86400,
+      "description": "Push monitor for certificate expiration. Auto-renews when < 10 days.",
+      "accepted_statuscodes": ["200-299"]
+    },
+    {
+      "name": "System Health Check",
+      "type": "push",
+      "interval": 900,
+      "description": "Comprehensive system health check every 15 minutes",
+      "accepted_statuscodes": ["200-299"]
+    },
+    {
+      "name": "Netdata Container",
+      "type": "http",
+      "url": "http://localhost:{{ monitoring.netdata.port | default(19999) }}/api/v1/info",
+      "interval": 60,
+      "maxretries": 3,
+      "description": "Monitors Netdata availability. Auto-restarts container if down."
+    },
+    {
+      "name": "Dockge Container",
+      "type": "http",
+      "url": "http://localhost:{{ dockge.port | default(5001) }}",
+      "interval": 60,
+      "maxretries": 3,
+      "description": "Monitors Dockge availability. Auto-restarts container if down."
+    }
+  ],
+  "webhooks": {
+    "disk_cleanup": "http://localhost:{{ monitoring.remediation_webhook_port | default(9090) }}?action=disk_cleanup&severity=warning",
+    "service_restart": "http://localhost:{{ monitoring.remediation_webhook_port | default(9090) }}?action=service_restart&service={service_name}&severity=critical",
+    "cert_renewal": "http://localhost:{{ monitoring.remediation_webhook_port | default(9090) }}?action=cert_renewal",
+    "health_check": "http://localhost:{{ monitoring.remediation_webhook_port | default(9090) }}?action=health_check"
+  },
+  "setup_instructions": {
+    "step1": "Create monitors in Uptime Kuma UI using the configurations above",
+    "step2": "For push monitors, note the push URL and add to group_vars/all.yml",
+    "step3": "Configure notifications (email, Discord, Slack, etc.) in Uptime Kuma",
+    "step4": "Test webhooks by triggering alerts manually",
+    "step5": "Monitor /var/log/auto-remediation.log for automated actions"
+  }
+}

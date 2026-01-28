@@ -1,6 +1,272 @@
 # Server Helper Changelog
 
-## Version 1.0.0 - Complete Rewrite: Ansible Edition (2025-12-23)
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## How to Update This Changelog
+
+When contributing, please add your changes under the "Unreleased" section in the appropriate category:
+
+- **Added** - New features
+- **Changed** - Changes in existing functionality
+- **Deprecated** - Soon-to-be removed features
+- **Removed** - Removed features
+- **Fixed** - Bug fixes
+- **Security** - Security fixes
+
+Example:
+
+```markdown
+## Unreleased
+
+### Added
+- New backup destination support for SFTP
+
+### Fixed
+- Netdata health check timeout issue
+```
+
+## Unreleased
+
+### Added
+
+- **Certificate Management (Hybrid: Let's Encrypt + Smallstep CA)**:
+  - Complete hybrid certificate management for public and internal domains
+  - **Public domains**: Let's Encrypt via DNS-01 challenge (auto-renewed, browser-trusted)
+  - **Internal domains**: Smallstep CA (self-hosted, fully private, ACME-compatible)
+  - Privacy-first Cloudflare integration (DNS-only mode, no traffic proxying)
+  - Support for multiple DNS providers: Cloudflare, Route53, DigitalOcean, Namecheap, GoDaddy
+  - Wildcard certificate support for public domains (`*.example.com`)
+  - Automatic certificate selection based on service routing (`public: true/false`)
+  - Client root CA installation scripts for all major operating systems
+  - Traefik v3.0 integration with dual certificate resolvers
+  - Security headers middleware (HSTS, X-Content-Type-Options, etc.)
+  - Dashboard authentication with htpasswd
+  - Comprehensive documentation: [docs/guides/certificates.md](docs/guides/certificates.md)
+  - Cloudflare privacy hardening guide: [docs/guides/cloudflare-privacy.md](docs/guides/cloudflare-privacy.md)
+  - New role: `roles/step-ca/` for Smallstep CA deployment
+  - Updated Traefik configuration with dynamic routing
+  - Vault integration for certificate secrets
+
+- **Smallstep CA Role** (`roles/step-ca/`):
+  - Self-hosted ACME-compatible certificate authority
+  - Docker-based deployment (~128MB RAM)
+  - Automatic certificate renewal (30-day default)
+  - ACME protocol support for Traefik integration
+  - Configurable certificate durations
+  - Client installation scripts for Linux, macOS, Windows
+  - Health checks and monitoring integration
+
+- **Enhanced Traefik Configuration**:
+  - Upgraded to Traefik v3.0
+  - Dual certificate resolvers: `letsencrypt` (public) + `step-ca` (internal)
+  - DNS-01 challenge support for privacy-focused certificate validation
+  - Dynamic service routing with automatic cert selection
+  - Security headers middleware for all routes
+  - Rate limiting and compression middlewares
+  - Internal-only access middleware for private services
+  - Dashboard with authentication (no more insecure mode by default)
+
+- **Service Routing Configuration**:
+  - New `services` configuration section for defining public/internal services
+  - Automatic Traefik labels generation based on service type
+  - Pre-configured routes for default services (Dockge, Netdata, Grafana, etc.)
+  - Wildcard domain support for public services
+  - Health check configuration per service
+
+- **DNS & Service Discovery (Pi-hole + Unbound)**:
+  - Complete DNS role with Pi-hole for ad-blocking and local DNS (~100MB RAM)
+  - Unbound recursive DNS resolver for privacy (~50MB RAM)
+  - Automatic service discovery: All enabled services auto-register to DNS
+  - Access services via clean names like `grafana.internal` instead of IPs
+  - Network-wide ad blocking for all devices
+  - DNSSEC validation via Unbound
+  - Prometheus exporter for Pi-hole metrics (~20MB RAM)
+  - Integration with Grafana (dashboard ID: 10176), Netdata, and Uptime Kuma
+  - Configurable upstream DNS with DNS-over-TLS support
+  - Custom DNS records for databases, applications, and infrastructure
+  - Dark theme web UI with query logging
+  - Comprehensive documentation: [roles/dns/README.md](roles/dns/README.md)
+  - Quick start guide: [docs/DNS_QUICKSTART.md](docs/DNS_QUICKSTART.md)
+  - Automatic firewall configuration (ports 53, 8080)
+  - Vault integration for Pi-hole admin password
+  - Docker network integration with monitoring stack
+  - Auto-generated custom.list from Ansible inventory
+
+- **Centralized Logging Stack (Loki + Promtail + Grafana)**:
+  - Complete logging role with Loki for log aggregation (~150MB RAM)
+  - Promtail for automatic log collection from Docker containers and system logs (~50MB RAM)
+  - Grafana for log visualization and dashboard creation (~200MB RAM)
+  - Pre-configured datasource connection between Grafana and Loki
+  - Automatic collection of Docker container logs, syslog, auth logs, and /var/log/* files
+  - Configurable log retention (default: 31 days)
+  - LogQL query interface for powerful log searching and filtering
+  - Support for custom log sources via additional_jobs configuration
+  - Optional SMTP configuration for Grafana email alerts
+  - Comprehensive documentation: [docs/guides/logging-stack.md](docs/guides/logging-stack.md)
+  - Quick start guide: [docs/LOGGING_QUICKSTART.md](docs/LOGGING_QUICKSTART.md)
+  - Automatic firewall configuration (ports 3000, 3100)
+  - Vault integration for secure password management
+
+- **Multi-Server Support Documentation**:
+  - Comprehensive guide for managing multiple physical servers ([docs/MULTI_SERVER_SETUP.md](docs/MULTI_SERVER_SETUP.md))
+  - Enhanced inventory examples with secondary server configurations
+  - Best practices for port management, backup scheduling, and resource isolation
+  - Common scenarios: load distribution, environment separation, geographic distribution
+  - Per-server variable override examples for ports, backup paths, and schedules
+  - Multi-server management commands and troubleshooting guide
+  - Server grouping strategies (by environment, location, function)
+- **Enhanced Configuration Examples**:
+  - Added multi-server configuration section to `group_vars/all.example.yml`
+  - Updated `inventory/hosts.example.yml` with detailed secondary server example
+  - Documented staggered backup schedules to prevent NAS resource contention
+  - Added examples for separate backup repositories per server
+- **Authentik SSO Integration**:
+  - Complete Authentik identity provider role for centralized authentication
+  - OAuth2/OIDC/SAML support for modern application integration
+  - Multi-factor authentication (MFA) with TOTP and WebAuthn/Passkeys
+  - Reverse proxy authentication for services without native OAuth
+  - PostgreSQL and Redis backend for scalable user management
+  - Automated deployment via Dockge stack
+  - Comprehensive setup guide with integration examples
+  - Vault integration for secure credential management
+  - Firewall configuration for Authentik ports
+  - Email configuration support for password resets and invitations
+- **Interactive Server Addition Script** (`scripts/add-server.sh`):
+  - Guided wizard for adding new servers to inventory
+  - Input validation for IP addresses, hostnames, and ports
+  - SSH connectivity testing before adding to inventory
+  - Automatic inventory backup before changes
+  - Batch mode for adding multiple servers
+  - Support for custom SSH ports, keys, and timezones
+  - Automatic server group assignment
+- **Quick Reference Documentation** ([docs/quick-reference.md](docs/quick-reference.md)):
+  - Comprehensive command reference for common operations
+  - Common workflows and troubleshooting commands
+  - Quick lookup guide for all major features
+- GitHub Actions workflow for automated releases
+- Changelog verification in pull requests
+- Automatic release note generation
+
+---
+
+## Version 1.0.0 - Complete Rewrite: Ansible Edition (2025-12-27)
+
+### 🧹 Post-Release Updates (2025-12-27)
+
+#### Vault Management Enhancements
+
+**New Vault Helper Scripts:**
+
+Added comprehensive vault management tooling to simplify Ansible Vault operations:
+
+- **Master script `vault.sh`**: All-in-one vault management tool
+  - `vault.sh init` - Initialize vault setup (creates password & vault file)
+  - `vault.sh status` - Health check for vault configuration
+  - `vault.sh create/edit/view` - Secure vault file operations
+  - `vault.sh validate` - Validate vault files can be decrypted
+  - `vault.sh backup/restore` - Vault file backup management
+  - `vault.sh diff` - Show git diff of encrypted files
+  - `vault.sh rekey` - Rotate vault passwords
+
+- **Individual helper scripts**:
+  - `vault-edit.sh` - Safe editing (recommended, no plain text files)
+  - `vault-view.sh` - Read-only viewing (secure)
+  - `vault-encrypt.sh` - Encrypt plain text files
+  - `vault-decrypt.sh` - Decrypt files (with security warnings)
+  - `vault-rekey.sh` - Password rotation (single file or all)
+
+- **Security features**:
+  - ✅ Automatic backups before destructive operations
+  - ✅ Colored output (green/red/yellow) for clear feedback
+  - ✅ Multiple confirmation prompts for dangerous operations
+  - ✅ File permission validation
+  - ✅ Comprehensive error handling
+
+**New Documentation:**
+
+- **External secret management integration** ([docs/integrations/external-secrets.md](docs/integrations/external-secrets.md)):
+  - HashiCorp Vault integration
+  - AWS Systems Manager Parameter Store
+  - AWS Secrets Manager
+  - Azure Key Vault
+  - Google Cloud Secret Manager
+  - 1Password CLI integration
+  - Environment variables for CI/CD
+  - Migration strategies and comparison matrix
+
+- **CI/CD workflow integration** ([docs/workflows/vault-in-ci-cd.md](docs/workflows/vault-in-ci-cd.md)):
+  - GitHub Actions integration examples
+  - GitLab CI/CD pipelines
+  - Jenkins integration
+  - Azure DevOps pipelines
+  - Git hooks (pre-commit) for vault security
+  - Team collaboration workflows
+  - Automated secret rotation
+  - Vault validation tests
+
+- **Script documentation** ([scripts/README.md](scripts/README.md)):
+  - Complete guide to all vault helper scripts
+  - Usage examples and workflows
+  - Best practices and security guidelines
+  - Troubleshooting guide
+
+**README Updates:**
+
+- Added vault helper scripts section with usage examples
+- Added links to new documentation
+- Improved vault setup instructions
+
+**Files Added:**
+
+- `scripts/vault.sh` - Master vault management tool
+- `scripts/vault-edit.sh` - Safe vault editing
+- `scripts/vault-view.sh` - Read-only vault viewing
+- `scripts/vault-encrypt.sh` - Encrypt plain text files
+- `scripts/vault-decrypt.sh` - Decrypt vault files (with warnings)
+- `scripts/vault-rekey.sh` - Password rotation tool
+- `docs/integrations/external-secrets.md` - External secret manager integration guide
+- `docs/workflows/vault-in-ci-cd.md` - CI/CD workflow guide
+- `scripts/README.md` - Scripts documentation
+
+**Benefits:**
+
+- 🚀 Easier vault management (no need to remember ansible-vault commands)
+- 🔒 Enhanced security (automatic validations, warnings, backups)
+- 📚 Better documentation (CI/CD integration, external secrets)
+- 🤝 Improved team collaboration (standardized workflows)
+- 🔄 Automated workflows (CI/CD examples, secret rotation)
+
+---
+
+**Codebase Cleanup & Bug Fixes:**
+
+- **Fixed variable naming inconsistencies**: Standardized `monitoring.netdata.*` variables across all roles
+- **Fixed Netdata deployment**: Added proper deployment tasks to netdata role (was missing)
+- **Fixed backup playbook**: Corrected broken task import reference
+- **Added missing variables**: Control node configuration for Uptime Kuma, Scanopy, PruneMate
+- **Created missing templates**: security-report.j2, control-monitoring-targets.yml.j2
+- **Removed duplicate code**: Deleted legacy setup.yml playbook and unused nas role
+- **Documentation reorganization**: Moved all docs to `docs/` directory with clear structure
+  - `docs/guides/` - Usage guides
+  - `docs/reference/` - Quick references
+  - `docs/development/` - Developer docs
+  - `docs/archive/` - Historical documents
+- **Removed redundant docs**: Deleted 8 outdated/duplicate markdown files
+- **Updated README**: Added documentation section with proper links to reorganized docs
+
+**Files Affected:**
+
+- Cleaned up 20+ markdown files into organized structure
+- Fixed 10+ variable references across roles
+- Created 2 new templates
+- Removed 2 unused components
+
+---
+
+## Version 1.0.0 - Initial Release (2025-12-23)
 
 ### 🎉 Major Release - Complete Architectural Overhaul
 

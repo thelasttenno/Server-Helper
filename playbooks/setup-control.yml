@@ -1,0 +1,326 @@
+---
+# Server Helper v1.0.0 - Control Node Setup Playbook
+# ======================================================
+# This playbook installs centralized monitoring services on the control node.
+# These services monitor and manage ALL target servers from a single location.
+#
+# Services installed on control node:
+#   - Uptime Kuma: Centralized uptime monitoring and alerting for all targets
+#   - (Optional) Netdata Parent: Aggregate metrics from all target Netdata instances
+#
+# Usage:
+#   ansible-playbook playbooks/setup-control.yml
+#
+# Prerequisites:
+#   - Docker installed on control node
+#   - Target nodes already configured with setup-targets.yml
+#
+
+- name: Server Helper - Control Node Setup
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars_prompt:
+    - name: confirm_control_setup
+      prompt: "Install centralized monitoring services on this control node? (yes/no)"
+      private: false
+      default: "no"
+
+  pre_tasks:
+    - name: Verify setup confirmation
+      ansible.builtin.fail:
+        msg: "Setup cancelled by user"
+      when: confirm_control_setup | lower != 'yes'
+
+    - name: Display banner
+      ansible.builtin.debug:
+        msg:
+          - "╔════════════════════════════════════════╗"
+          - "║  Server Helper v1.0.0 - Ansible       ║"
+          - "║  Control Node Setup                    ║"
+          - "╚════════════════════════════════════════╝"
+
+    - name: Detect OS
+      ansible.builtin.fail:
+        msg: "Control node setup requires Linux or macOS"
+      when: ansible_os_family not in ['Debian', 'RedHat', 'Darwin']
+
+    - name: Update apt cache (Debian/Ubuntu)
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      become: true
+      when: ansible_os_family == "Debian"
+
+  tasks:
+    # ==============================================
+    # Install Docker on Control Node
+    # ==============================================
+    - name: Check if Docker is installed
+      ansible.builtin.command: docker --version
+      register: docker_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Install Docker
+      block:
+        - name: Include Docker installation role
+          ansible.builtin.include_role:
+            name: geerlingguy.docker
+          vars:
+            docker_install_compose: true
+            docker_users:
+              - "{{ ansible_user_id }}"
+      when: docker_check.rc != 0
+      become: true
+
+    - name: Ensure Docker is running
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: true
+      become: true
+
+    # ==============================================
+    # Create Base Directory
+    # ==============================================
+    - name: Create control node services directory
+      ansible.builtin.file:
+        path: "{{ control_node_install_dir }}"
+        state: directory
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_id }}"
+        mode: '0755'
+      become: true
+
+    # ==============================================
+    # Install Centralized Uptime Kuma
+    # ==============================================
+    - name: Deploy centralized Uptime Kuma
+      block:
+        - name: Create Uptime Kuma directory
+          ansible.builtin.file:
+            path: "{{ control_node_install_dir }}/uptime-kuma"
+            state: directory
+            mode: '0755'
+
+        - name: Create Uptime Kuma data directory
+          ansible.builtin.file:
+            path: "{{ control_node_install_dir }}/uptime-kuma/data"
+            state: directory
+            mode: '0755'
+
+        - name: Deploy Uptime Kuma container
+          community.docker.docker_container:
+            name: uptime-kuma-control
+            image: louislam/uptime-kuma:{{ control_uptime_kuma.version }}
+            state: started
+            restart_policy: unless-stopped
+            ports:
+              - "{{ control_uptime_kuma.port }}:3001"
+            volumes:
+              - "{{ control_node_install_dir }}/uptime-kuma/data:/app/data"
+            labels:
+              com.server-helper.service: "uptime-kuma-control"
+              com.server-helper.type: "monitoring"
+
+        - name: Wait for Uptime Kuma to be ready
+          ansible.builtin.wait_for:
+            host: localhost
+            port: "{{ control_uptime_kuma.port }}"
+            delay: 5
+            timeout: 60
+
+      when: control_uptime_kuma.enabled
+
+    # ==============================================
+    # Install Scanopy (Container Security Scanning)
+    # ==============================================
+    - name: Deploy Scanopy
+      block:
+        - name: Create Scanopy directory
+          ansible.builtin.file:
+            path: "{{ control_node_install_dir }}/scanopy"
+            state: directory
+            mode: '0755'
+
+        - name: Deploy Scanopy container
+          community.docker.docker_container:
+            name: scanopy-control
+            image: aquasec/trivy:{{ control_scanopy.trivy_version }}
+            state: started
+            restart_policy: unless-stopped
+            command: server --listen 0.0.0.0:{{ control_scanopy.port }}
+            ports:
+              - "{{ control_scanopy.port }}:8080"
+            volumes:
+              - "/var/run/docker.sock:/var/run/docker.sock:ro"
+              - "{{ control_node_install_dir }}/scanopy/cache:/root/.cache"
+            labels:
+              com.server-helper.service: "scanopy-control"
+              com.server-helper.type: "security"
+
+        - name: Wait for Scanopy to be ready
+          ansible.builtin.wait_for:
+            host: localhost
+            port: "{{ control_scanopy.port }}"
+            delay: 5
+            timeout: 60
+
+      when: control_scanopy.enabled
+
+    # ==============================================
+    # Install PruneMate (Docker Cleanup Automation)
+    # ==============================================
+    - name: Deploy PruneMate
+      block:
+        - name: Create PruneMate directory
+          ansible.builtin.file:
+            path: "{{ control_node_install_dir }}/prunemate"
+            state: directory
+            mode: '0755'
+
+        - name: Create PruneMate configuration
+          ansible.builtin.copy:
+            content: |
+              # PruneMate Configuration
+              # Cleanup schedule and rules
+
+              # Images
+              PRUNE_IMAGES_ENABLED=true
+              PRUNE_IMAGES_FILTER="until=720h"  # 30 days
+              PRUNE_IMAGES_DANGLING=true
+
+              # Containers
+              PRUNE_CONTAINERS_ENABLED=true
+              PRUNE_CONTAINERS_FILTER="until=168h"  # 7 days
+
+              # Volumes
+              PRUNE_VOLUMES_ENABLED=true
+              PRUNE_VOLUMES_FILTER="all"
+
+              # Networks
+              PRUNE_NETWORKS_ENABLED=true
+
+              # Build cache
+              PRUNE_BUILD_CACHE_ENABLED=true
+              PRUNE_BUILD_CACHE_FILTER="until=168h"  # 7 days
+
+              # Schedule (cron format)
+              SCHEDULE="{{ control_prunemate.schedule }}"  # Weekly Sunday 3 AM
+            dest: "{{ control_node_install_dir }}/prunemate/config.env"
+            mode: '0644'
+
+        - name: Deploy PruneMate container
+          community.docker.docker_container:
+            name: prunemate-control
+            image: alpine:latest
+            state: started
+            restart_policy: unless-stopped
+            command: >
+              sh -c "
+              apk add --no-cache docker-cli dcron &&
+              echo '{{ control_prunemate.schedule }} docker system prune -af --filter until=720h' > /etc/crontabs/root &&
+              crond -f -l 2
+              "
+            volumes:
+              - "/var/run/docker.sock:/var/run/docker.sock"
+            labels:
+              com.server-helper.service: "prunemate-control"
+              com.server-helper.type: "maintenance"
+
+      when: control_prunemate.enabled
+
+    # ==============================================
+    # Create Monitoring Configuration Template
+    # ==============================================
+    - name: Create monitoring targets template
+      ansible.builtin.template:
+        src: templates/control-monitoring-targets.yml.j2
+        dest: "{{ control_node_install_dir }}/monitoring-targets.yml"
+        mode: '0644'
+      vars:
+        target_servers: "{{ groups['all'] | default([]) }}"
+      when: control_uptime_kuma.enabled
+      ignore_errors: true
+
+  post_tasks:
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg:
+          - "═══════════════════════════════════════"
+          - "      Control Node Setup Complete!"
+          - "═══════════════════════════════════════"
+          - ""
+          - "Centralized Services:"
+          - "{% if control_uptime_kuma.enabled %}"
+          - "  ✓ Uptime Kuma: http://{{ ansible_default_ipv4.address }}:{{ control_uptime_kuma.port }}"
+          - "{% endif %}"
+          - "{% if control_scanopy.enabled %}"
+          - "  ✓ Scanopy (Trivy): http://{{ ansible_default_ipv4.address }}:{{ control_scanopy.port }}"
+          - "{% endif %}"
+          - "{% if control_prunemate.enabled %}"
+          - "  ✓ PruneMate: Automated Docker cleanup (cron: {{ control_prunemate.schedule }})"
+          - "{% endif %}"
+          - ""
+          - "Next steps:"
+          - "  1. Access Uptime Kuma and complete initial setup"
+          - "  2. Configure monitors for all target servers"
+          - "  3. Setup notification endpoints (email, Discord, Telegram, etc.)"
+          - "  4. Use Scanopy to scan container images for vulnerabilities"
+          - "  5. PruneMate will automatically clean unused Docker resources"
+          - ""
+          - "Monitor your target servers:"
+          - "{% for host in groups['all'] | default([]) %}"
+          - "  - {{ host }}: {{ hostvars[host]['ansible_host'] | default(host) }}"
+          - "{% endfor %}"
+          - ""
+          - "Suggested Uptime Kuma monitors to create:"
+          - "  - Netdata Health: http://TARGET_IP:19999/api/v1/info"
+          - "  - Dockge Health: http://TARGET_IP:5001"
+          - "  - SSH Connectivity: TARGET_IP:22"
+          - "  - HTTP Endpoints: Your applications"
+          - ""
+          - "Scanopy Usage:"
+          - "  # Scan a Docker image"
+          - "  docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \\"
+          - "    aquasec/trivy client --remote http://localhost:{{ control_scanopy.port }} \\"
+          - "    IMAGE_NAME"
+          - ""
+
+    - name: Save control node service URLs
+      ansible.builtin.copy:
+        content: |
+          # Server Helper - Control Node Services
+          # Generated: {{ ansible_date_time.iso8601 }}
+
+          {% if control_uptime_kuma.enabled %}
+          Uptime Kuma (Centralized Monitoring): http://{{ ansible_default_ipv4.address }}:{{ control_uptime_kuma.port }}
+          {% endif %}
+
+          {% if control_scanopy.enabled %}
+          Scanopy (Trivy Security Scanner): http://{{ ansible_default_ipv4.address }}:{{ control_scanopy.port }}
+          {% endif %}
+
+          {% if control_prunemate.enabled %}
+          PruneMate (Docker Cleanup): Automated (Schedule: {{ control_prunemate.schedule }})
+          {% endif %}
+
+          Target Servers Configured:
+          {% for host in groups['all'] | default([]) %}
+          - {{ host }}: {{ hostvars[host]['ansible_host'] | default(host) }}
+          {% endfor %}
+
+          Usage Examples:
+
+          # Scan container with Scanopy/Trivy
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy client --remote http://localhost:{{ control_scanopy.port }} IMAGE_NAME
+
+          # Manual Docker cleanup (PruneMate runs automatically)
+          docker exec prunemate-control docker system prune -af --filter until=720h
+
+          # View PruneMate logs
+          docker logs prunemate-control
+        dest: "{{ control_node_install_dir }}/service_urls.txt"
+        mode: '0644'

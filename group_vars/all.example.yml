@@ -19,6 +19,45 @@ timezone: "America/New_York"
 locale: "en_US.UTF-8"
 
 # =============================================================================
+# MULTI-SERVER CONFIGURATION (Optional)
+# =============================================================================
+# When managing multiple physical servers, you can override these settings
+# per-server in inventory/hosts.yml. See the secondary server example there.
+#
+# KEY CONSIDERATIONS FOR SECONDARY SERVERS:
+#   1. Service ports: Ensure unique ports if servers share the same network
+#      - Primary: Dockge 5001, Netdata 19999
+#      - Secondary: Dockge 5002, Netdata 19998
+#
+#   2. Backup schedules: Stagger schedules to avoid resource contention
+#      - Primary: "0 2 * * *" (2 AM)
+#      - Secondary: "0 4 * * *" (4 AM)
+#
+#   3. Backup repositories: Use separate paths per server
+#      - Primary: /mnt/nas/backup/server01
+#      - Secondary: /mnt/nas/backup/server02
+#
+#   4. Hostnames: Set unique hostnames for each server
+#      - Define in inventory/hosts.yml: hostname: "docker-server-02"
+#
+#   5. Monitoring: Central Uptime Kuma can monitor all servers
+#      - Configure monitors pointing to each server's IP
+#
+# EXAMPLE inventory/hosts.yml override:
+#   server02:
+#     ansible_host: 192.168.1.101
+#     hostname: "docker-server-02"
+#     server_id: "02"
+#     dockge:
+#       port: 5002
+#     monitoring:
+#       netdata:
+#         port: 19998
+#     backups:
+#       schedule: "0 4 * * *"
+# =============================================================================
+
+# =============================================================================
 # USER ACCOUNT CONFIGURATION
 # =============================================================================
 
@@ -174,31 +213,49 @@ restic:
 # MONITORING CONFIGURATION
 # =============================================================================
 
+monitoring:
+  # Automated remediation system
+  auto_remediation:
+    enabled: true
+
+  # Webhook handler for triggering remediation
+  remediation_webhook_port: 9090
+
+  # Uptime Kuma push URLs for remediation notifications
+  uptime_kuma_push_url: ""  # Main remediation push URL
+  uptime_kuma_critical_key: ""  # Critical alerts push key
+  uptime_kuma_service_key: ""   # Service alerts push key
+  uptime_kuma_disk_key: ""      # Disk alerts push key
+  uptime_kuma_cert_key: ""      # Certificate alerts push key
+
 # Netdata - System and container metrics
 netdata:
   enabled: true
   port: 19999
-  
+
   # Netdata Cloud (optional)
   claim_token: ""  # Get from: https://app.netdata.cloud
   claim_rooms: ""  # Room IDs (comma-separated)
-  
+
   # Alarms configuration
   alarms:
     enabled: true
-    
+
     # CPU alarm thresholds
     cpu_warning: 80
     cpu_critical: 95
-    
+
     # RAM alarm thresholds
     ram_warning: 80
     ram_critical: 95
-    
+
     # Disk alarm thresholds
     disk_warning: 80
     disk_critical: 90
-    
+
+    # Health check interval (minutes)
+    check_interval_minutes: 5
+
     # Uptime Kuma push URLs for alarms
     uptime_kuma_urls:
       cpu: ""      # http://localhost:3001/api/push/CPU123
@@ -242,6 +299,57 @@ uptime_kuma:
   #   smtp_password: "your-app-password"
 
 # =============================================================================
+# LOGGING & VISUALIZATION (Loki + Promtail + Grafana)
+# =============================================================================
+
+logging:
+  # Stack directory
+  stack_dir: /opt/dockge/stacks/logging
+
+  # Loki - Log aggregation server
+  loki:
+    enabled: true
+    version: latest
+    port: 3100
+    retention_period: "744h"  # 31 days (720h = 30 days, 168h = 7 days)
+
+  # Promtail - Log shipper (collects logs and sends to Loki)
+  promtail:
+    enabled: true
+    version: latest
+
+    # Additional custom log sources (optional)
+    additional_jobs: []
+    # Example:
+    # - name: "nginx"
+    #   path: "/var/log/nginx/*.log"
+    #   pipeline_stages:
+    #     - regex:
+    #         expression: '^(?P<remote_addr>[\w\.]+) - .*'
+
+  # Grafana - Visualization and dashboards
+  grafana:
+    enabled: true
+    version: latest
+    port: 3000
+    admin_user: admin
+    # Admin password stored in vault: vault_grafana_admin_password
+
+    # Grafana plugins to install (comma-separated)
+    plugins: ""
+    # Example: "grafana-clock-panel,grafana-piechart-panel"
+
+    # SMTP configuration for email alerts (optional)
+    smtp:
+      enabled: false
+      host: "smtp.gmail.com"
+      port: 587
+      user: ""
+      from_address: "grafana@example.com"
+      from_name: "Grafana"
+      # SMTP password stored in vault: vault_grafana_smtp_password
+
+# =============================================================================
 # CONTAINER MANAGEMENT (Dockge)
 # =============================================================================
 
@@ -270,9 +378,14 @@ security:
   ufw_default_policy: "deny"
   ufw_allowed_ports:
     - 22      # SSH
+    - 53      # DNS (Pi-hole - if enabled)
     - 5001    # Dockge
+    - 8080    # Pi-hole Web UI (if enabled)
     - 19999   # Netdata
     - 3001    # Uptime Kuma
+    - 3000    # Grafana / Semaphore (if enabled on different port, update accordingly)
+    - 3100    # Loki (optional - only if accessing externally)
+    - 9000    # Authentik (if enabled)
   
   # SSH Hardening
   ssh_hardening: true
@@ -293,6 +406,65 @@ security:
   auto_reboot_time: "03:00"
 
 # =============================================================================
+# ANSIBLE AUTOMATION (Semaphore UI)
+# =============================================================================
+
+semaphore:
+  enabled: false
+  port: 3000
+
+  # Database configuration
+  database:
+    dialect: postgres  # Options: postgres, mysql, bolt (sqlite)
+    host: semaphore-db
+    port: 5432
+    name: semaphore
+    user: semaphore
+    # Password stored in vault: vault_semaphore_db_password
+
+  # Admin user configuration
+  admin:
+    username: admin
+    email: admin@example.com
+    # Password stored in vault: vault_semaphore_admin_password
+
+  # Access key encryption secret stored in vault: vault_semaphore_access_key_encryption
+
+  # Optional: Playbook path (if different from default)
+  # playbook_path: /tmp/semaphore
+
+  # Optional: Web host for external access
+  # web_host: https://semaphore.example.com
+
+  # Optional: LDAP authentication
+  # ldap:
+  #   enabled: true
+  #   server: ldap://ldap.example.com:389
+  #   binddn: "cn=admin,dc=example,dc=com"
+  #   password: "{{ vault_semaphore_ldap_password }}"
+  #   searchdn: "ou=users,dc=example,dc=com"
+
+  # Optional: Email notifications (SMTP)
+  # email:
+  #   enabled: true
+  #   sender: semaphore@example.com
+  #   host: smtp.example.com
+  #   port: 587
+  #   username: semaphore@example.com
+  #   password: "{{ vault_semaphore_smtp_password }}"
+
+  # Optional: Telegram notifications
+  # telegram:
+  #   enabled: true
+  #   token: "{{ vault_semaphore_telegram_token }}"
+  #   chat: "{{ vault_semaphore_telegram_chat }}"
+
+  # Optional: Slack notifications
+  # slack:
+  #   enabled: true
+  #   url: "{{ vault_semaphore_slack_webhook }}"
+
+# =============================================================================
 # OPTIONAL SERVICES
 # =============================================================================
 
@@ -306,35 +478,302 @@ watchtower:
     enabled: false
     url: ""  # Shoutrrr URL (e.g., discord://token@id)
 
-# Reverse Proxy (Traefik or Nginx Proxy Manager)
+# Reverse Proxy (Traefik)
 reverse_proxy:
   enabled: false
-  type: "traefik"  # or "nginx"
-  
+  type: "traefik"
+
   # Domain configuration
   domain: "example.com"
-  email: "admin@example.com"  # For Let's Encrypt
-  
-  # SSL/TLS
+  email: "admin@example.com"  # For Let's Encrypt notifications
+
+  # Force HTTPS redirect
+  force_https: true
+
+  # SSL/TLS (now managed by certificates section above)
   ssl_enabled: true
-  ssl_provider: "letsencrypt"  # or "cloudflare"
-  
+
   # Traefik-specific settings
   traefik:
+    # Dashboard configuration
     dashboard_enabled: true
     dashboard_port: 8080
+    dashboard_insecure: false  # Set true for HTTP access (not recommended)
+
+    # Logging
+    log_level: "INFO"  # DEBUG, INFO, WARN, ERROR
+
+    # Entrypoints (automatically configured)
     entrypoints:
       - name: "web"
         port: 80
         redirect_to_https: true
       - name: "websecure"
         port: 443
-  
-  # Nginx Proxy Manager settings
-  nginx:
-    admin_port: 81
-    http_port: 80
-    https_port: 443
+
+# =============================================================================
+# CERTIFICATE MANAGEMENT (Hybrid: Let's Encrypt + Smallstep CA)
+# =============================================================================
+#
+# This configuration provides HYBRID certificate management:
+#   - PUBLIC domains → Let's Encrypt (via DNS-01 challenge)
+#   - INTERNAL domains → Smallstep CA (self-hosted, fully private)
+#
+# Privacy: Cloudflare is used in DNS-ONLY mode (no traffic proxying)
+#          All HTTP/HTTPS traffic goes directly to your server
+#
+# Example:
+#   mealie.tennogen.ca → Let's Encrypt certificate (public)
+#   grafana.internal → Smallstep CA certificate (private)
+
+certificates:
+  # ============================================
+  # PUBLIC CERTIFICATES (Let's Encrypt)
+  # ============================================
+  # For domains accessible from the internet
+  public:
+    enabled: true
+    email: "admin@example.com"  # Let's Encrypt notifications
+
+    # Challenge type for domain validation
+    # Options: dns-01 (recommended), tls-alpn-01, http-01
+    challenge: "dns-01"
+
+    # DNS provider for DNS-01 challenge
+    # Supported: cloudflare, route53, digitalocean, namecheap, godaddy
+    dns_provider: "cloudflare"
+
+    # Use Let's Encrypt staging for testing (avoids rate limits)
+    staging: false
+
+    # Domains to request certificates for
+    # Wildcard domains require DNS-01 challenge
+    domains:
+      - "example.com"
+      - "*.example.com"
+
+    # AWS Route53 specific settings (if dns_provider: route53)
+    # route53_zone_id: "ZXXXXXXXXXXXXX"
+
+  # ============================================
+  # INTERNAL CERTIFICATES (Smallstep CA)
+  # ============================================
+  # For internal/private domains (*.internal, *.local, etc.)
+  internal:
+    enabled: true
+    email: "admin@internal"  # Internal CA notifications
+
+    # Private domain suffix (services accessible as service.internal)
+    domain: "internal"
+
+# Smallstep CA - Self-Hosted Certificate Authority
+# Provides ACME-compatible certificates for internal services
+step_ca:
+  enabled: true
+
+  # CA identity
+  name: "Server-Helper Internal CA"
+  dns_names:
+    - "step-ca"
+    - "step-ca.internal"
+    - "localhost"
+
+  # Network configuration
+  port: 9000
+
+  # Certificate settings
+  provisioner_name: "admin"
+  default_cert_duration: "720h"    # 30 days
+  max_cert_duration: "2160h"       # 90 days
+  min_cert_duration: "5m"
+
+  # ACME configuration (for Traefik integration)
+  acme:
+    enabled: true
+    require_eab: false  # External Account Binding
+
+  # SSH certificate support (optional)
+  ssh:
+    enabled: false
+
+  # Data persistence
+  data_dir: "/opt/step-ca"
+
+  # Resource limits
+  resources:
+    memory: "128M"
+    cpu: "0.5"
+
+# =============================================================================
+# SERVICE ROUTING (Public vs Internal)
+# =============================================================================
+# Define which services are public (Let's Encrypt) vs internal (Smallstep CA)
+#
+# Example configuration:
+# services:
+#   mealie:
+#     enabled: true
+#     public: true                    # Uses Let's Encrypt
+#     domain: "mealie.tennogen.ca"
+#     port: 9925
+#     container: "mealie"
+#
+#   grafana:
+#     enabled: true
+#     public: false                   # Uses Smallstep CA
+#     port: 3000
+#     container: "grafana"
+#     # Accessible at: grafana.internal
+
+services: {}
+# Add your services here. Examples:
+#
+# mealie:
+#   enabled: true
+#   public: true
+#   domain: "mealie.tennogen.ca"
+#   port: 9925
+#   container: "mealie"
+#   wildcard: false
+#   rate_limit: true
+#   compress: true
+#   health_check: true
+#   health_check_path: "/health"
+#
+# homepage:
+#   enabled: true
+#   public: true
+#   domain: "home.tennogen.ca"
+#   port: 3000
+#   container: "homepage"
+#
+# vaultwarden:
+#   enabled: true
+#   public: true
+#   domain: "vault.tennogen.ca"
+#   port: 80
+#   container: "vaultwarden"
+
+# Authentik - Identity Provider & SSO
+authentik:
+  enabled: false
+  version: "2024.12"
+  http_port: 9000
+  https_port: 9443
+
+  # Database settings
+  db_user: authentik
+  db_name: authentik
+
+  # Email configuration (optional - for password resets, invites)
+  email:
+    enabled: false
+    host: "smtp.gmail.com"
+    port: 587
+    username: "your-email@gmail.com"
+    from: "authentik@example.com"
+    use_tls: true
+    use_ssl: false
+
+# =============================================================================
+# DNS & SERVICE DISCOVERY (Pi-hole + Unbound)
+# =============================================================================
+
+dns:
+  enabled: false
+
+  # Stack directory
+  stack_dir: /opt/dockge/stacks/dns
+
+  # Network configuration
+  network_name: dns
+  private_domain: internal  # Services will be accessible as service.internal
+  local_domain: local
+  connect_to_monitoring: true  # Connect to monitoring network for Grafana/Netdata
+
+  # Pi-hole - Network-wide ad blocking + local DNS
+  pihole:
+    version: latest
+    port: 8080  # Web UI port (use 8080 to avoid conflict with port 80)
+    https_port: false  # Set to 8443 if you want HTTPS
+    theme: default-dark  # Options: default-light, default-dark, default-darker
+    temp_unit: c  # c or f
+    query_logging: true
+
+    # Reverse DNS (conditional forwarding)
+    rev_server: true
+    rev_server_domain: local
+    # rev_server_cidr and rev_server_target auto-detected from network
+
+    # Traefik integration (if reverse proxy enabled)
+    traefik_enabled: false
+    virtual_host: ""  # e.g., pihole.example.com
+
+  # Unbound - Recursive DNS resolver (privacy-focused)
+  unbound:
+    version: latest
+    ipv6: false  # Enable if you use IPv6
+
+    # Performance tuning
+    num_threads: 2
+    msg_cache_size: 50m
+    rrset_cache_size: 100m
+
+    # Upstream forwarding (set to true for faster resolution)
+    forward_zone: false  # true = use upstream DNS, false = recursive from root
+    forward_tls: true  # Use DNS-over-TLS when forwarding
+    forward_servers:
+      - 1.1.1.1  # Cloudflare
+      - 1.0.0.1
+      # - 9.9.9.9  # Quad9
+      # - 149.112.112.112
+
+  # Prometheus exporter for Grafana
+  exporter:
+    version: latest
+    port: 9617
+    interval: 30s
+
+  # Monitoring integration
+  monitoring:
+    enabled: true
+    grafana_dashboard: true
+    uptime_kuma: true
+    netdata: true
+
+  # Custom DNS records (manually defined)
+  custom_records: []
+  # Example - add your custom domains here:
+  # - domain: db.internal
+  #   ip: 192.168.1.50
+  # - domain: nas.internal
+  #   ip: 192.168.1.100
+  # - domain: router.internal
+  #   ip: 192.168.1.1
+
+  # Database services (auto-registered to DNS)
+  database_services: []
+  # Example:
+  # - name: postgres
+  #   ip: 192.168.1.50
+  # - name: mysql
+  #   ip: 192.168.1.51
+  # - name: redis
+  #   ip: 192.168.1.52
+
+  # Application services (auto-registered to DNS)
+  application_services: []
+  # Example:
+  # - name: webapp
+  #   ip: 192.168.1.100
+  # - name: api
+  #   ip: 192.168.1.101
+
+  # Additional private domains (won't query upstream)
+  additional_private_domains: []
+  # Example:
+  # - home.arpa
+  # - lan
 
 # =============================================================================
 # SELF-UPDATE CONFIGURATION (ansible-pull)
@@ -417,11 +856,6 @@ notifications:
 # =============================================================================
 # ADVANCED SETTINGS
 # =============================================================================
-
-# Logging
-logging:
-  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
-  retention_days: 30
 
 # Performance
 performance:

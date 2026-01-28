@@ -79,6 +79,24 @@ vault_uptime_kuma_credentials:
   username: "admin"
   password: "change-me-on-first-login"
 
+# Authentik SSO credentials
+# IMPORTANT: Generate strong random values:
+#   secret_key: openssl rand -base64 60
+#   db_password: openssl rand -base64 32
+vault_authentik_credentials:
+  # Authentik secret key (used for encryption)
+  secret_key: "change-me-use-openssl-rand-base64-60"
+
+  # PostgreSQL database password
+  db_password: "change-me-strong-db-password"
+
+  # Initial admin account (set during first-time setup)
+  admin_email: "admin@example.com"
+  admin_password: "change-me-on-first-login"
+
+  # Email password (if email is enabled)
+  email_password: "your-smtp-password-or-app-password"
+
 # =============================================================================
 # MONITORING & OBSERVABILITY
 # =============================================================================
@@ -96,6 +114,55 @@ vault_uptime_kuma_push_urls:
   backup: ""           # Backup success/failure
   security: ""         # Security scan results
   update: ""           # Self-update status
+
+# Grafana Admin Credentials
+# Change password on first login!
+vault_grafana_admin_password: "change-me-on-first-login"
+
+# Grafana SMTP Password (optional - for email alerts)
+vault_grafana_smtp_password: "your-smtp-password-or-app-password"
+
+# =============================================================================
+# SEMAPHORE UI (Ansible Automation)
+# =============================================================================
+
+# Semaphore database password
+# Generate with: openssl rand -base64 32
+vault_semaphore_db_password: "change-me-strong-db-password"
+
+# Semaphore database root password (for MySQL only)
+vault_semaphore_db_root_password: "change-me-strong-root-password"
+
+# Semaphore admin credentials
+# Change password on first login!
+vault_semaphore_admin_password: "change-me-on-first-login"
+
+# Semaphore access key encryption secret
+# Generate with: openssl rand -base64 32
+# IMPORTANT: Never change this after initial setup - used to encrypt stored credentials
+vault_semaphore_access_key_encryption: "change-me-use-openssl-rand-base64-32-KEEP-FOREVER"
+
+# Optional: LDAP password (if using LDAP authentication)
+vault_semaphore_ldap_password: ""
+
+# Optional: SMTP password (if using email notifications)
+vault_semaphore_smtp_password: ""
+
+# Optional: Telegram bot token (if using Telegram notifications)
+vault_semaphore_telegram_token: ""
+vault_semaphore_telegram_chat: ""
+
+# Optional: Slack webhook URL (if using Slack notifications)
+vault_semaphore_slack_webhook: ""
+
+# =============================================================================
+# DNS SERVICES (Pi-hole)
+# =============================================================================
+
+# Pi-hole admin password
+# Generate with: openssl rand -base64 32
+vault_dns:
+  pihole_password: "change-me-strong-pihole-password"
 
 # =============================================================================
 # NOTIFICATION SERVICES
@@ -127,29 +194,72 @@ vault_telegram_credentials:
 vault_slack_webhook: ""
 
 # =============================================================================
-# REVERSE PROXY / SSL
+# CERTIFICATE MANAGEMENT
 # =============================================================================
 
-# Let's Encrypt Email (for SSL certificates)
-vault_letsencrypt_email: "admin@example.com"
+# -----------------------------------------
+# SMALLSTEP CA (Internal Certificate Authority)
+# -----------------------------------------
+# Passwords for your self-hosted CA
+# Generate with: openssl rand -base64 32
 
-# Cloudflare API (if using Cloudflare DNS challenge)
-vault_cloudflare_credentials:
-  api_token: ""
-  zone_id: ""
+# Main CA password (used for signing)
+vault_step_ca_password: "change-me-strong-ca-password"
 
-# Custom SSL Certificate (if not using Let's Encrypt)
-vault_ssl_certificate: |
-  -----BEGIN CERTIFICATE-----
-  MIIDXTCCAkWgAwIBAgIJAKL0UG+mRKuoMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV
-  ... your certificate content ...
-  -----END CERTIFICATE-----
+# Provisioner password (for ACME provisioner)
+vault_step_ca_provisioner_password: "change-me-strong-provisioner-password"
 
-vault_ssl_private_key: |
-  -----BEGIN PRIVATE KEY-----
-  MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj
-  ... your private key content ...
-  -----END PRIVATE KEY-----
+# -----------------------------------------
+# DNS-01 CHALLENGE CREDENTIALS
+# -----------------------------------------
+# For Let's Encrypt certificates on PUBLIC domains
+# Using Cloudflare in DNS-ONLY mode (no traffic proxying = maximum privacy)
+
+# Cloudflare DNS API Token
+# Create at: https://dash.cloudflare.com/profile/api-tokens
+# Permissions needed:
+#   - Zone - DNS - Edit
+#   - Zone - Zone - Read
+# Zone Resources: Include your specific zones only
+vault_cloudflare_dns_api_token: "your-cloudflare-dns-api-token"
+
+# Alternative DNS Providers (if not using Cloudflare):
+
+# AWS Route53
+# vault_aws_access_key_id: "AKIAIOSFODNN7EXAMPLE"
+# vault_aws_secret_access_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+
+# DigitalOcean
+# vault_digitalocean_api_token: "your-digitalocean-api-token"
+
+# Namecheap
+# vault_namecheap_api_user: "your-namecheap-username"
+# vault_namecheap_api_key: "your-namecheap-api-key"
+
+# GoDaddy
+# vault_godaddy_api_key: "your-godaddy-api-key"
+# vault_godaddy_api_secret: "your-godaddy-api-secret"
+
+# -----------------------------------------
+# TRAEFIK DASHBOARD AUTHENTICATION
+# -----------------------------------------
+# Generate htpasswd hash: htpasswd -nb admin your-password
+# Or use: echo $(htpasswd -nb admin your-password) | sed -e s/\\$/\\$\\$/g
+vault_traefik_dashboard_auth: "admin:$$apr1$$xyz123$$hashedpassword"
+
+# -----------------------------------------
+# LEGACY SSL (if not using ACME)
+# -----------------------------------------
+# Custom SSL Certificate (only needed if NOT using Let's Encrypt or Step-CA)
+# vault_ssl_certificate: |
+#   -----BEGIN CERTIFICATE-----
+#   ... your certificate content ...
+#   -----END CERTIFICATE-----
+#
+# vault_ssl_private_key: |
+#   -----BEGIN PRIVATE KEY-----
+#   ... your private key content ...
+#   -----END PRIVATE KEY-----
 
 # =============================================================================
 # ADDITIONAL SECRETS

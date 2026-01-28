@@ -45,6 +45,10 @@
     dest: "{{ base_install_dir }}/uptime_kuma_setup.md"
     mode: '0644'
 
+- name: Setup automated remediation
+  import_tasks: remediation.yml
+  when: monitoring.auto_remediation.enabled | default(true)
+
 - name: Display monitoring access info
   ansible.builtin.debug:
     msg:
@@ -52,8 +56,12 @@
       - "Netdata: http://{{ ansible_default_ipv4.address }}:{{ monitoring.netdata.port }}"
       - "Uptime Kuma: http://{{ ansible_default_ipv4.address }}:{{ monitoring.uptime_kuma.port }}"
       - ""
+      - "Automated Remediation: {{ 'ENABLED' if monitoring.auto_remediation.enabled | default(true) else 'DISABLED' }}"
+      - "Webhook Handler: http://localhost:{{ monitoring.remediation_webhook_port | default(9090) }}"
+      - ""
       - "Next steps:"
       - "1. Access Uptime Kuma and create admin account"
       - "2. Set up monitors for all services"
       - "3. Configure notification channels"
       - "4. See {{ base_install_dir }}/uptime_kuma_setup.md for detailed guide"
+      - "5. Review automated remediation docs: /opt/ansible/docs/AUTOMATED_REMEDIATION.md"

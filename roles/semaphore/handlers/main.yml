@@ -1,0 +1,8 @@
+---
+# Semaphore handlers
+
+- name: Restart Semaphore
+  community.docker.docker_compose_v2:
+    project_src: /opt/semaphore
+    state: restarted
+  when: semaphore.enabled | default(false)

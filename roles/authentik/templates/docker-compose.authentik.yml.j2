@@ -1,0 +1,124 @@
+# Authentik Stack - Identity Provider & SSO
+# Deployed via Dockge
+
+version: '3.8'
+
+services:
+  postgresql:
+    image: docker.io/library/postgres:16-alpine
+    container_name: authentik-db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      start_period: 20s
+      interval: 30s
+      retries: 5
+      timeout: 5s
+    volumes:
+      - authentik-database:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: {{ vault_authentik_credentials.db_password }}
+      POSTGRES_USER: {{ authentik.db_user | default('authentik') }}
+      POSTGRES_DB: {{ authentik.db_name | default('authentik') }}
+    networks:
+      - authentik
+
+  redis:
+    image: docker.io/library/redis:alpine
+    container_name: authentik-redis
+    command: --save 60 1 --loglevel warning
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      start_period: 20s
+      interval: 30s
+      retries: 5
+      timeout: 3s
+    volumes:
+      - authentik-redis:/data
+    networks:
+      - authentik
+
+  server:
+    image: ghcr.io/goauthentik/server:{{ authentik.version | default('2024.12') }}
+    container_name: authentik-server
+    restart: unless-stopped
+    command: server
+    environment:
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: {{ authentik.db_user | default('authentik') }}
+      AUTHENTIK_POSTGRESQL__NAME: {{ authentik.db_name | default('authentik') }}
+      AUTHENTIK_POSTGRESQL__PASSWORD: {{ vault_authentik_credentials.db_password }}
+      AUTHENTIK_SECRET_KEY: {{ vault_authentik_credentials.secret_key }}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+{% if authentik.email.enabled | default(false) %}
+      # Email Configuration
+      AUTHENTIK_EMAIL__HOST: {{ authentik.email.host }}
+      AUTHENTIK_EMAIL__PORT: {{ authentik.email.port | default(587) }}
+      AUTHENTIK_EMAIL__USERNAME: {{ authentik.email.username }}
+      AUTHENTIK_EMAIL__PASSWORD: {{ vault_authentik_credentials.email_password }}
+      AUTHENTIK_EMAIL__USE_TLS: {{ authentik.email.use_tls | default('true') }}
+      AUTHENTIK_EMAIL__USE_SSL: {{ authentik.email.use_ssl | default('false') }}
+      AUTHENTIK_EMAIL__FROM: {{ authentik.email.from }}
+{% endif %}
+    volumes:
+      - authentik-media:/media
+      - authentik-custom-templates:/templates
+    ports:
+      - "{{ authentik.http_port | default(9000) }}:9000"
+      - "{{ authentik.https_port | default(9443) }}:9443"
+    depends_on:
+      - postgresql
+      - redis
+    networks:
+      - authentik
+
+  worker:
+    image: ghcr.io/goauthentik/server:{{ authentik.version | default('2024.12') }}
+    container_name: authentik-worker
+    restart: unless-stopped
+    command: worker
+    environment:
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: {{ authentik.db_user | default('authentik') }}
+      AUTHENTIK_POSTGRESQL__NAME: {{ authentik.db_name | default('authentik') }}
+      AUTHENTIK_POSTGRESQL__PASSWORD: {{ vault_authentik_credentials.db_password }}
+      AUTHENTIK_SECRET_KEY: {{ vault_authentik_credentials.secret_key }}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+{% if authentik.email.enabled | default(false) %}
+      # Email Configuration
+      AUTHENTIK_EMAIL__HOST: {{ authentik.email.host }}
+      AUTHENTIK_EMAIL__PORT: {{ authentik.email.port | default(587) }}
+      AUTHENTIK_EMAIL__USERNAME: {{ authentik.email.username }}
+      AUTHENTIK_EMAIL__PASSWORD: {{ vault_authentik_credentials.email_password }}
+      AUTHENTIK_EMAIL__USE_TLS: {{ authentik.email.use_tls | default('true') }}
+      AUTHENTIK_EMAIL__USE_SSL: {{ authentik.email.use_ssl | default('false') }}
+      AUTHENTIK_EMAIL__FROM: {{ authentik.email.from }}
+{% endif %}
+    volumes:
+      - authentik-media:/media
+      - authentik-certs:/certs
+      - authentik-custom-templates:/templates
+    depends_on:
+      - postgresql
+      - redis
+    networks:
+      - authentik
+
+volumes:
+  authentik-database:
+    driver: local
+  authentik-redis:
+    driver: local
+  authentik-media:
+    driver: local
+  authentik-certs:
+    driver: local
+  authentik-custom-templates:
+    driver: local
+
+networks:
+  authentik:
+    driver: bridge

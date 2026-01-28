@@ -1,0 +1,17 @@
+---
+# Monitoring Role - Handlers
+
+- name: reload systemd
+  systemd:
+    daemon_reload: true
+
+- name: restart remediation webhook
+  systemd:
+    name: remediation-webhook
+    state: restarted
+    enabled: true
+
+- name: restart docker
+  systemd:
+    name: docker
+    state: restarted

@@ -1,0 +1,9 @@
+---
+# Authentik Handlers
+
+- name: Restart Authentik
+  community.docker.docker_compose:
+    project_src: "{{ dockge_stacks_dir }}/authentik"
+    state: present
+    restarted: true
+  when: authentik.enabled | default(false)

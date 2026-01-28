@@ -1,0 +1,39 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Check if hostname is set
+      command: hostname
+      register: hostname_result
+      changed_when: false
+
+    - name: Validate hostname
+      assert:
+        that:
+          - hostname_result.stdout == 'test-server'
+        fail_msg: "Hostname not set correctly"
+
+    - name: Check if essential packages are installed
+      package:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - curl
+        - wget
+        - git
+        - vim
+        - htop
+      check_mode: yes
+      register: pkg_check
+      failed_when: pkg_check.changed
+
+    - name: Verify required directories exist
+      stat:
+        path: "{{ item }}"
+      register: dir_stat
+      failed_when: not dir_stat.stat.exists
+      loop:
+        - /opt/backups
+        - /opt/scripts
+        - /var/log/server-helper

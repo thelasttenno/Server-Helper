@@ -1,0 +1,26 @@
+---
+# Authentik Role - Default Variables
+
+# Authentik Configuration
+authentik:
+  enabled: false
+  version: "2024.12"
+  http_port: 9000
+  https_port: 9443
+
+  # Database settings
+  db_user: authentik
+  db_name: authentik
+
+  # Email configuration (optional)
+  email:
+    enabled: false
+    host: ""
+    port: 587
+    username: ""
+    use_tls: true
+    use_ssl: false
+    from: "authentik@example.com"
+
+# Dockge integration
+dockge_stacks_dir: "/opt/stacks"

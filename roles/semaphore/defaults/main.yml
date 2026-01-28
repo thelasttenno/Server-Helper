@@ -1,0 +1,62 @@
+---
+# Semaphore UI default configuration
+
+semaphore:
+  enabled: false
+  port: 3000
+  # Database configuration
+  database:
+    dialect: postgres  # postgres, mysql, or bolt (sqlite)
+    host: semaphore-db
+    port: 5432
+    name: semaphore
+    user: semaphore
+    # Password is stored in vault.yml as vault_semaphore_db_password
+
+  # Admin user configuration (initial setup)
+  admin:
+    username: admin
+    email: admin@example.com
+    # Password is stored in vault.yml as vault_semaphore_admin_password
+
+  # Access key encryption secret (required)
+  # Generated in vault.yml as vault_semaphore_access_key_encryption
+
+  # Optional: Playbook path for Ansible playbooks
+  # playbook_path: /tmp/semaphore
+
+  # Optional: Enable web host (for accessing external URLs)
+  # web_host: https://semaphore.example.com
+
+  # Optional: LDAP/OAuth configuration
+  # ldap:
+  #   enabled: true
+  #   server: ldap://ldap.example.com:389
+  #   binddn: "cn=admin,dc=example,dc=com"
+  #   password: "vault_semaphore_ldap_password"
+  #   searchdn: "ou=users,dc=example,dc=com"
+
+  # Optional: Email notifications (SMTP)
+  # email:
+  #   enabled: true
+  #   sender: semaphore@example.com
+  #   host: smtp.example.com
+  #   port: 587
+  #   username: semaphore@example.com
+  #   password: "vault_semaphore_smtp_password"
+
+  # Optional: Telegram notifications
+  # telegram:
+  #   enabled: true
+  #   token: "vault_semaphore_telegram_token"
+  #   chat: "vault_semaphore_telegram_chat"
+
+  # Optional: Slack notifications
+  # slack:
+  #   enabled: true
+  #   url: "vault_semaphore_slack_webhook"
+
+# Installation paths
+semaphore_data_dir: /opt/semaphore/data
+semaphore_playbooks_dir: /opt/semaphore/playbooks
+semaphore_config_dir: /opt/semaphore/config

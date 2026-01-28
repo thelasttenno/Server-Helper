@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
 #
-# Server Helper v1.0.0 - Automated Setup Script
-# ==============================================
-# This script installs all dependencies and runs the Ansible playbook
-# with interactive configuration prompts.
+# Server Helper v1.0.0 - Command Node Setup Script
+# =================================================
+# This script prepares your COMMAND NODE to manage target servers with Ansible.
+# Run this on your laptop/desktop/control machine, NOT on target servers.
+#
+# What this does:
+#   1. Installs Ansible and dependencies on this command node
+#   2. Prompts for target server configuration
+#   3. Creates inventory file with your target nodes
+#   4. Creates configuration and vault files
+#   5. Tests connectivity to target nodes
+#   6. Runs Ansible playbooks against target servers
+#
+# For target servers, run bootstrap-target.sh on each node first, OR
+# run: ansible-playbook playbooks/bootstrap.yml
 #
 # Usage: ./setup.sh
 #
@@ -29,7 +40,7 @@ LOG_FILE="${SCRIPT_DIR}/setup.log"
 print_header() {
     echo -e "\n${BLUE}${BOLD}╔════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}${BOLD}║  Server Helper v1.0.0 Setup            ║${NC}"
-    echo -e "${BLUE}${BOLD}║  Ansible + Docker + Monitoring         ║${NC}"
+    echo -e "${BLUE}${BOLD}║  Command Node Configuration            ║${NC}"
     echo -e "${BLUE}${BOLD}╚════════════════════════════════════════╝${NC}\n"
 }
 
@@ -58,16 +69,9 @@ log_exec() {
 # Check if running as root
 check_not_root() {
     if [[ $EUID -eq 0 ]]; then
-        print_warning "Running as root is not recommended for security reasons"
-        print_info "It's better to run as a regular user with sudo privileges"
-        echo
-        read -p "Continue running as root? (yes/no): " -r CONFIRM
-        if [[ ! $CONFIRM =~ ^[Yy][Ee][Ss]$ ]]; then
-            print_info "Please run as a regular user with sudo privileges"
-            exit 1
-        fi
-        print_warning "Continuing as root..."
-        echo
+        print_error "This script should NOT be run as root on the command node"
+        print_info "Please run as a regular user with sudo privileges"
+        exit 1
     fi
 }
 
@@ -95,9 +99,9 @@ detect_os() {
     if [[ "$OS" != "ubuntu" ]]; then
         print_warning "This script is designed for Ubuntu 24.04 LTS"
         print_warning "Detected: $OS $OS_VERSION"
-        read -p "Continue anyway? (y/N): " -n 1 -r
+        read -p "Continue anyway? (y/N): " -r
         echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        if [[ ! $REPLY =~ ^[Yy]([Ee][Ss])?$ ]]; then
             exit 1
         fi
     fi
@@ -142,8 +146,28 @@ install_python_deps() {
     print_info "Installing Python dependencies..."
 
     if [[ -f requirements.txt ]]; then
-        log_exec pip3 install --user -q -r requirements.txt
-        print_success "Python dependencies installed"
+        # Use system packages instead of pip to avoid PEP 668 issues on Debian/Ubuntu
+        local python_packages=(
+            "python3-docker"
+            "python3-jmespath"
+            "python3-netaddr"
+            "python3-requests"
+        )
+
+        local to_install=()
+        for pkg in "${python_packages[@]}"; do
+            if ! dpkg -l | grep -q "^ii  $pkg "; then
+                to_install+=("$pkg")
+            fi
+        done
+
+        if [[ ${#to_install[@]} -gt 0 ]]; then
+            print_info "Installing Python packages: ${to_install[*]}"
+            log_exec sudo apt-get install -y -qq "${to_install[@]}"
+            print_success "Python dependencies installed"
+        else
+            print_success "All Python dependencies already installed"
+        fi
     else
         print_warning "requirements.txt not found, skipping Python dependencies"
     fi
@@ -162,17 +186,103 @@ install_galaxy_deps() {
     fi
 }
 
+# Prompt for target nodes
+prompt_target_nodes() {
+    print_header
+    print_info "Target Server Configuration"
+    print_info "Enter details for servers you want to manage with Ansible"
+    echo
+
+    # Initialize arrays
+    TARGET_HOSTS=()
+    TARGET_HOSTNAMES=()
+    TARGET_USERS=()
+
+    # Prompt for number of targets
+    read -p "How many target servers do you want to configure? [1]: " NUM_TARGETS
+    NUM_TARGETS=${NUM_TARGETS:-1}
+
+    # SSH authentication method
+    echo
+    echo -e "${BOLD}SSH Authentication:${NC}"
+    read -p "Use SSH key authentication? (recommended) (Y/n): " -r USE_SSH_KEYS_INPUT
+    echo
+    USE_SSH_KEYS=${USE_SSH_KEYS_INPUT:-y}
+    USE_SSH_KEYS=$(echo "$USE_SSH_KEYS" | tr '[:upper:]' '[:lower:]')
+
+    if [[ "$USE_SSH_KEYS" =~ ^[yY]([eE][sS])?$ ]]; then
+        USE_SSH_KEYS="yes"
+        print_success "Using SSH key authentication"
+
+        # Check if SSH key exists
+        if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
+            print_warning "No SSH key found at ~/.ssh/id_rsa.pub"
+            read -p "Generate SSH key pair now? (Y/n): " -r GEN_KEY
+            echo
+            if [[ ! $GEN_KEY =~ ^[Nn]$ ]]; then
+                ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""
+                print_success "SSH key generated"
+            fi
+        fi
+    else
+        USE_SSH_KEYS="no"
+        print_warning "Password authentication will be used (less secure)"
+    fi
+
+    # Collect target server details
+    for ((i=0; i<NUM_TARGETS; i++)); do
+        echo
+        echo -e "${BOLD}Target Server $((i+1)) of ${NUM_TARGETS}:${NC}"
+
+        # Hostname
+        read -p "Hostname/identifier [server-$(printf "%02d" $((i+1)))]: " TARGET_HOSTNAME
+        TARGET_HOSTNAME=${TARGET_HOSTNAME:-server-$(printf "%02d" $((i+1)))}
+        TARGET_HOSTNAMES+=("$TARGET_HOSTNAME")
+
+        # IP/Hostname
+        read -p "IP address or DNS name: " TARGET_HOST
+        while [[ -z "$TARGET_HOST" ]]; do
+            print_error "IP address or DNS name is required"
+            read -p "IP address or DNS name: " TARGET_HOST
+        done
+        TARGET_HOSTS+=("$TARGET_HOST")
+
+        # SSH user
+        read -p "SSH username [ansible]: " TARGET_USER
+        TARGET_USER=${TARGET_USER:-ansible}
+        TARGET_USERS+=("$TARGET_USER")
+
+        # Test SSH connectivity
+        print_info "Testing SSH connectivity to ${TARGET_HOST}..."
+        if [[ "$USE_SSH_KEYS" == "yes" ]]; then
+            if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}" "echo 'Connected'" &>/dev/null; then
+                print_success "SSH connectivity test passed for ${TARGET_HOSTNAME}"
+            else
+                print_warning "SSH connectivity test failed for ${TARGET_HOSTNAME}"
+                print_info "Make sure the target node is bootstrapped and SSH keys are configured"
+                print_info "You can run: ssh-copy-id ${TARGET_USER}@${TARGET_HOST}"
+            fi
+        else
+            print_warning "Skipping connectivity test (password auth requires manual intervention)"
+        fi
+    done
+
+    echo
+    print_success "Target server configuration complete"
+    print_info "Configured ${#TARGET_HOSTS[@]} target node(s)"
+}
+
 # Prompt for configuration values
 prompt_config() {
     print_header
-    print_info "Configuration Setup"
+    print_info "Service Configuration"
     print_info "Press Enter to use default values shown in [brackets]"
     echo
 
     # System configuration
     echo -e "${BOLD}System Configuration:${NC}"
-    read -p "Server hostname [server-01]: " HOSTNAME
-    HOSTNAME=${HOSTNAME:-server-01}
+    read -p "Default hostname prefix [server]: " HOSTNAME_PREFIX
+    HOSTNAME_PREFIX=${HOSTNAME_PREFIX:-server}
 
     read -p "Timezone [America/New_York]: " TIMEZONE
     TIMEZONE=${TIMEZONE:-America/New_York}
@@ -180,11 +290,11 @@ prompt_config() {
     # NAS configuration
     echo
     echo -e "${BOLD}NAS Configuration:${NC}"
-    read -p "Enable NAS mounts? (y/N): " -n 1 -r ENABLE_NAS
+    read -p "Enable NAS mounts? (y/N): " -r ENABLE_NAS
     echo
     ENABLE_NAS=${ENABLE_NAS:-n}
 
-    if [[ $ENABLE_NAS =~ ^[Yy]$ ]]; then
+    if [[ $ENABLE_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then
         read -p "NAS IP address [192.168.1.100]: " NAS_IP
         NAS_IP=${NAS_IP:-192.168.1.100}
 
@@ -202,37 +312,37 @@ prompt_config() {
     # Backup configuration
     echo
     echo -e "${BOLD}Backup Configuration:${NC}"
-    read -p "Enable backups (Restic)? (Y/n): " -n 1 -r ENABLE_BACKUPS
+    read -p "Enable backups (Restic)? (Y/n): " -r ENABLE_BACKUPS
     echo
     ENABLE_BACKUPS=${ENABLE_BACKUPS:-y}
 
-    if [[ $ENABLE_BACKUPS =~ ^[Yy]$ ]]; then
+    if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then
         read -p "Backup schedule (cron format) [0 2 * * *]: " BACKUP_SCHEDULE
         BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}
 
-        read -p "Enable NAS backup destination? (Y/n): " -n 1 -r BACKUP_NAS
+        read -p "Enable NAS backup destination? (Y/n): " -r BACKUP_NAS
         echo
         BACKUP_NAS=${BACKUP_NAS:-y}
 
-        if [[ $BACKUP_NAS =~ ^[Yy]$ ]]; then
+        if [[ $BACKUP_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then
             read -sp "Restic NAS repository password: " RESTIC_NAS_PASS
             echo
         fi
 
-        read -p "Enable local backup destination? (Y/n): " -n 1 -r BACKUP_LOCAL
+        read -p "Enable local backup destination? (Y/n): " -r BACKUP_LOCAL
         echo
         BACKUP_LOCAL=${BACKUP_LOCAL:-y}
 
-        if [[ $BACKUP_LOCAL =~ ^[Yy]$ ]]; then
+        if [[ $BACKUP_LOCAL =~ ^[Yy]([Ee][Ss])?$ ]]; then
             read -sp "Restic local repository password: " RESTIC_LOCAL_PASS
             echo
         fi
 
-        read -p "Enable S3 backup destination? (y/N): " -n 1 -r BACKUP_S3
+        read -p "Enable S3 backup destination? (y/N): " -r BACKUP_S3
         echo
         BACKUP_S3=${BACKUP_S3:-n}
 
-        if [[ $BACKUP_S3 =~ ^[Yy]$ ]]; then
+        if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then
             read -p "S3 bucket name: " S3_BUCKET
             read -p "S3 region [us-east-1]: " S3_REGION
             S3_REGION=${S3_REGION:-us-east-1}
@@ -247,22 +357,22 @@ prompt_config() {
     # Monitoring configuration
     echo
     echo -e "${BOLD}Monitoring Configuration:${NC}"
-    read -p "Enable Netdata? (Y/n): " -n 1 -r ENABLE_NETDATA
+    read -p "Enable Netdata? (Y/n): " -r ENABLE_NETDATA
     echo
     ENABLE_NETDATA=${ENABLE_NETDATA:-y}
 
-    if [[ $ENABLE_NETDATA =~ ^[Yy]$ ]]; then
+    if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then
         read -p "Netdata port [19999]: " NETDATA_PORT
         NETDATA_PORT=${NETDATA_PORT:-19999}
 
         read -p "Netdata Cloud claim token (optional): " NETDATA_CLAIM_TOKEN
     fi
 
-    read -p "Enable Uptime Kuma? (Y/n): " -n 1 -r ENABLE_UPTIME_KUMA
+    read -p "Enable Uptime Kuma? (Y/n): " -r ENABLE_UPTIME_KUMA
     echo
     ENABLE_UPTIME_KUMA=${ENABLE_UPTIME_KUMA:-y}
 
-    if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]$ ]]; then
+    if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then
         read -p "Uptime Kuma port [3001]: " UPTIME_KUMA_PORT
         UPTIME_KUMA_PORT=${UPTIME_KUMA_PORT:-3001}
     fi
@@ -270,11 +380,11 @@ prompt_config() {
     # Container management
     echo
     echo -e "${BOLD}Container Management:${NC}"
-    read -p "Enable Dockge? (Y/n): " -n 1 -r ENABLE_DOCKGE
+    read -p "Enable Dockge? (Y/n): " -r ENABLE_DOCKGE
     echo
     ENABLE_DOCKGE=${ENABLE_DOCKGE:-y}
 
-    if [[ $ENABLE_DOCKGE =~ ^[Yy]$ ]]; then
+    if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then
         read -p "Dockge port [5001]: " DOCKGE_PORT
         DOCKGE_PORT=${DOCKGE_PORT:-5001}
     fi
@@ -282,32 +392,32 @@ prompt_config() {
     # Security configuration
     echo
     echo -e "${BOLD}Security Configuration:${NC}"
-    read -p "Enable fail2ban? (Y/n): " -n 1 -r ENABLE_FAIL2BAN
+    read -p "Enable fail2ban? (Y/n): " -r ENABLE_FAIL2BAN
     echo
     ENABLE_FAIL2BAN=${ENABLE_FAIL2BAN:-y}
 
-    read -p "Enable UFW firewall? (Y/n): " -n 1 -r ENABLE_UFW
+    read -p "Enable UFW firewall? (Y/n): " -r ENABLE_UFW
     echo
     ENABLE_UFW=${ENABLE_UFW:-y}
 
-    read -p "Enable SSH hardening? (Y/n): " -n 1 -r ENABLE_SSH_HARDENING
+    read -p "Enable SSH hardening? (Y/n): " -r ENABLE_SSH_HARDENING
     echo
     ENABLE_SSH_HARDENING=${ENABLE_SSH_HARDENING:-y}
 
-    if [[ $ENABLE_SSH_HARDENING =~ ^[Yy]$ ]]; then
+    if [[ $ENABLE_SSH_HARDENING =~ ^[Yy]([Ee][Ss])?$ ]]; then
         read -p "SSH port [22]: " SSH_PORT
         SSH_PORT=${SSH_PORT:-22}
 
-        read -p "Disable SSH password authentication? (Y/n): " -n 1 -r SSH_NO_PASSWORD
+        read -p "Disable SSH password authentication? (Y/n): " -r SSH_NO_PASSWORD
         echo
         SSH_NO_PASSWORD=${SSH_NO_PASSWORD:-y}
 
-        read -p "Disable SSH root login? (Y/n): " -n 1 -r SSH_NO_ROOT
+        read -p "Disable SSH root login? (Y/n): " -r SSH_NO_ROOT
         echo
         SSH_NO_ROOT=${SSH_NO_ROOT:-y}
     fi
 
-    read -p "Enable Lynis security scanning? (Y/n): " -n 1 -r ENABLE_LYNIS
+    read -p "Enable Lynis security scanning? (Y/n): " -r ENABLE_LYNIS
     echo
     ENABLE_LYNIS=${ENABLE_LYNIS:-y}
 
@@ -337,22 +447,50 @@ create_inventory() {
 ---
 all:
   hosts:
-    ${HOSTNAME}:
-      ansible_host: ${TARGET_HOST}
-      ansible_user: ${TARGET_USER}
+EOF
+
+    # Add each target host to inventory
+    for i in "${!TARGET_HOSTS[@]}"; do
+        local host_name="${TARGET_HOSTNAMES[$i]}"
+        local host_ip="${TARGET_HOSTS[$i]}"
+        local host_user="${TARGET_USERS[$i]}"
+
+        cat >> "$inventory_file" <<EOF
+    ${host_name}:
+      ansible_host: ${host_ip}
+      ansible_user: ${host_user}
       ansible_become: yes
       ansible_python_interpreter: /usr/bin/python3
 
+EOF
+    done
+
+    # Add children groups
+    cat >> "$inventory_file" <<EOF
   children:
     servers:
       hosts:
-        ${HOSTNAME}:
+EOF
+
+    for host_name in "${TARGET_HOSTNAMES[@]}"; do
+        echo "        ${host_name}:" >> "$inventory_file"
+    done
+
+    cat >> "$inventory_file" <<EOF
 
   vars:
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
 EOF
 
+    # Add SSH key authentication if using keys
+    if [[ "$USE_SSH_KEYS" == "yes" ]]; then
+        cat >> "$inventory_file" <<EOF
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+EOF
+    fi
+
     print_success "Inventory file created: $inventory_file"
+    print_info "Added ${#TARGET_HOSTS[@]} target node(s) to inventory"
 }
 
 # Create main configuration file
@@ -367,15 +505,16 @@ create_config() {
 
 ---
 # System Configuration
-hostname: "${HOSTNAME}"
+# Note: Individual hostnames are configured per-host in inventory
+hostname_prefix: "${HOSTNAME_PREFIX}"
 timezone: "${TIMEZONE}"
 locale: "en_US.UTF-8"
 base_install_dir: "/opt"
 
 # NAS Configuration
 nas_mounts:
-  enabled: $(if [[ $ENABLE_NAS =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
-$(if [[ $ENABLE_NAS =~ ^[Yy]$ ]]; then cat <<EON
+  enabled: $(if [[ $ENABLE_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+$(if [[ $ENABLE_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EON
 
 nas:
   enabled: true
@@ -391,9 +530,9 @@ fi)
 
 # Backup Configuration
 backups:
-  enabled: $(if [[ $ENABLE_BACKUPS =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
+  enabled: $(if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
 
-$(if [[ $ENABLE_BACKUPS =~ ^[Yy]$ ]]; then cat <<EOB
+$(if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOB
 restic:
   enabled: true
   schedule: "${BACKUP_SCHEDULE}"
@@ -406,18 +545,18 @@ restic:
 
   destinations:
     nas:
-      enabled: $(if [[ $BACKUP_NAS =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
+      enabled: $(if [[ $BACKUP_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
       path: "${NAS_MOUNT}/restic"
       password: "{{ vault_restic_passwords.nas }}"
 
     local:
-      enabled: $(if [[ $BACKUP_LOCAL =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
+      enabled: $(if [[ $BACKUP_LOCAL =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
       path: "/opt/backups/restic"
       password: "{{ vault_restic_passwords.local }}"
 
     s3:
-      enabled: $(if [[ $BACKUP_S3 =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
-$(if [[ $BACKUP_S3 =~ ^[Yy]$ ]]; then cat <<EOS3
+      enabled: $(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+$(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOS3
       bucket: "${S3_BUCKET}"
       endpoint: "s3.amazonaws.com"
       region: "${S3_REGION}"
@@ -448,9 +587,9 @@ fi)
 
 # Monitoring Configuration
 monitoring:
-  enabled: $(if [[ $ENABLE_NETDATA =~ ^[Yy]$ ]] || [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
+  enabled: $(if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]] || [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
 
-$(if [[ $ENABLE_NETDATA =~ ^[Yy]$ ]]; then cat <<EON
+$(if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EON
   netdata:
     enabled: true
     port: ${NETDATA_PORT}
@@ -471,7 +610,7 @@ echo "  netdata:"
 echo "    enabled: false"
 fi)
 
-$(if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]$ ]]; then cat <<EOK
+$(if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOK
   uptime_kuma:
     enabled: true
     port: ${UPTIME_KUMA_PORT}
@@ -496,7 +635,7 @@ fi)
 
 # Container Management
 dockge:
-  enabled: $(if [[ $ENABLE_DOCKGE =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
+  enabled: $(if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
   port: ${DOCKGE_PORT:-5001}
   stacks_dir: "/opt/dockge/stacks"
   data_dir: "/opt/dockge/data"
@@ -505,26 +644,26 @@ dockge:
 
 # Security Configuration
 security:
-  fail2ban_enabled: $(if [[ $ENABLE_FAIL2BAN =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
+  fail2ban_enabled: $(if [[ $ENABLE_FAIL2BAN =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
   fail2ban_bantime: 3600
   fail2ban_maxretry: 5
 
-  ufw_enabled: $(if [[ $ENABLE_UFW =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
+  ufw_enabled: $(if [[ $ENABLE_UFW =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
   ufw_default_policy: "deny"
   ufw_allowed_ports:
     - ${SSH_PORT:-22}
-$(if [[ $ENABLE_DOCKGE =~ ^[Yy]$ ]]; then echo "    - ${DOCKGE_PORT}"; fi)
-$(if [[ $ENABLE_NETDATA =~ ^[Yy]$ ]]; then echo "    - ${NETDATA_PORT}"; fi)
-$(if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]$ ]]; then echo "    - ${UPTIME_KUMA_PORT}"; fi)
+$(if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${DOCKGE_PORT}"; fi)
+$(if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${NETDATA_PORT}"; fi)
+$(if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${UPTIME_KUMA_PORT}"; fi)
 
-  ssh_hardening: $(if [[ $ENABLE_SSH_HARDENING =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
+  ssh_hardening: $(if [[ $ENABLE_SSH_HARDENING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
   ssh_port: ${SSH_PORT:-22}
-  ssh_password_authentication: $(if [[ $SSH_NO_PASSWORD =~ ^[Yy]$ ]]; then echo "false"; else echo "true"; fi)
-  ssh_permit_root_login: $(if [[ $SSH_NO_ROOT =~ ^[Yy]$ ]]; then echo "false"; else echo "true"; fi)
+  ssh_password_authentication: $(if [[ $SSH_NO_PASSWORD =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "false"; else echo "true"; fi)
+  ssh_permit_root_login: $(if [[ $SSH_NO_ROOT =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "false"; else echo "true"; fi)
   ssh_max_auth_tries: 3
   ssh_client_alive_interval: 300
 
-  lynis_enabled: $(if [[ $ENABLE_LYNIS =~ ^[Yy]$ ]]; then echo "true"; else echo "false"; fi)
+  lynis_enabled: $(if [[ $ENABLE_LYNIS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
   lynis_schedule: "0 3 * * 0"
   lynis_uptime_kuma_push_url: ""
 
@@ -623,7 +762,7 @@ create_vault() {
 # Generated: $(date '+%Y-%m-%d %H:%M:%S')
 
 # NAS Credentials
-$(if [[ $ENABLE_NAS =~ ^[Yy]$ ]]; then cat <<EON
+$(if [[ $ENABLE_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EON
 vault_nas_credentials:
   - username: "${NAS_USER}"
     password: "${NAS_PASS}"
@@ -634,13 +773,13 @@ fi)
 
 # Restic Passwords
 vault_restic_passwords:
-$(if [[ $BACKUP_NAS =~ ^[Yy]$ ]]; then echo "  nas: \"${RESTIC_NAS_PASS}\""; else echo "  nas: \"\""; fi)
-$(if [[ $BACKUP_LOCAL =~ ^[Yy]$ ]]; then echo "  local: \"${RESTIC_LOCAL_PASS}\""; else echo "  local: \"\""; fi)
-$(if [[ $BACKUP_S3 =~ ^[Yy]$ ]]; then echo "  s3: \"${RESTIC_S3_PASS}\""; else echo "  s3: \"\""; fi)
+$(if [[ $BACKUP_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  nas: \"${RESTIC_NAS_PASS}\""; else echo "  nas: \"\""; fi)
+$(if [[ $BACKUP_LOCAL =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  local: \"${RESTIC_LOCAL_PASS}\""; else echo "  local: \"\""; fi)
+$(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  s3: \"${RESTIC_S3_PASS}\""; else echo "  s3: \"\""; fi)
   b2: ""
 
 # Cloud Provider Credentials
-$(if [[ $BACKUP_S3 =~ ^[Yy]$ ]]; then cat <<EOS3
+$(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOS3
 vault_aws_credentials:
   access_key: "${AWS_ACCESS_KEY}"
   secret_key: "${AWS_SECRET_KEY}"
@@ -749,23 +888,87 @@ preflight_checks() {
     print_success "Pre-flight checks complete"
 }
 
+# Offer to run bootstrap playbook
+offer_bootstrap() {
+    print_header
+    print_info "Target Node Bootstrap Check"
+    echo
+
+    print_info "Before running the main setup, target nodes must be bootstrapped with:"
+    echo "  - Python 3 installed"
+    echo "  - SSH server running"
+    echo "  - Admin user with sudo privileges"
+    echo "  - SSH key authentication configured"
+    echo
+
+    read -p "Have all target nodes been bootstrapped? (y/N): " -r BOOTSTRAPPED
+    echo
+
+    if [[ ! $BOOTSTRAPPED =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        print_warning "Target nodes need to be bootstrapped first"
+        echo
+        echo "You have two options:"
+        echo
+        echo "  ${BOLD}Option 1: Manual bootstrap (recommended for initial setup)${NC}"
+        echo "  Run this on each target node as root:"
+        echo "    curl -fsSL https://raw.githubusercontent.com/yourusername/Server-Helper/main/bootstrap-target.sh | sudo bash"
+        echo "  OR copy bootstrap-target.sh to each node and run it"
+        echo
+        echo "  ${BOLD}Option 2: Ansible bootstrap playbook${NC}"
+        echo "  Run this from the command node (requires root SSH access):"
+        echo "    ansible-playbook playbooks/bootstrap.yml --ask-become-pass"
+        echo
+
+        read -p "Would you like to run the bootstrap playbook now? (y/N): " -r RUN_BOOTSTRAP
+        echo
+
+        if [[ $RUN_BOOTSTRAP =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            print_info "Running bootstrap playbook..."
+            if ansible-playbook playbooks/bootstrap.yml --ask-become-pass; then
+                print_success "Bootstrap playbook completed"
+            else
+                print_error "Bootstrap playbook failed"
+                print_info "You may need to bootstrap nodes manually"
+                read -p "Continue with main setup anyway? (y/N): " -r CONTINUE
+                if [[ ! $CONTINUE =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                    exit 1
+                fi
+            fi
+        else
+            print_warning "Please bootstrap target nodes before continuing"
+            read -p "Continue with main setup anyway? (y/N): " -r CONTINUE
+            if [[ ! $CONTINUE =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                print_info "Setup paused. Run this script again after bootstrapping target nodes."
+                exit 0
+            fi
+        fi
+    else
+        print_success "Target nodes confirmed bootstrapped"
+    fi
+}
+
 # Run Ansible playbook
 run_playbook() {
     print_header
     print_info "Running Ansible playbook..."
     echo
 
-    print_warning "This will configure your server with:"
-    if [[ $ENABLE_DOCKGE =~ ^[Yy]$ ]]; then echo "  - Dockge (Container Management)"; fi
-    if [[ $ENABLE_NETDATA =~ ^[Yy]$ ]]; then echo "  - Netdata (Monitoring)"; fi
-    if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]$ ]]; then echo "  - Uptime Kuma (Alerting)"; fi
-    if [[ $ENABLE_BACKUPS =~ ^[Yy]$ ]]; then echo "  - Restic Backups"; fi
-    if [[ $ENABLE_FAIL2BAN =~ ^[Yy]$ ]]; then echo "  - fail2ban (Security)"; fi
-    if [[ $ENABLE_UFW =~ ^[Yy]$ ]]; then echo "  - UFW Firewall"; fi
+    print_warning "This will configure ${#TARGET_HOSTS[@]} target server(s) with:"
+    if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Dockge (Container Management)"; fi
+    if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Netdata (Monitoring)"; fi
+    if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Uptime Kuma (Alerting)"; fi
+    if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Restic Backups"; fi
+    if [[ $ENABLE_FAIL2BAN =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - fail2ban (Security)"; fi
+    if [[ $ENABLE_UFW =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - UFW Firewall"; fi
+    echo
+    print_info "Target servers:"
+    for i in "${!TARGET_HOSTS[@]}"; do
+        echo "  - ${TARGET_HOSTNAMES[$i]} (${TARGET_HOSTS[$i]})"
+    done
     echo
 
     read -p "Continue with installation? (yes/no): " -r CONFIRM
-    if [[ ! $CONFIRM =~ ^[Yy][Ee][Ss]$ ]]; then
+    if [[ ! $CONFIRM =~ ^[Yy]([Ee][Ss])?$ ]]; then
         print_warning "Installation cancelled by user"
         exit 0
     fi
@@ -775,14 +978,67 @@ run_playbook() {
     print_info "This may take 10-20 minutes depending on your system"
     echo
 
-    # Run the playbook with verbose output
-    if ansible-playbook playbooks/setup.yml -v; then
-        print_success "Playbook execution completed successfully!"
+    # Run the TARGET playbook with verbose output (excludes Uptime Kuma)
+    if ansible-playbook playbooks/setup-targets.yml -v; then
+        print_success "Target node playbook completed successfully!"
+
+        # Offer to install control node services
+        offer_control_node_setup
+
         show_completion_message
     else
         print_error "Playbook execution failed"
         print_info "Check the log file for details: $LOG_FILE"
         exit 1
+    fi
+}
+
+# Offer to install control node services
+offer_control_node_setup() {
+    echo
+    print_header
+    print_info "Control Node Services Setup"
+    echo
+
+    print_info "Target servers are now configured. You can optionally install"
+    print_info "centralized monitoring services on this control node:"
+    echo
+    echo "  ${BOLD}Centralized Uptime Kuma:${NC}"
+    echo "  - Monitor ALL target servers from a single dashboard"
+    echo "  - Centralized alerting (email, Discord, Telegram, etc.)"
+    echo "  - Recommended for multi-server deployments"
+    echo
+
+    read -p "Install centralized monitoring on this control node? (Y/n): " -r INSTALL_CONTROL
+    echo
+
+    if [[ ! $INSTALL_CONTROL =~ ^[Nn]$ ]]; then
+        print_info "Installing control node services..."
+
+        # Run control node playbook
+        if ansible-playbook playbooks/setup-control.yml -v; then
+            print_success "Control node services installed!"
+            echo
+            print_info "Access centralized Uptime Kuma:"
+            print_info "  http://localhost:${CONTROL_UPTIME_KUMA_PORT:-3001}"
+            echo
+            print_info "Configure monitors for your target servers:"
+            for i in "${!TARGET_HOSTS[@]}"; do
+                local host_ip="${TARGET_HOSTS[$i]}"
+                echo "  - Netdata: http://${host_ip}:${NETDATA_PORT}"
+                echo "  - Dockge: http://${host_ip}:${DOCKGE_PORT}"
+                echo "  - SSH: ${host_ip}:22"
+            done
+            echo
+        else
+            print_warning "Control node setup failed (optional)"
+            print_info "You can run it manually later with:"
+            print_info "  ansible-playbook playbooks/setup-control.yml"
+        fi
+    else
+        print_info "Skipping control node services"
+        print_info "You can install them later with:"
+        print_info "  ansible-playbook playbooks/setup-control.yml"
     fi
 }
 
@@ -792,34 +1048,43 @@ show_completion_message() {
     print_success "Server Helper setup complete!"
     echo
 
-    print_info "Access your services:"
-    if [[ $ENABLE_DOCKGE =~ ^[Yy]$ ]]; then
-        echo -e "  ${GREEN}Dockge:${NC}      http://${TARGET_HOST}:${DOCKGE_PORT}"
-    fi
-    if [[ $ENABLE_NETDATA =~ ^[Yy]$ ]]; then
-        echo -e "  ${GREEN}Netdata:${NC}     http://${TARGET_HOST}:${NETDATA_PORT}"
-    fi
-    if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]$ ]]; then
-        echo -e "  ${GREEN}Uptime Kuma:${NC} http://${TARGET_HOST}:${UPTIME_KUMA_PORT}"
-    fi
+    print_info "Access your services on target servers:"
     echo
+
+    for i in "${!TARGET_HOSTS[@]}"; do
+        local host_name="${TARGET_HOSTNAMES[$i]}"
+        local host_ip="${TARGET_HOSTS[$i]}"
+
+        echo -e "${BOLD}${host_name} (${host_ip}):${NC}"
+        if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo -e "  ${GREEN}Dockge:${NC}      http://${host_ip}:${DOCKGE_PORT}"
+        fi
+        if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo -e "  ${GREEN}Netdata:${NC}     http://${host_ip}:${NETDATA_PORT}"
+        fi
+        if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo -e "  ${GREEN}Uptime Kuma:${NC} http://${host_ip}:${UPTIME_KUMA_PORT}"
+        fi
+        echo
+    done
 
     print_info "Next steps:"
     echo "  1. Change default admin passwords on first login"
-    if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]$ ]]; then
+    if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then
         echo "  2. Configure Uptime Kuma notification endpoints"
     fi
-    if [[ $ENABLE_BACKUPS =~ ^[Yy]$ ]]; then
+    if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then
         echo "  3. Verify backup repositories are initialized"
     fi
     echo "  4. Review security settings and firewall rules"
     echo
 
-    print_info "Useful commands:"
+    print_info "Useful commands (from command node):"
     echo "  - View service status: ansible all -m shell -a 'docker ps'"
     echo "  - Run backup manually: ansible-playbook playbooks/backup.yml"
     echo "  - Security audit: ansible-playbook playbooks/security.yml"
     echo "  - Update system: ansible-playbook playbooks/update.yml"
+    echo "  - Add more nodes: Edit inventory/hosts.yml and re-run playbook"
     echo
 
     print_info "Documentation:"
@@ -843,19 +1108,23 @@ main() {
     check_sudo
     detect_os
 
-    # Install dependencies
+    # Install dependencies on COMMAND NODE
     install_system_deps
     install_python_deps
     install_galaxy_deps
 
     # Configuration
-    prompt_config
-    create_inventory
-    create_config
-    create_vault
+    prompt_target_nodes  # NEW: Prompt for target servers first
+    prompt_config        # Then prompt for service configuration
+    create_inventory     # Create inventory with target nodes
+    create_config        # Create service configuration
+    create_vault         # Create encrypted vault
 
     # Pre-flight checks
     preflight_checks
+
+    # Offer to run bootstrap playbook
+    offer_bootstrap
 
     # Run playbook
     run_playbook

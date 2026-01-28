@@ -1,0 +1,30 @@
+---
+# Pi-hole Prometheus Exporter
+# Exports Pi-hole metrics for Grafana dashboards
+# Managed by Ansible - DO NOT EDIT MANUALLY
+
+services:
+  pihole-exporter:
+    container_name: pihole-exporter
+    image: ekofr/pihole-exporter:{{ dns.exporter.version | default('latest') }}
+    restart: unless-stopped
+    networks:
+      - dns
+      - monitoring
+    ports:
+      - "{{ dns.exporter.port | default(9617) }}:9617"
+    environment:
+      - PIHOLE_HOSTNAME=pihole
+      - PIHOLE_PORT={{ dns.pihole.port | default(80) }}
+      - PIHOLE_PASSWORD={{ vault_dns.pihole_password }}
+      - INTERVAL={{ dns.exporter.interval | default('30s') }}
+    labels:
+      - "com.centurylinklabs.watchtower.enable={{ watchtower.enabled | default(false) | string | lower }}"
+
+networks:
+  dns:
+    name: {{ dns.network_name | default('dns') }}
+    external: true
+  monitoring:
+    name: monitoring
+    external: true

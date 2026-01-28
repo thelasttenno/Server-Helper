@@ -1,0 +1,286 @@
+.PHONY: help setup bootstrap deploy update upgrade backup security test lint clean ui vault status
+
+# Default target
+.DEFAULT_GOAL := help
+
+# Configuration
+INVENTORY ?= inventory/hosts.yml
+PLAYBOOK_DIR = playbooks
+ANSIBLE_OPTS ?=
+VAULT_PASSWORD_FILE ?= .vault_password
+
+help:
+	@echo ""
+	@echo "Server-Helper - Available Commands"
+	@echo "===================================="
+	@echo ""
+	@echo "Setup & Bootstrap:"
+	@echo "  make setup                      - Run interactive setup script"
+	@echo "  make bootstrap                  - Bootstrap target servers"
+	@echo "  make bootstrap-host HOST=...    - Bootstrap specific host"
+	@echo ""
+	@echo "Deployment:"
+	@echo "  make deploy                     - Deploy to all target servers"
+	@echo "  make deploy-host HOST=...       - Deploy to specific host"
+	@echo "  make deploy-control             - Deploy to control node"
+	@echo "  make deploy-check               - Dry run deployment"
+	@echo ""
+	@echo "Operations:"
+	@echo "  make update                     - Update all servers"
+	@echo "  make upgrade                    - Upgrade Docker images"
+	@echo "  make upgrade-service SERVICE=...- Upgrade specific service"
+	@echo "  make backup                     - Run backups"
+	@echo "  make security                   - Run security audit"
+	@echo "  make restart-all                - Restart all services"
+	@echo ""
+	@echo "Testing & Quality:"
+	@echo "  make test                       - Run all Molecule tests"
+	@echo "  make test-role ROLE=...         - Test specific role"
+	@echo "  make lint                       - Run linting"
+	@echo "  make syntax-check               - Check playbook syntax"
+	@echo ""
+	@echo "UI & Monitoring:"
+	@echo "  make ui                         - List service URLs"
+	@echo "  make ui-all                     - Open all UIs"
+	@echo "  make ui-dockge                  - Open Dockge"
+	@echo "  make ui-netdata                 - Open Netdata"
+	@echo "  make ui-uptime                  - Open Uptime Kuma"
+	@echo ""
+	@echo "Vault Management:"
+	@echo "  make vault-edit [FILE=...]      - Edit vault file"
+	@echo "  make vault-view [FILE=...]      - View vault file"
+	@echo "  make vault-status               - Check vault status"
+	@echo ""
+	@echo "Status & Information:"
+	@echo "  make status                     - Show service status"
+	@echo "  make ping                       - Ping all hosts"
+	@echo "  make list-hosts                 - List inventory hosts"
+	@echo "  make version                    - Show version info"
+	@echo ""
+	@echo "Dependencies:"
+	@echo "  make install-deps               - Install all dependencies"
+	@echo "  make install-test-deps          - Install test dependencies"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make deploy-host HOST=server-01"
+	@echo "  make test-role ROLE=common"
+	@echo "  make upgrade-service SERVICE=netdata"
+	@echo ""
+
+install-test-deps:
+	@echo "Installing test dependencies..."
+	pip install -r requirements-test.txt
+	@echo "Done!"
+
+test:
+	@./scripts/test-all-roles.sh
+
+test-all:
+	@./scripts/test-all-roles.sh
+
+test-role:
+ifndef ROLE
+	@echo "Error: ROLE variable not set"
+	@echo "Usage: make test-role ROLE=<role-name> [CMD=<molecule-command>]"
+	@exit 1
+endif
+	@./scripts/test-single-role.sh $(ROLE) $(CMD)
+
+lint:
+	@echo "Running ansible-lint..."
+	ansible-lint playbooks/ roles/
+	@echo ""
+	@echo "Running yamllint..."
+	yamllint -c .yamllint playbooks/ roles/ inventory/
+	@echo ""
+	@echo "Lint checks passed!"
+
+syntax-check:
+	@echo "Checking playbook syntax..."
+	@for playbook in playbooks/*.yml; do \
+		echo "Checking $$playbook..."; \
+		ansible-playbook --syntax-check "$$playbook" -i inventory/hosts.example.yml; \
+	done
+	@echo "Syntax check passed!"
+
+clean:
+	@echo "Cleaning up test artifacts..."
+	find roles -type d -name ".molecule" -exec rm -rf {} + 2>/dev/null || true
+	find roles -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find roles -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
+	find . -name "*.pyc" -delete 2>/dev/null || true
+	@echo "Cleanup complete!"
+
+##@ Setup & Bootstrap
+
+setup:
+	@echo "Running setup script..."
+	@bash setup.sh
+
+bootstrap:
+	@echo "Bootstrapping target servers..."
+	@ansible-playbook $(PLAYBOOK_DIR)/bootstrap.yml --ask-become-pass $(ANSIBLE_OPTS)
+
+bootstrap-host:
+	@echo "Bootstrapping host: $(HOST)..."
+	@ansible-playbook $(PLAYBOOK_DIR)/bootstrap.yml --limit $(HOST) --ask-become-pass $(ANSIBLE_OPTS)
+
+##@ Deployment
+
+deploy:
+	@echo "Deploying to all target servers..."
+	@ansible-playbook $(PLAYBOOK_DIR)/setup-targets.yml $(ANSIBLE_OPTS)
+
+deploy-host:
+	@echo "Deploying to host: $(HOST)..."
+	@ansible-playbook $(PLAYBOOK_DIR)/setup-targets.yml --limit $(HOST) $(ANSIBLE_OPTS)
+
+deploy-control:
+	@echo "Deploying to control node..."
+	@ansible-playbook $(PLAYBOOK_DIR)/setup-control.yml $(ANSIBLE_OPTS)
+
+deploy-check:
+	@echo "Running deployment in check mode..."
+	@ansible-playbook $(PLAYBOOK_DIR)/setup-targets.yml --check --diff $(ANSIBLE_OPTS)
+
+##@ Operations
+
+update:
+	@echo "Updating all servers..."
+	@ansible-playbook $(PLAYBOOK_DIR)/update.yml $(ANSIBLE_OPTS)
+
+update-host:
+	@echo "Updating host: $(HOST)..."
+	@ansible-playbook $(PLAYBOOK_DIR)/update.yml --limit $(HOST) $(ANSIBLE_OPTS)
+
+upgrade:
+	@echo "Upgrading Docker images..."
+	@bash upgrade.sh
+
+upgrade-service:
+	@echo "Upgrading service: $(SERVICE)..."
+	@bash upgrade.sh --service $(SERVICE)
+
+backup:
+	@echo "Running backups..."
+	@ansible-playbook $(PLAYBOOK_DIR)/backup.yml $(ANSIBLE_OPTS)
+
+backup-host:
+	@echo "Running backup on host: $(HOST)..."
+	@ansible-playbook $(PLAYBOOK_DIR)/backup.yml --limit $(HOST) $(ANSIBLE_OPTS)
+
+security:
+	@echo "Running security audit..."
+	@ansible-playbook $(PLAYBOOK_DIR)/security.yml $(ANSIBLE_OPTS)
+
+security-host:
+	@echo "Running security audit on host: $(HOST)..."
+	@ansible-playbook $(PLAYBOOK_DIR)/security.yml --limit $(HOST) $(ANSIBLE_OPTS)
+
+restart-all:
+	@echo "Restarting all Docker services..."
+	@ansible all -m shell -a "cd /opt/dockge && docker compose restart" $(ANSIBLE_OPTS) || true
+	@ansible all -m shell -a "cd /opt/dockge/stacks/netdata && docker compose restart" $(ANSIBLE_OPTS) || true
+	@ansible all -m shell -a "cd /opt/dockge/stacks/uptime-kuma && docker compose restart" $(ANSIBLE_OPTS) || true
+	@echo "All services restarted!"
+
+##@ UI & Monitoring
+
+ui:
+	@bash scripts/open-ui.sh list
+
+ui-all:
+	@bash scripts/open-ui.sh all
+
+ui-dockge:
+	@bash scripts/open-ui.sh dockge
+
+ui-netdata:
+	@bash scripts/open-ui.sh netdata
+
+ui-uptime:
+	@bash scripts/open-ui.sh uptime-kuma
+
+##@ Vault Management
+
+vault-init:
+	@echo "Initializing Ansible Vault..."
+	@bash scripts/vault.sh init
+
+vault-edit:
+	@echo "Editing vault file..."
+	@bash scripts/vault.sh edit $(or $(FILE),group_vars/vault.yml)
+
+vault-view:
+	@bash scripts/vault.sh view $(or $(FILE),group_vars/vault.yml)
+
+vault-encrypt:
+	@echo "Encrypting file: $(FILE)..."
+	@bash scripts/vault.sh create $(FILE)
+
+vault-rekey:
+	@echo "Changing vault password..."
+	@bash scripts/vault.sh rekey --all
+
+vault-status:
+	@bash scripts/vault.sh status
+
+vault-validate:
+	@bash scripts/vault.sh validate
+
+##@ Status & Information
+
+status:
+	@echo "Checking service status..."
+	@ansible all -m shell -a "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'" $(ANSIBLE_OPTS)
+
+status-host:
+	@echo "Checking status on host: $(HOST)..."
+	@ansible $(HOST) -m shell -a "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'" $(ANSIBLE_OPTS)
+
+ping:
+	@echo "Pinging all hosts..."
+	@ansible all -m ping $(ANSIBLE_OPTS)
+
+ping-host:
+	@ansible $(HOST) -m ping $(ANSIBLE_OPTS)
+
+list-hosts:
+	@echo "Hosts in inventory:"
+	@ansible all --list-hosts
+
+disk-space:
+	@echo "Checking disk space..."
+	@ansible all -m shell -a "df -h /" $(ANSIBLE_OPTS)
+
+version:
+	@echo ""
+	@echo "Server Helper v1.0.0"
+	@echo ""
+	@echo "Ansible: $$(ansible --version | head -1)"
+	@echo "Python: $$(python3 --version)"
+
+##@ Dependencies
+
+install-deps:
+	@echo "Installing system dependencies..."
+	@sudo apt-get update -qq
+	@sudo apt-get install -y -qq ansible python3-pip git curl wget sshpass
+	@echo "Installing Python dependencies..."
+	@sudo apt-get install -y -qq python3-docker python3-jmespath python3-netaddr python3-requests
+	@echo "Installing Ansible Galaxy dependencies..."
+	@ansible-galaxy install -r requirements.yml
+	@echo "All dependencies installed!"
+
+##@ Cleanup
+
+clean-logs:
+	@echo "Cleaning log files..."
+	@rm -f setup.log
+	@rm -f *.retry
+	@echo "Log files cleaned!"
+
+clean-docker:
+	@echo "Warning: This will remove unused Docker images, containers, and volumes"
+	@ansible all -m shell -a "docker system prune -af --volumes" $(ANSIBLE_OPTS)
+	@echo "Docker cleanup complete!"

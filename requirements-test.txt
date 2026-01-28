@@ -1,0 +1,25 @@
+# Testing requirements for Server-Helper playbooks
+# Install with: pip install -r requirements-test.txt
+
+# Molecule - Test framework for Ansible roles
+molecule>=6.0.0
+molecule-plugins[docker]>=23.5.0
+
+# Testinfra - Infrastructure testing framework
+testinfra>=10.0.0
+pytest>=7.4.0
+pytest-testinfra>=10.0.0
+
+# Docker SDK for Python
+docker>=6.1.0
+
+# Ansible
+ansible>=8.0.0
+ansible-lint>=6.22.0
+
+# YAML linting
+yamllint>=1.33.0
+
+# Additional testing utilities
+pytest-xdist>=3.5.0  # Parallel test execution
+pytest-html>=4.1.0   # HTML test reports

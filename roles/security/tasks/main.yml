@@ -19,8 +19,8 @@
     ufw_rules:
       - { rule: "allow", port: "22", proto: "tcp", comment: "SSH" }
       - { rule: "allow", port: "{{ dockge.port }}", proto: "tcp", comment: "Dockge" }
-      - { rule: "allow", port: "{{ netdata.port }}", proto: "tcp", comment: "Netdata" }
-      - { rule: "allow", port: "{{ uptime_kuma.port }}", proto: "tcp", comment: "Uptime Kuma" }
+      - { rule: "allow", port: "{{ monitoring.netdata.port }}", proto: "tcp", comment: "Netdata" }
+      - { rule: "allow", port: "{{ monitoring.uptime_kuma.port }}", proto: "tcp", comment: "Uptime Kuma" }
   when: security.ufw.enabled | default(true)
 
 - name: Harden SSH configuration

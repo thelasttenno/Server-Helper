@@ -1,0 +1,100 @@
+---
+name: Changelog Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+      - develop
+
+jobs:
+  check-changelog:
+    name: Verify Changelog Updated
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if CHANGELOG.md was modified
+        id: changelog_check
+        run: |
+          # Get list of changed files
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+
+          # Check if CHANGELOG.md is in the changed files
+          if echo "$CHANGED_FILES" | grep -q "CHANGELOG.md"; then
+            echo "changelog_updated=true" >> $GITHUB_OUTPUT
+            echo "✅ CHANGELOG.md has been updated"
+          else
+            echo "changelog_updated=false" >> $GITHUB_OUTPUT
+            echo "⚠️ CHANGELOG.md has not been updated"
+          fi
+
+      - name: Check PR labels
+        id: label_check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = context.payload.pull_request.labels.map(l => l.name);
+            const skipLabels = ['documentation', 'dependencies', 'no-changelog'];
+            const shouldSkip = labels.some(label => skipLabels.includes(label));
+            core.setOutput('skip_changelog', shouldSkip);
+            if (shouldSkip) {
+              console.log('✅ PR has label that skips changelog requirement');
+            }
+
+      - name: Comment on PR if changelog missing
+        if: steps.changelog_check.outputs.changelog_updated == 'false' && steps.label_check.outputs.skip_changelog != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ⚠️ Changelog Not Updated
+
+            This PR does not appear to update the CHANGELOG.md file.
+
+            **Please add an entry to CHANGELOG.md** describing your changes under the "Unreleased" section, following the [semantic versioning](https://semver.org/) format:
+
+            \`\`\`markdown
+            ## Unreleased
+
+            ### Added
+            - New feature description
+
+            ### Changed
+            - Changed functionality description
+
+            ### Fixed
+            - Bug fix description
+
+            ### Deprecated
+            - Deprecated feature description
+
+            ### Removed
+            - Removed feature description
+
+            ### Security
+            - Security fix description
+            \`\`\`
+
+            **Exemptions:**
+            If this PR doesn't require a changelog entry (e.g., documentation-only changes), add one of these labels:
+            - \`documentation\` - Documentation-only changes
+            - \`dependencies\` - Dependency updates
+            - \`no-changelog\` - Other changes that don't need changelog entry
+
+            [See CONTRIBUTING.md](${context.payload.repository.html_url}/blob/main/CONTRIBUTING.md) for more details.`
+            })
+
+      - name: Set status
+        if: steps.changelog_check.outputs.changelog_updated == 'false' && steps.label_check.outputs.skip_changelog != 'true'
+        run: |
+          echo "::warning::CHANGELOG.md has not been updated. Please add an entry or add an exemption label."
+          # Note: This is a warning, not a failure, to allow flexibility

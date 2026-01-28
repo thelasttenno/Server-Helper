@@ -1,0 +1,39 @@
+---
+# Smallstep CA - Internal Certificate Authority
+# Default configuration values
+
+step_ca:
+  enabled: false
+
+  # CA identity
+  name: "Server-Helper Internal CA"
+  dns_names:
+    - "step-ca"
+    - "step-ca.{{ dns.private_domain | default('internal') }}"
+    - "{{ ansible_host | default('localhost') }}"
+
+  # Network configuration
+  port: 9000
+
+  # Certificate settings
+  provisioner_name: "admin"
+  default_cert_duration: "720h"    # 30 days
+  max_cert_duration: "2160h"       # 90 days
+  min_cert_duration: "5m"
+
+  # ACME configuration (for Traefik integration)
+  acme:
+    enabled: true
+    require_eab: false
+
+  # SSH certificate support (optional)
+  ssh:
+    enabled: false
+
+  # Data persistence
+  data_dir: "/opt/step-ca"
+
+  # Resource limits
+  resources:
+    memory: "128M"
+    cpu: "0.5"

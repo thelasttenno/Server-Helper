@@ -1,0 +1,84 @@
+# Unbound Configuration
+# Recursive DNS resolver for Pi-hole
+# Managed by Ansible - DO NOT EDIT MANUALLY
+
+server:
+    # Logging
+    verbosity: 1
+    log-queries: no
+    log-replies: no
+    log-servfail: no
+
+    # Network
+    interface: 0.0.0.0
+    port: 53
+    do-ip4: yes
+    do-ip6: {{ dns.unbound.ipv6 | default(false) | string | lower }}
+    do-udp: yes
+    do-tcp: yes
+
+    # Access control
+    access-control: 127.0.0.0/8 allow
+    access-control: 10.0.0.0/8 allow
+    access-control: 172.16.0.0/12 allow
+    access-control: 192.168.0.0/16 allow
+    access-control: 0.0.0.0/0 refuse
+
+    # Performance tuning
+    num-threads: {{ dns.unbound.num_threads | default(2) }}
+    msg-cache-size: {{ dns.unbound.msg_cache_size | default('50m') }}
+    rrset-cache-size: {{ dns.unbound.rrset_cache_size | default('100m') }}
+    cache-min-ttl: 300
+    cache-max-ttl: 86400
+
+    # Privacy
+    hide-identity: yes
+    hide-version: yes
+    qname-minimisation: yes
+    minimal-responses: yes
+    rrset-roundrobin: yes
+    use-caps-for-id: yes
+
+    # DNSSEC
+    auto-trust-anchor-file: "/opt/unbound/etc/unbound/root.key"
+    val-clean-additional: yes
+    val-permissive-mode: no
+    serve-expired: yes
+    serve-expired-ttl: 86400
+
+    # Prefetch popular domains
+    prefetch: yes
+    prefetch-key: yes
+
+    # Reduce EDNS reassembly buffer size (helps with DNS Flag Day 2020)
+    edns-buffer-size: 1232
+
+    # Private domains (don't query upstream)
+    private-domain: "{{ dns.private_domain | default('internal') }}"
+    private-domain: "{{ dns.local_domain | default('local') }}"
+{% for domain in dns.additional_private_domains | default([]) %}
+    private-domain: "{{ domain }}"
+{% endfor %}
+
+    # Hardening
+    harden-glue: yes
+    harden-dnssec-stripped: yes
+    harden-below-nxdomain: yes
+    harden-referral-path: yes
+    harden-algo-downgrade: yes
+    harden-large-queries: yes
+    harden-short-bufsize: yes
+    use-caps-for-id: yes
+
+    # Trust anchors for DNSSEC
+    trust-anchor-file: "/opt/unbound/etc/unbound/root.key"
+
+{% if dns.unbound.forward_zone | default(false) %}
+# Forward queries to upstream DNS (alternative to root hints)
+forward-zone:
+    name: "."
+{% for server in dns.unbound.forward_servers | default(['1.1.1.1', '1.0.0.1']) %}
+    forward-addr: {{ server }}
+{% endfor %}
+    forward-tls-upstream: {{ dns.unbound.forward_tls | default(true) | string | lower }}
+{% endif %}

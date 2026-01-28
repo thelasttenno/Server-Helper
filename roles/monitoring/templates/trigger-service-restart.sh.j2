@@ -1,0 +1,45 @@
+#!/bin/bash
+# Automated Service Restart Trigger
+# Called when a service fails
+
+SERVICE_NAME="${1:-}"
+SEVERITY="${2:-warning}"
+LOG_FILE=/var/log/auto-remediation.log
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SERVICE-RESTART] $1" | tee -a "$LOG_FILE"
+}
+
+if [ -z "$SERVICE_NAME" ]; then
+    log "ERROR: No service name provided"
+    exit 1
+fi
+
+log "Starting remediation for failed service: $SERVICE_NAME (severity: $SEVERITY)"
+
+# Run the remediation playbook
+ansible-playbook {{ base_install_dir }}/ansible/playbooks/remediation.yml \
+    -e "action=service_restart" \
+    -e "service=$SERVICE_NAME" \
+    -e "severity=$SEVERITY" \
+    >> "$LOG_FILE" 2>&1
+
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 0 ]; then
+    log "Successfully restarted service: $SERVICE_NAME"
+
+    # Notify Uptime Kuma if configured
+    {% if monitoring.uptime_kuma_push_url is defined and monitoring.uptime_kuma_push_url | length > 0 %}
+    curl -s "{{ monitoring.uptime_kuma_push_url }}?status=up&msg=Service+$SERVICE_NAME+restarted" > /dev/null 2>&1
+    {% endif %}
+else
+    log "Failed to restart service: $SERVICE_NAME (exit code: $EXIT_CODE)"
+
+    # Send critical alert
+    {% if monitoring.uptime_kuma_push_url is defined and monitoring.uptime_kuma_push_url | length > 0 %}
+    curl -s "{{ monitoring.uptime_kuma_push_url }}?status=down&msg=Failed+to+restart+$SERVICE_NAME" > /dev/null 2>&1
+    {% endif %}
+fi
+
+exit $EXIT_CODE

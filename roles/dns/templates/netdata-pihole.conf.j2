@@ -1,0 +1,22 @@
+# Netdata Pi-hole Monitoring Configuration
+# Monitors Pi-hole DNS performance and statistics
+# Managed by Ansible - DO NOT EDIT MANUALLY
+
+[plugin:apps]
+    # Monitor Pi-hole processes
+    apps groups = pihole
+
+[plugin:go.d]
+    # Enable Pi-hole collector
+    pihole = yes
+
+[pihole]
+    # Pi-hole API endpoint
+    url = http://pihole:{{ dns.pihole.port }}/admin/api.php
+    update_every = 5
+
+    # Authentication (if web password is set)
+    password = {{ vault_dns.pihole_password }}
+
+    # Data collection
+    charts = yes

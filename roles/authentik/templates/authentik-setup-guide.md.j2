@@ -1,0 +1,245 @@
+# Authentik Setup Guide
+
+## Overview
+
+Authentik is now installed and ready for configuration. This guide will help you set up Single Sign-On (SSO) for your homelab services.
+
+## Initial Setup
+
+### 1. Access Authentik
+
+Open your browser and navigate to:
+```
+http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/if/flow/initial-setup/
+```
+
+### 2. Complete Initial Setup Wizard
+
+- **Admin Email**: {{ vault_authentik_credentials.admin_email }}
+- **Admin Password**: {{ vault_authentik_credentials.admin_password }}
+
+### 3. Access Admin Interface
+
+After setup, access the admin interface at:
+```
+http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/if/admin/
+```
+
+## Service Integration
+
+### Setting Up Applications
+
+1. **Navigate to Applications**
+   - Go to Admin Interface → Applications → Create
+
+2. **Create Application**
+   - Name: Your service name (e.g., "Grafana", "Netdata")
+   - Slug: service-name
+   - Provider: Create new provider
+
+### OAuth2/OIDC Provider Setup
+
+For each service that supports OAuth2/OIDC:
+
+1. **Create Provider**
+   - Type: OAuth2/OpenID Provider
+   - Name: Service name
+   - Client Type: Confidential
+   - Redirect URIs: Add your service's callback URL
+
+2. **Note Configuration Details**
+   - Client ID: (save this)
+   - Client Secret: (save this)
+   - Authorization URL: `http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/application/o/authorize/`
+   - Token URL: `http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/application/o/token/`
+   - User Info URL: `http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/application/o/userinfo/`
+
+### Example: Grafana Integration
+
+1. **In Authentik:**
+   - Create OAuth2 provider for Grafana
+   - Redirect URI: `http://your-grafana:3000/login/generic_oauth`
+
+2. **In Grafana (grafana.ini):**
+   ```ini
+   [auth.generic_oauth]
+   enabled = true
+   name = Authentik
+   client_id = <from authentik>
+   client_secret = <from authentik>
+   scopes = openid email profile
+   auth_url = http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/application/o/authorize/
+   token_url = http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/application/o/token/
+   api_url = http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/application/o/userinfo/
+   ```
+
+### Example: Reverse Proxy Authentication
+
+For services without native OAuth support, use reverse proxy authentication:
+
+1. **Create Proxy Provider in Authentik**
+   - Type: Proxy Provider
+   - External host: Your service URL
+   - Authorization flow: default-provider-authorization-implicit-consent
+
+2. **Configure Reverse Proxy (Traefik/Nginx)**
+   - Forward auth to Authentik
+   - Pass authentication headers to backend
+
+### Services You Can Integrate
+
+#### Native OAuth/OIDC Support
+- Grafana
+- Portainer
+- GitLab
+- Nextcloud
+- Many modern web apps
+
+#### Via Reverse Proxy
+- Netdata
+- Uptime Kuma
+- Dockge
+- Any web service
+
+## Security Features
+
+### Enable Multi-Factor Authentication (MFA)
+
+1. **Navigate to Flows**
+   - Admin Interface → Flows → Stages
+
+2. **Add MFA Stages**
+   - TOTP (Authenticator apps)
+   - WebAuthn (Hardware keys, passkeys)
+   - Static tokens (backup codes)
+
+3. **Add to Authentication Flow**
+   - Edit default authentication flow
+   - Add MFA stage after password
+
+### Enable WebAuthn/Passkeys
+
+1. **Create WebAuthn Stage**
+   - Navigate to Flows → Stages → Create
+   - Type: WebAuthn Authenticator Validation
+   - Configure device types (platform, cross-platform)
+
+2. **Add to Flow**
+   - Add to enrollment and authentication flows
+
+## User Management
+
+### Creating Users
+
+1. **Navigate to Directory → Users**
+2. **Create User**
+   - Username
+   - Email
+   - Set password or send invite
+
+### Groups and Permissions
+
+1. **Create Groups**
+   - Directory → Groups → Create
+   - Example: "Admins", "Monitoring Users"
+
+2. **Assign to Applications**
+   - Configure which groups can access each app
+   - Set up role-based access control
+
+## Advanced Configuration
+
+### Custom Branding
+
+1. **Navigate to System → Tenants**
+2. **Edit Default Tenant**
+   - Upload logo
+   - Customize colors
+   - Set title and branding
+
+### Email Configuration
+
+Email is configured via environment variables in the docker-compose file:
+{% if authentik.email.enabled | default(false) %}
+- Host: {{ authentik.email.host }}
+- Port: {{ authentik.email.port | default(587) }}
+- From: {{ authentik.email.from }}
+{% else %}
+Email is currently disabled. Enable it in your group_vars/all.yml:
+```yaml
+authentik:
+  email:
+    enabled: true
+    host: "smtp.example.com"
+    port: 587
+    username: "your-email@example.com"
+    from: "authentik@example.com"
+```
+{% endif %}
+
+### Backup and Recovery
+
+Authentik data is stored in Docker volumes:
+- `authentik-database`: PostgreSQL database
+- `authentik-redis`: Redis cache
+- `authentik-media`: Uploaded files and logos
+
+To backup:
+```bash
+docker exec authentik-db pg_dump -U {{ authentik.db_user | default('authentik') }} {{ authentik.db_name | default('authentik') }} > authentik-backup.sql
+```
+
+To restore:
+```bash
+docker exec -i authentik-db psql -U {{ authentik.db_user | default('authentik') }} {{ authentik.db_name | default('authentik') }} < authentik-backup.sql
+```
+
+## Troubleshooting
+
+### Check Container Status
+```bash
+cd {{ dockge_stacks_dir }}/authentik
+docker compose ps
+docker compose logs
+```
+
+### Reset Admin Password
+
+If you lose admin access:
+```bash
+docker exec -it authentik-server ak create_admin_group
+docker exec -it authentik-server ak reset_password <username>
+```
+
+### Database Connection Issues
+
+Check database container:
+```bash
+docker exec authentik-db pg_isready -U {{ authentik.db_user | default('authentik') }}
+```
+
+## Resources
+
+- Official Documentation: https://goauthentik.io/docs/
+- Integrations: https://goauthentik.io/integrations/
+- Community Forum: https://github.com/goauthentik/authentik/discussions
+
+## Service URLs
+
+- **Admin Interface**: http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/if/admin/
+- **User Portal**: http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/
+- **API**: http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/api/v3/
+
+## Next Steps
+
+1. Complete initial setup wizard
+2. Create your first application
+3. Integrate with existing services
+4. Enable MFA for enhanced security
+5. Configure groups and permissions
+6. Customize branding
+
+---
+
+Generated by Server-Helper Ansible Playbook
+Date: {{ ansible_date_time.iso8601 }}

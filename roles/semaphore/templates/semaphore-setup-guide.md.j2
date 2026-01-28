@@ -1,0 +1,263 @@
+# Semaphore UI Setup Guide
+
+## Access Information
+
+- **URL**: http://{{ ansible_default_ipv4.address }}:{{ semaphore.port }}
+- **Username**: {{ semaphore.admin.username }}
+- **Email**: {{ semaphore.admin.email }}
+- **Password**: (Check your Ansible vault for `vault_semaphore_admin_password`)
+
+## Initial Setup Steps
+
+### 1. First Login
+
+1. Navigate to http://{{ ansible_default_ipv4.address }}:{{ semaphore.port }}
+2. Log in with the credentials above
+3. **IMPORTANT**: Change your admin password immediately
+   - Click on your username in the top right
+   - Go to "Settings" → "Change Password"
+
+### 2. Create a Project
+
+1. Click "New Project" on the dashboard
+2. Enter a project name (e.g., "Server Management")
+3. Save the project
+
+### 3. Add Key Store (SSH/Vault Credentials)
+
+1. Navigate to "Key Store" in your project
+2. Click "New Key"
+3. Choose the appropriate type:
+   - **SSH Key**: For connecting to remote hosts
+   - **Login with Password**: For username/password authentication
+   - **None**: For localhost operations
+
+For SSH Key:
+- Name: e.g., "Ansible SSH Key"
+- Type: SSH Key
+- SSH Private Key: Paste your private key content
+- Save
+
+### 4. Add Inventory
+
+1. Go to "Inventory" in your project
+2. Click "New Inventory"
+3. Choose inventory type:
+   - **Static**: Paste your inventory content
+   - **File**: Reference to inventory file on server
+
+Example Static Inventory:
+```yaml
+all:
+  hosts:
+    localhost:
+      ansible_connection: local
+```
+
+For your playbooks location:
+- Inventory File: `/playbooks/inventory/hosts.yml`
+
+### 5. Add Environment (Variables)
+
+1. Navigate to "Environment" in your project
+2. Click "New Environment"
+3. Add your variables in JSON or YAML format
+
+Example:
+```json
+{
+  "ansible_python_interpreter": "/usr/bin/python3"
+}
+```
+
+### 6. Add Repository
+
+1. Go to "Repositories" in your project
+2. Click "New Repository"
+3. Configure repository details:
+   - Name: e.g., "Server Playbooks"
+   - URL: Git repository URL or local path
+   - Branch: main (or your default branch)
+   - Access Key: Select your SSH key if using Git
+
+For local playbooks:
+- URL: `file://{{ semaphore_playbooks_dir }}`
+- Branch: (leave empty for local)
+
+### 7. Create Task Template
+
+1. Navigate to "Task Templates"
+2. Click "New Template"
+3. Configure:
+   - Name: e.g., "Update Servers"
+   - Playbook Filename: e.g., `update.yml`
+   - Inventory: Select your inventory
+   - Repository: Select your repository
+   - Environment: Select your environment (optional)
+   - Vault Password: Add if using Ansible Vault
+
+Advanced Options:
+- **Override CLI Arguments**: Add extra ansible-playbook flags
+- **Limit**: Limit execution to specific hosts
+- **Survey Variables**: Create a form for runtime variables
+
+### 8. Run Your First Task
+
+1. Go to "Tasks" (dashboard)
+2. Click "New Task"
+3. Select your template
+4. Review settings
+5. Click "Run"
+
+You can monitor task execution in real-time with live log output.
+
+## Directory Structure
+
+Semaphore expects the following structure in `{{ semaphore_playbooks_dir }}`:
+
+```
+{{ semaphore_playbooks_dir }}/
+├── inventory/
+│   └── hosts.yml
+├── playbooks/
+│   ├── update.yml
+│   ├── backup.yml
+│   └── ...
+├── roles/
+│   └── ...
+└── group_vars/
+    └── ...
+```
+
+## Configuration Files
+
+- **Docker Compose**: `/opt/semaphore/docker-compose.yml`
+- **Data Directory**: `{{ semaphore_data_dir }}`
+- **Playbooks Directory**: `{{ semaphore_playbooks_dir }}`
+- **Config Directory**: `{{ semaphore_config_dir }}`
+
+## Database Information
+
+- **Type**: {{ semaphore.database.dialect }}
+{% if semaphore.database.dialect in ['postgres', 'mysql'] %}
+- **Host**: {{ semaphore.database.host }}
+- **Port**: {{ semaphore.database.port }}
+- **Database**: {{ semaphore.database.name }}
+- **User**: {{ semaphore.database.user }}
+{% else %}
+- **File**: `{{ semaphore_data_dir }}/semaphore.db`
+{% endif %}
+
+## Useful Commands
+
+### View Semaphore logs
+```bash
+docker logs -f semaphore
+```
+
+{% if semaphore.database.dialect == 'postgres' %}
+### View database logs
+```bash
+docker logs -f semaphore-db
+```
+
+### Access PostgreSQL database
+```bash
+docker exec -it semaphore-db psql -U {{ semaphore.database.user }} -d {{ semaphore.database.name }}
+```
+{% elif semaphore.database.dialect == 'mysql' %}
+### View database logs
+```bash
+docker logs -f semaphore-db
+```
+
+### Access MySQL database
+```bash
+docker exec -it semaphore-db mysql -u {{ semaphore.database.user }} -p{{ semaphore.database.name }}
+```
+{% endif %}
+
+### Restart Semaphore
+```bash
+cd /opt/semaphore
+docker compose restart semaphore
+```
+
+### Stop Semaphore
+```bash
+cd /opt/semaphore
+docker compose down
+```
+
+### Start Semaphore
+```bash
+cd /opt/semaphore
+docker compose up -d
+```
+
+## Security Best Practices
+
+1. **Change Default Password**: Immediately change the admin password after first login
+2. **Use HTTPS**: Consider setting up a reverse proxy (Traefik) with SSL/TLS
+3. **Restrict Access**: Use firewall rules to limit access to Semaphore port
+4. **API Tokens**: Use API tokens instead of passwords for automation
+5. **Backup Database**: Regularly backup the Semaphore database
+6. **Vault Passwords**: Use Ansible Vault for sensitive variables
+
+## Integrations
+
+### Uptime Kuma Monitoring
+To monitor Semaphore with Uptime Kuma:
+1. Add HTTP(s) monitor
+2. URL: http://{{ ansible_default_ipv4.address }}:{{ semaphore.port }}/api/ping
+3. Expected status: 200
+
+{% if semaphore.telegram is defined and semaphore.telegram.enabled %}
+### Telegram Notifications
+Telegram notifications are configured. Task results will be sent to the configured chat.
+{% endif %}
+
+{% if semaphore.slack is defined and semaphore.slack.enabled %}
+### Slack Notifications
+Slack notifications are configured. Task results will be sent to the configured webhook.
+{% endif %}
+
+{% if semaphore.email is defined and semaphore.email.enabled %}
+### Email Notifications
+Email notifications are configured via SMTP. Task results will be sent to project members.
+{% endif %}
+
+## Troubleshooting
+
+### Cannot access Semaphore UI
+- Check if container is running: `docker ps | grep semaphore`
+- Check logs: `docker logs semaphore`
+- Verify port is not blocked: `netstat -tuln | grep {{ semaphore.port }}`
+
+### Database connection errors
+{% if semaphore.database.dialect in ['postgres', 'mysql'] %}
+- Check database container: `docker ps | grep semaphore-db`
+- Check database logs: `docker logs semaphore-db`
+- Verify database is healthy: `docker inspect semaphore-db | grep Health`
+{% else %}
+- Check database file exists: `ls -lah {{ semaphore_data_dir }}/semaphore.db`
+- Check file permissions: `ls -lah {{ semaphore_data_dir }}`
+{% endif %}
+
+### Task execution fails
+- Verify SSH key is correct in Key Store
+- Check inventory is accessible
+- Verify playbook syntax: `ansible-playbook --syntax-check playbook.yml`
+- Check Semaphore has access to playbooks directory
+- Review task logs in Semaphore UI
+
+## Additional Resources
+
+- **Official Documentation**: https://docs.ansible-semaphore.com/
+- **GitHub Repository**: https://github.com/ansible-semaphore/semaphore
+- **Community Forum**: https://github.com/ansible-semaphore/semaphore/discussions
+
+---
+
+**Generated**: {{ ansible_date_time.iso8601 }}
+**Server**: {{ ansible_hostname }} ({{ ansible_default_ipv4.address }})

@@ -1,0 +1,105 @@
+---
+# Authentik Role - Identity Provider & SSO Setup
+
+- name: Create Authentik stack directory in Dockge
+  ansible.builtin.file:
+    path: "{{ dockge_stacks_dir }}/authentik"
+    state: directory
+    mode: '0755'
+  when: authentik.enabled | default(false)
+
+- name: Deploy Authentik docker-compose file
+  ansible.builtin.template:
+    src: docker-compose.authentik.yml.j2
+    dest: "{{ dockge_stacks_dir }}/authentik/compose.yaml"
+    mode: '0644'
+  when: authentik.enabled | default(false)
+  notify: Restart Authentik
+
+- name: Create Authentik network
+  community.docker.docker_network:
+    name: authentik
+    state: present
+  when: authentik.enabled | default(false)
+
+- name: Start Authentik stack
+  community.docker.docker_compose:
+    project_src: "{{ dockge_stacks_dir }}/authentik"
+    state: present
+    pull: true
+  when: authentik.enabled | default(false)
+
+- name: Wait for Authentik to be ready
+  ansible.builtin.uri:
+    url: "http://localhost:{{ authentik.http_port | default(9000) }}/if/flow/initial-setup/"
+    status_code: [200, 302]
+  register: authentik_health
+  until: authentik_health.status in [200, 302]
+  retries: 60
+  delay: 5
+  when: authentik.enabled | default(false)
+
+- name: Check if Authentik has been configured
+  ansible.builtin.uri:
+    url: "http://localhost:{{ authentik.http_port | default(9000) }}/if/flow/initial-setup/"
+    method: GET
+    status_code: [200, 302]
+  register: authentik_configured
+  failed_when: false
+  when: authentik.enabled | default(false)
+
+- name: Create Authentik setup guide
+  ansible.builtin.template:
+    src: authentik-setup-guide.md.j2
+    dest: /root/authentik-setup-guide.md
+    mode: '0644'
+  when: authentik.enabled | default(false)
+
+- name: Display Authentik setup instructions (first time setup)
+  ansible.builtin.debug:
+    msg:
+      - "=============================================="
+      - "    Authentik Setup Required"
+      - "=============================================="
+      - ""
+      - "Authentik is running but requires initial setup:"
+      - ""
+      - "1. Access Authentik:"
+      - "   http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/if/flow/initial-setup/"
+      - ""
+      - "2. Complete initial setup wizard:"
+      - "   - Set admin email: {{ vault_authentik_credentials.admin_email }}"
+      - "   - Set admin password: {{ vault_authentik_credentials.admin_password }}"
+      - ""
+      - "3. After setup, access admin interface:"
+      - "   http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/if/admin/"
+      - ""
+      - "4. Configure authentication:"
+      - "   - Create applications for your services"
+      - "   - Configure OAuth2/OIDC providers"
+      - "   - Setup flows and policies"
+      - "   - Enable MFA/WebAuthn"
+      - ""
+      - "5. Integration examples:"
+      - "   - Grafana: OAuth2 provider"
+      - "   - Netdata: Reverse proxy auth"
+      - "   - Uptime Kuma: Reverse proxy auth"
+      - "   - Custom apps: OIDC/SAML"
+      - ""
+      - "6. Setup guide available at:"
+      - "   /root/authentik-setup-guide.md"
+      - ""
+      - "=============================================="
+  when:
+    - authentik.enabled | default(false)
+    - authentik_configured.status == 200
+
+- name: Display Authentik information (already configured)
+  ansible.builtin.debug:
+    msg:
+      - "Authentik is configured!"
+      - "Admin interface: http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/if/admin/"
+      - "Setup guide: /root/authentik-setup-guide.md"
+  when:
+    - authentik.enabled | default(false)
+    - authentik_configured.status == 302

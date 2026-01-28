@@ -46,21 +46,27 @@
         version: "{{ self_update.version | default('main') }}"
         force: yes
       register: git_pull
-      when: self_update.enabled
-    
+      when:
+        - self_update is defined
+        - self_update.enabled | default(false)
+
     - name: Check if updates were pulled
       debug:
-        msg: "{{ 'Changes detected - applying updates' if git_pull.changed else 'No changes detected' }}"
+        msg: "{{ 'Changes detected - applying updates' if git_pull.changed | default(false) else 'No changes detected' }}"
       when: git_pull is defined
-    
+
     # Run setup playbook if changes detected
+    # NOTE: Uses setup-targets.yml for the new control/target architecture
+    # This maintains the ansible-pull self-update mechanism on target nodes
     - name: Run setup playbook
       command: >
-        ansible-playbook 
-        /opt/ansible/Server-Helper/playbooks/setup.yml
+        ansible-playbook
+        /opt/ansible/Server-Helper/playbooks/setup-targets.yml
         --inventory localhost,
         --connection local
-      when: git_pull.changed or (self_update.check_only is defined and not self_update.check_only)
+      when:
+        - git_pull is defined
+        - git_pull.changed | default(false) or not (self_update.check_only | default(false))
       register: setup_result
     
     - name: Display setup result
@@ -73,48 +79,52 @@
       copy:
         content: |
           Last update: {{ ansible_date_time.iso8601 }}
-          Version: {{ self_update.version }}
-          Changes: {{ 'Yes' if git_pull.changed else 'No' }}
+          Version: {{ self_update.version | default('unknown') }}
+          Changes: {{ 'Yes' if git_pull.changed | default(false) else 'No' }}
         dest: /var/log/ansible-pull-last-run.txt
         mode: '0644'
-    
+
     - name: Update version file
       copy:
-        content: "{{ self_update.version }}"
+        content: "{{ self_update.version | default('unknown') }}"
         dest: /etc/server-helper-version.txt
         mode: '0644'
-      when: git_pull.changed
-    
+      when: git_pull.changed | default(false)
+
     - name: Log update completion
       lineinfile:
-        path: "{{ self_update.log_file }}"
-        line: "[{{ ansible_date_time.iso8601 }}] Self-update completed. Changes: {{ 'Yes' if git_pull.changed else 'No' }}"
+        path: "{{ self_update.log_file | default('/var/log/ansible-pull.log') }}"
+        line: "[{{ ansible_date_time.iso8601 }}] Self-update completed. Changes: {{ 'Yes' if git_pull.changed | default(false) else 'No' }}"
         create: yes
         mode: '0644'
-    
+      when: self_update is defined
+
     - name: Send update heartbeat to Uptime Kuma
       uri:
         url: "{{ self_update.uptime_kuma_push_url }}?status=up&msg=self-update-complete"
         method: POST
         status_code: [200, 201]
-      when: self_update.uptime_kuma_push_url | default('') | length > 0
+      when:
+        - self_update is defined
+        - self_update.uptime_kuma_push_url is defined
+        - self_update.uptime_kuma_push_url | length > 0
       ignore_errors: yes
-    
+
     - name: Display completion message
       debug:
         msg: |
           ╔════════════════════════════════════════╗
           ║    Self-Update Complete!               ║
           ╚════════════════════════════════════════╝
-          
+
           📊 Update Status:
-          - Changes detected: {{ 'Yes' if git_pull.changed else 'No' }}
-          - Version: {{ self_update.version }}
+          - Changes detected: {{ 'Yes' if git_pull.changed | default(false) else 'No' }}
+          - Version: {{ self_update.version | default('unknown') }}
           - Timestamp: {{ ansible_date_time.iso8601 }}
-          
+
           📝 Logs:
-          - Update log: {{ self_update.log_file }}
+          - Update log: {{ self_update.log_file | default('/var/log/ansible-pull.log') }}
           - Last run: /var/log/ansible-pull-last-run.txt
-          
+
           💡 Next scheduled update: Check systemd timer
           - systemctl status ansible-pull.timer

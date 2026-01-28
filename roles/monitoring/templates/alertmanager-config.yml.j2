@@ -1,0 +1,116 @@
+global:
+  resolve_timeout: 5m
+  http_config:
+    follow_redirects: true
+
+# Templates for notifications
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Route configuration
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+
+  routes:
+    # Critical alerts - immediate action
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 0s
+      group_interval: 5m
+      repeat_interval: 4h
+      continue: true
+
+    # Automated remediation route
+    - match_re:
+        remediation_action: "(service_restart|disk_cleanup|cert_renewal)"
+      receiver: 'auto-remediation'
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+
+    # Service-related alerts
+    - match:
+        category: service
+      receiver: 'service-alerts'
+      group_interval: 5m
+      repeat_interval: 6h
+
+    # Disk space alerts
+    - match:
+        category: disk
+      receiver: 'disk-alerts'
+      group_interval: 10m
+      repeat_interval: 2h
+
+    # Certificate alerts
+    - match:
+        category: certificate
+      receiver: 'cert-alerts'
+      group_interval: 1h
+      repeat_interval: 24h
+
+# Receivers configuration
+receivers:
+  - name: 'default'
+    webhook_configs:
+      - url: 'http://localhost:{{ monitoring.remediation_webhook_port | default(9090) }}?action=health_check'
+        send_resolved: true
+
+  - name: 'critical-alerts'
+    webhook_configs:
+      - url: 'http://localhost:{{ uptime_kuma.port | default(3001) }}/api/push/{{ monitoring.uptime_kuma_critical_key | default("CRITICAL") }}?status=down&msg={{`{{ .CommonAnnotations.summary }}`}}'
+        send_resolved: true
+{% if notifications.email.enabled | default(false) %}
+    email_configs:
+      - to: '{{ notifications.email.to_addresses | join(",") }}'
+        from: '{{ notifications.email.from_address }}'
+        smarthost: '{{ notifications.email.smtp_host }}:{{ notifications.email.smtp_port }}'
+        auth_username: '{{ notifications.email.smtp_username }}'
+        auth_password: '{{ notifications.email.smtp_password }}'
+        headers:
+          Subject: 'CRITICAL: {{`{{ .GroupLabels.alertname }}`}}'
+{% endif %}
+
+  - name: 'auto-remediation'
+    webhook_configs:
+      # Trigger remediation based on alert annotations
+      - url: 'http://localhost:{{ monitoring.remediation_webhook_port | default(9090) }}?action={{`{{ .CommonAnnotations.remediation_action }}`}}&service={{`{{ .CommonAnnotations.remediation_service }}`}}&severity={{`{{ .GroupLabels.severity }}`}}'
+        send_resolved: false
+        http_config:
+          follow_redirects: true
+
+  - name: 'service-alerts'
+    webhook_configs:
+      - url: 'http://localhost:{{ uptime_kuma.port | default(3001) }}/api/push/{{ monitoring.uptime_kuma_service_key | default("SERVICE") }}?status={{`{{ if eq .Status "firing" }}`}}down{{`{{ else }}`}}up{{`{{ end }}`}}&msg={{`{{ .CommonAnnotations.summary }}`}}'
+        send_resolved: true
+
+  - name: 'disk-alerts'
+    webhook_configs:
+      - url: 'http://localhost:{{ uptime_kuma.port | default(3001) }}/api/push/{{ monitoring.uptime_kuma_disk_key | default("DISK") }}?status={{`{{ if eq .Status "firing" }}`}}down{{`{{ else }}`}}up{{`{{ end }}`}}&msg={{`{{ .CommonAnnotations.summary }}`}}'
+        send_resolved: true
+
+  - name: 'cert-alerts'
+    webhook_configs:
+      - url: 'http://localhost:{{ uptime_kuma.port | default(3001) }}/api/push/{{ monitoring.uptime_kuma_cert_key | default("CERT") }}?status={{`{{ if eq .Status "firing" }}`}}down{{`{{ else }}`}}up{{`{{ end }}`}}&msg={{`{{ .CommonAnnotations.summary }}`}}'
+        send_resolved: true
+
+# Inhibition rules - prevent alert spam
+inhibit_rules:
+  # Inhibit warning if critical is firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+
+  # Inhibit disk warning if cleanup is running
+  - source_match:
+      alertname: 'DiskSpaceCritical'
+    target_match:
+      alertname: 'DiskSpaceWarning'
+    equal: ['instance']

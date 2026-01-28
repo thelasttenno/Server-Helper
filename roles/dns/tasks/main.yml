@@ -1,0 +1,91 @@
+---
+# DNS Role - Pi-hole + Unbound
+# Provides internal DNS resolution and ad-blocking for homelab
+
+- name: Include DNS configuration tasks
+  when: dns.enabled | default(false)
+  block:
+    - name: Create DNS stack directory
+      ansible.builtin.file:
+        path: "{{ dns.stack_dir }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Create Pi-hole configuration directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - "{{ dns.stack_dir }}/pihole"
+        - "{{ dns.stack_dir }}/pihole/etc-pihole"
+        - "{{ dns.stack_dir }}/pihole/etc-dnsmasq.d"
+        - "{{ dns.stack_dir }}/unbound"
+        - "{{ dns.stack_dir }}/unbound/etc-unbound"
+
+    - name: Create Unbound configuration
+      ansible.builtin.template:
+        src: unbound.conf.j2
+        dest: "{{ dns.stack_dir }}/unbound/etc-unbound/unbound.conf"
+        mode: '0644'
+      notify: restart dns stack
+
+    - name: Create Pi-hole custom DNS records
+      ansible.builtin.template:
+        src: custom.list.j2
+        dest: "{{ dns.stack_dir }}/pihole/custom.list"
+        mode: '0644'
+      notify: restart dns stack
+
+    - name: Create Pi-hole docker-compose file
+      ansible.builtin.template:
+        src: docker-compose.dns.yml.j2
+        dest: "{{ dns.stack_dir }}/docker-compose.yml"
+        mode: '0644'
+      notify: restart dns stack
+
+    - name: Create Pi-hole environment file
+      ansible.builtin.template:
+        src: pihole.env.j2
+        dest: "{{ dns.stack_dir }}/.env"
+        mode: '0600'
+      notify: restart dns stack
+
+    - name: Ensure DNS network exists
+      community.docker.docker_network:
+        name: "{{ dns.network_name | default('dns') }}"
+        state: present
+
+    - name: Start DNS stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ dns.stack_dir }}"
+        state: present
+      register: dns_stack_result
+
+    - name: Wait for Pi-hole to be ready
+      ansible.builtin.uri:
+        url: "http://localhost:{{ dns.pihole.port }}/admin/"
+        status_code: 200
+      register: pihole_health
+      until: pihole_health.status == 200
+      retries: 30
+      delay: 2
+      when: dns_stack_result.changed
+
+    - name: Display DNS service information
+      ansible.builtin.debug:
+        msg:
+          - "Pi-hole Admin UI: http://{{ ansible_default_ipv4.address }}:{{ dns.pihole.port }}/admin"
+          - "Pi-hole Password: Check vault_dns.pihole_password"
+          - "DNS Server: {{ ansible_default_ipv4.address }}:53"
+          - "Unbound Recursive Resolver: Running on port 5335"
+
+- name: Include DNS monitoring tasks
+  ansible.builtin.include_tasks: monitoring.yml
+  when:
+    - dns.enabled | default(false)
+    - dns.monitoring.enabled | default(true)

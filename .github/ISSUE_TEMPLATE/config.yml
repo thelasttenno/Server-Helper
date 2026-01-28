@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: GitHub Discussions
+    url: https://github.com/thelasttenno/Server-Helper/discussions
+    about: Ask questions, share ideas, or discuss implementation details
+  - name: Documentation
+    url: https://github.com/thelasttenno/Server-Helper/tree/main/docs
+    about: Browse the complete documentation
+  - name: Security Issue
+    url: https://github.com/thelasttenno/Server-Helper/security/advisories/new
+    about: Report a security vulnerability (private)

@@ -1,0 +1,98 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Docker container logs
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: 'stream'
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        target_label: 'compose_project'
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: 'compose_service'
+    pipeline_stages:
+      - docker: {}
+
+  # System logs
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: varlogs
+          host: {{ hostname | default(ansible_hostname) }}
+          __path__: /var/log/*log
+    pipeline_stages:
+      - match:
+          selector: '{job="varlogs"}'
+          stages:
+            - regex:
+                expression: '.*'
+
+  # Syslog
+  - job_name: syslog
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: syslog
+          host: {{ hostname | default(ansible_hostname) }}
+          __path__: /var/log/syslog
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\w+\s+\d+\s+\d+:\d+:\d+)\s+(?P<hostname>\S+)\s+(?P<service>\S+?)(\[(?P<pid>\d+)\])?:\s+(?P<message>.*)$'
+      - labels:
+          service:
+      - timestamp:
+          source: timestamp
+          format: 'Jan _2 15:04:05'
+
+  # Auth logs
+  - job_name: auth
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: auth
+          host: {{ hostname | default(ansible_hostname) }}
+          __path__: /var/log/auth.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\w+\s+\d+\s+\d+:\d+:\d+)\s+(?P<hostname>\S+)\s+(?P<service>\S+?)(\[(?P<pid>\d+)\])?:\s+(?P<message>.*)$'
+      - labels:
+          service:
+      - timestamp:
+          source: timestamp
+          format: 'Jan _2 15:04:05'
+
+{% if logging.promtail.additional_jobs | default([]) | length > 0 %}
+  # Additional custom jobs
+{% for job in logging.promtail.additional_jobs %}
+  - job_name: {{ job.name }}
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: {{ job.name }}
+          host: {{ hostname | default(ansible_hostname) }}
+          __path__: {{ job.path }}
+{% if job.pipeline_stages | default([]) | length > 0 %}
+    pipeline_stages:
+{{ job.pipeline_stages | to_nice_yaml(indent=2) | indent(6, first=True) }}
+{% endif %}
+{% endfor %}
+{% endif %}
