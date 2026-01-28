@@ -1,0 +1,130 @@
+---
+# Server Helper - Auto-Register Target Services with Control Node
+# ================================================================
+# This playbook registers all target node services with the control node's
+# Uptime Kuma for centralized monitoring.
+#
+# Run this after:
+#   1. Control node is set up (setup-control.yml)
+#   2. Target nodes are set up (setup-targets.yml)
+#
+# Usage:
+#   ansible-playbook playbooks/register-services.yml
+
+- name: Gather Target Node Information
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Collect target node service info
+      ansible.builtin.set_fact:
+        target_services:
+          hostname: "{{ target_hostname | default(inventory_hostname) }}"
+          ip: "{{ ansible_default_ipv4.address }}"
+          services:
+            - name: "{{ target_hostname | default(inventory_hostname) }} - Dockge"
+              type: "http"
+              url: "http://{{ ansible_default_ipv4.address }}:{{ target_dockge.port }}"
+              enabled: "{{ target_dockge.enabled | default(true) }}"
+            - name: "{{ target_hostname | default(inventory_hostname) }} - Netdata"
+              type: "http"
+              url: "http://{{ ansible_default_ipv4.address }}:{{ target_netdata.port }}/api/v1/info"
+              enabled: "{{ target_netdata.enabled | default(true) }}"
+            - name: "{{ target_hostname | default(inventory_hostname) }} - Grafana"
+              type: "http"
+              url: "http://{{ ansible_default_ipv4.address }}:{{ target_logging.grafana.port }}/api/health"
+              enabled: "{{ target_logging.grafana.enabled | default(true) }}"
+            - name: "{{ target_hostname | default(inventory_hostname) }} - SSH"
+              type: "port"
+              hostname: "{{ ansible_default_ipv4.address }}"
+              port: 22
+              enabled: true
+            - name: "{{ target_hostname | default(inventory_hostname) }} - Ping"
+              type: "ping"
+              hostname: "{{ ansible_default_ipv4.address }}"
+              enabled: true
+
+- name: Register Services with Uptime Kuma
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    uptime_kuma_url: "http://{{ control_node_ip }}:{{ control_uptime_kuma.port | default(3001) }}"
+    all_target_services: "{{ hostvars | dict2items | selectattr('value.target_services', 'defined') | map(attribute='value.target_services') | list }}"
+
+  tasks:
+    - name: Check if control_node_ip is set
+      ansible.builtin.fail:
+        msg: "control_node_ip is not set in group_vars/all.yml. Please set it to your control node's IP address."
+      when: control_node_ip | default('') | length == 0
+
+    - name: Check if service discovery is enabled
+      ansible.builtin.fail:
+        msg: "service_discovery.uptime_monitoring.enabled is false. Enable it in group_vars/all.yml."
+      when: not (service_discovery.uptime_monitoring.enabled | default(false))
+
+    - name: Wait for Uptime Kuma to be ready
+      ansible.builtin.uri:
+        url: "{{ uptime_kuma_url }}"
+        method: GET
+        status_code: [200, 401]
+      register: uptime_kuma_check
+      retries: 10
+      delay: 5
+      until: uptime_kuma_check.status in [200, 401]
+
+    - name: Generate Uptime Kuma registration script
+      ansible.builtin.template:
+        src: templates/uptime-kuma-register.sh.j2
+        dest: "{{ control_node_install_dir }}/scripts/register-monitors.sh"
+        mode: '0755'
+      delegate_to: "{{ control_node_ip }}"
+
+    - name: Display registered services summary
+      ansible.builtin.debug:
+        msg:
+          - "═══════════════════════════════════════════════════"
+          - "  Service Auto-Registration Complete"
+          - "═══════════════════════════════════════════════════"
+          - ""
+          - "Target nodes discovered: {{ all_target_services | length }}"
+          - ""
+          - "{% for target in all_target_services %}"
+          - "  {{ target.hostname }} ({{ target.ip }}):"
+          - "{% for svc in target.services if svc.enabled | default(true) %}"
+          - "    - {{ svc.name }}"
+          - "{% endfor %}"
+          - "{% endfor %}"
+          - ""
+          - "Next steps:"
+          - "  1. Log into Uptime Kuma: {{ uptime_kuma_url }}"
+          - "  2. Run the registration script on the control node:"
+          - "     {{ control_node_install_dir }}/scripts/register-monitors.sh"
+          - ""
+          - "OR configure monitors manually in the Uptime Kuma UI."
+          - ""
+
+    - name: Save service registry to file
+      ansible.builtin.copy:
+        content: |
+          # Server Helper - Service Registry
+          # Generated: {{ ansible_date_time.iso8601 | default('N/A') }}
+          # Control Node: {{ control_node_ip }}
+
+          {% for target in all_target_services %}
+          ## {{ target.hostname }} ({{ target.ip }})
+          {% for svc in target.services if svc.enabled | default(true) %}
+          - {{ svc.name }}
+            Type: {{ svc.type }}
+          {% if svc.url is defined %}
+            URL: {{ svc.url }}
+          {% endif %}
+          {% if svc.hostname is defined %}
+            Host: {{ svc.hostname }}:{{ svc.port | default('') }}
+          {% endif %}
+          {% endfor %}
+
+          {% endfor %}
+        dest: "{{ control_node_install_dir }}/service-registry.txt"
+        mode: '0644'
+      delegate_to: "{{ control_node_ip }}"

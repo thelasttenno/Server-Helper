@@ -1,6 +1,6 @@
 # Netdata Stack - System Monitoring
 # Deployed via Dockge
-{% if target_netdata.stream_to_parent | default(false) and control_node_ip | default('') | length > 0 %}
+{% if service_discovery.enabled | default(false) and service_discovery.netdata_streaming.enabled | default(false) and control_node_ip | default('') | length > 0 %}
 # Configured as CHILD node - streaming to parent at {{ control_node_ip }}:{{ control_netdata.port | default(19999) }}
 {% endif %}
 
@@ -8,12 +8,12 @@ version: '3.8'
 
 services:
   netdata:
-    image: netdata/netdata:latest
+    image: netdata/netdata:{{ target_netdata.version | default('latest') }}
     container_name: netdata
-    hostname: {{ hostname | default(ansible_hostname) }}
+    hostname: {{ target_hostname | default(ansible_hostname) }}
     restart: unless-stopped
     ports:
-      - "{{ monitoring.netdata.port }}:19999"
+      - "{{ target_netdata.port }}:19999"
     cap_add:
       - SYS_PTRACE
       - SYS_ADMIN
@@ -29,17 +29,24 @@ services:
       - /sys:/host/sys:ro
       - /etc/os-release:/host/etc/os-release:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-{% if target_netdata.stream_to_parent | default(false) and control_node_ip | default('') | length > 0 %}
+{% if service_discovery.enabled | default(false) and service_discovery.netdata_streaming.enabled | default(false) and control_node_ip | default('') | length > 0 %}
       - ./stream.conf:/etc/netdata/stream.conf:ro
 {% endif %}
     environment:
       - DOCKER_HOST=/var/run/docker.sock
-{% if monitoring.netdata.claim_token | default('') | length > 0 %}
-      - NETDATA_CLAIM_TOKEN={{ monitoring.netdata.claim_token }}
-{% if monitoring.netdata.claim_rooms | default('') | length > 0 %}
-      - NETDATA_CLAIM_ROOMS={{ monitoring.netdata.claim_rooms }}
+{% if target_netdata.claim_token | default('') | length > 0 %}
+      - NETDATA_CLAIM_TOKEN={{ target_netdata.claim_token }}
+{% if target_netdata.claim_rooms | default('') | length > 0 %}
+      - NETDATA_CLAIM_ROOMS={{ target_netdata.claim_rooms }}
 {% endif %}
       - NETDATA_CLAIM_URL=https://app.netdata.cloud
+{% endif %}
+    labels:
+      - "com.server-helper.service=netdata"
+      - "com.server-helper.target={{ target_hostname | default(ansible_hostname) }}"
+{% if service_discovery.enabled | default(false) %}
+      - "com.server-helper.discovery=true"
+      - "com.server-helper.control-node={{ control_node_ip | default('') }}"
 {% endif %}
     networks:
       - monitoring

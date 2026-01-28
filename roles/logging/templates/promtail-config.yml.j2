@@ -6,9 +6,17 @@ positions:
   filename: /tmp/positions.yaml
 
 clients:
-{% if target_promtail.send_to_central | default(false) and control_node_ip | default('') | length > 0 %}
+{% if service_discovery.enabled | default(false) and service_discovery.log_aggregation.enabled | default(false) and control_node_ip | default('') | length > 0 %}
   # Sending logs to centralized Loki on control node
   - url: http://{{ control_node_ip }}:{{ control_loki.port | default(3100) }}/loki/api/v1/push
+    external_labels:
+      target_host: {{ target_hostname | default(ansible_hostname) }}
+      target_ip: {{ ansible_default_ipv4.address | default('unknown') }}
+{% if service_discovery.log_aggregation.extra_labels | default({}) | length > 0 %}
+{% for key, value in service_discovery.log_aggregation.extra_labels.items() %}
+      {{ key }}: {{ value }}
+{% endfor %}
+{% endif %}
 {% else %}
   # Sending logs to local Loki
   - url: http://loki:3100/loki/api/v1/push
@@ -30,6 +38,9 @@ scrape_configs:
         target_label: 'compose_project'
       - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
         target_label: 'compose_service'
+      # Add target hostname to all docker logs
+      - target_label: 'host'
+        replacement: '{{ target_hostname | default(ansible_hostname) }}'
     pipeline_stages:
       - docker: {}
 
@@ -40,7 +51,7 @@ scrape_configs:
           - localhost
         labels:
           job: varlogs
-          host: {{ hostname | default(ansible_hostname) }}
+          host: {{ target_hostname | default(ansible_hostname) }}
           __path__: /var/log/*log
     pipeline_stages:
       - match:
@@ -56,7 +67,7 @@ scrape_configs:
           - localhost
         labels:
           job: syslog
-          host: {{ hostname | default(ansible_hostname) }}
+          host: {{ target_hostname | default(ansible_hostname) }}
           __path__: /var/log/syslog
     pipeline_stages:
       - regex:
@@ -74,7 +85,7 @@ scrape_configs:
           - localhost
         labels:
           job: auth
-          host: {{ hostname | default(ansible_hostname) }}
+          host: {{ target_hostname | default(ansible_hostname) }}
           __path__: /var/log/auth.log
     pipeline_stages:
       - regex:
@@ -85,16 +96,16 @@ scrape_configs:
           source: timestamp
           format: 'Jan _2 15:04:05'
 
-{% if logging.promtail.additional_jobs | default([]) | length > 0 %}
+{% if target_logging.promtail.additional_jobs | default([]) | length > 0 %}
   # Additional custom jobs
-{% for job in logging.promtail.additional_jobs %}
+{% for job in target_logging.promtail.additional_jobs %}
   - job_name: {{ job.name }}
     static_configs:
       - targets:
           - localhost
         labels:
           job: {{ job.name }}
-          host: {{ hostname | default(ansible_hostname) }}
+          host: {{ target_hostname | default(ansible_hostname) }}
           __path__: {{ job.path }}
 {% if job.pipeline_stages | default([]) | length > 0 %}
     pipeline_stages:

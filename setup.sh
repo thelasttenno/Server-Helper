@@ -966,187 +966,53 @@ create_config() {
     cat > "$config_file" <<EOF
 # Server Helper Configuration
 # Generated: $(date '+%Y-%m-%d %H:%M:%S')
+#
+# This file contains configuration for BOTH target nodes and control node.
+# Variables are organized with prefixes:
+#   - target_*: Services deployed on managed servers (setup-targets.yml)
+#   - control_*: Centralized services on control node (setup-control.yml)
 
 ---
-# System Configuration
-# Note: Individual hostnames are configured per-host in inventory
-hostname_prefix: "${HOSTNAME_PREFIX}"
-timezone: "${TIMEZONE}"
-locale: "en_US.UTF-8"
-base_install_dir: "/opt"
+# =============================================================================
+# TARGET NODE CONFIGURATION
+# =============================================================================
 
-# NAS Configuration
-nas_mounts:
+# Target: System Settings
+target_hostname: "${HOSTNAME_PREFIX}"
+target_timezone: "${TIMEZONE}"
+target_locale: "en_US.UTF-8"
+
+# Target: Base Directories
+target_base_dir: "/opt/server-helper"
+target_dockge_base_dir: "/opt/dockge"
+target_dockge_stacks_dir: "{{ target_dockge_base_dir }}/stacks"
+target_dockge_data_dir: "{{ target_dockge_base_dir }}/data"
+
+# Target: NAS Mounts
+target_nas_mounts:
   enabled: $(if [[ $ENABLE_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
 $(if [[ $ENABLE_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EON
-
-nas:
-  enabled: true
   shares:
-    - ip: "${NAS_IP}"
-      share: "${NAS_SHARE}"
-      mount: "${NAS_MOUNT}"
+    - name: "primary"
+      ip: "${NAS_IP}"
+      share_name: "${NAS_SHARE}"
+      mount_point: "${NAS_MOUNT}"
       username: "{{ vault_nas_credentials[0].username }}"
       password: "{{ vault_nas_credentials[0].password }}"
-      options: "vers=3.0,_netdev,nofail"
+      smb_version: "3.0"
+      options: "_netdev,nofail"
 EON
 fi)
 
-# Backup Configuration
-backups:
-  enabled: $(if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+# Target: LVM Configuration
+target_lvm_config:
+  enabled: $(if [[ ${ENABLE_LVM_CONFIG:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  auto_extend_ubuntu: true
+  custom_lvs: []
+  create_lvs: []
 
-$(if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOB
-restic:
-  enabled: true
-  schedule: "${BACKUP_SCHEDULE}"
-
-  retention:
-    keep_daily: 7
-    keep_weekly: 4
-    keep_monthly: 6
-    keep_yearly: 2
-
-  destinations:
-    nas:
-      enabled: $(if [[ $BACKUP_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-      path: "${NAS_MOUNT}/restic"
-      password: "{{ vault_restic_passwords.nas }}"
-
-    local:
-      enabled: $(if [[ $BACKUP_LOCAL =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-      path: "/opt/backups/restic"
-      password: "{{ vault_restic_passwords.local }}"
-
-    s3:
-      enabled: $(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-$(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOS3
-      bucket: "${S3_BUCKET}"
-      endpoint: "s3.amazonaws.com"
-      region: "${S3_REGION}"
-      access_key: "{{ vault_aws_credentials.access_key }}"
-      secret_key: "{{ vault_aws_credentials.secret_key }}"
-      password: "{{ vault_restic_passwords.s3 }}"
-EOS3
-fi)
-
-    b2:
-      enabled: false
-
-  backup_paths:
-    - /opt/dockge/stacks
-    - /opt/dockge/data
-    - /etc
-    - /home
-
-  exclude_patterns:
-    - "*.tmp"
-    - "*.log"
-    - ".cache"
-    - "__pycache__"
-
-  uptime_kuma_push_url: ""
-EOB
-fi)
-
-# Monitoring Configuration
-monitoring:
-  enabled: $(if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-
-$(if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EON
-  netdata:
-    enabled: true
-    port: ${NETDATA_PORT}
-    claim_token: "${NETDATA_CLAIM_TOKEN}"
-    claim_rooms: ""
-
-    alarms:
-      enabled: true
-      cpu_warning: 80
-      cpu_critical: 95
-      ram_warning: 80
-      ram_critical: 95
-      disk_warning: 80
-      disk_critical: 90
-EON
-else
-echo "  netdata:"
-echo "    enabled: false"
-fi)
-
-# Uptime Kuma is installed on command node only (setup-control.yml)
-
-# Logging Configuration (Loki + Promtail + Grafana)
-logging:
-  stack_dir: /opt/dockge/stacks/logging
-
-  loki:
-    enabled: $(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-    version: latest
-    port: ${LOKI_PORT:-3100}
-    retention_period: "744h"
-
-  promtail:
-    enabled: $(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-    version: latest
-    additional_jobs: []
-
-  grafana:
-    enabled: $(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-    version: latest
-    port: ${GRAFANA_PORT:-3000}
-    admin_user: admin
-    admin_password: "{{ vault_grafana_admin_password }}"
-    plugins: ""
-    smtp:
-      enabled: false
-
-# Container Management
-dockge:
-  enabled: $(if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-  port: ${DOCKGE_PORT:-5001}
-  stacks_dir: "/opt/dockge/stacks"
-  data_dir: "/opt/dockge/data"
-  admin_username: "admin"
-  admin_password: "{{ vault_dockge_credentials.password }}"
-
-# Security Configuration
-security:
-  fail2ban_enabled: $(if [[ $ENABLE_FAIL2BAN =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-  fail2ban_bantime: 3600
-  fail2ban_maxretry: 5
-
-  ufw_enabled: $(if [[ $ENABLE_UFW =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-  ufw_default_policy: "deny"
-  ufw_allowed_ports:
-    - ${SSH_PORT:-22}
-$(if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${DOCKGE_PORT}"; fi)
-$(if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${NETDATA_PORT}"; fi)
-$(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${GRAFANA_PORT}"; echo "    - ${LOKI_PORT}"; fi)
-$(if [[ ${ENABLE_UPTIME_KUMA:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${UPTIME_KUMA_PORT:-3001}"; fi)
-
-  ssh_hardening: $(if [[ $ENABLE_SSH_HARDENING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-  ssh_port: ${SSH_PORT:-22}
-  ssh_password_authentication: $(if [[ $SSH_NO_PASSWORD =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "false"; else echo "true"; fi)
-  ssh_permit_root_login: $(if [[ $SSH_NO_ROOT =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "false"; else echo "true"; fi)
-  ssh_max_auth_tries: 3
-  ssh_client_alive_interval: 300
-
-  lynis_enabled: $(if [[ $ENABLE_LYNIS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-  lynis_schedule: "0 3 * * 0"
-  lynis_uptime_kuma_push_url: ""
-
-  unattended_upgrades: true
-  auto_reboot: false
-  auto_reboot_time: "03:00"
-
-# Note: DNS (Pi-hole + Unbound) is a centralized service
-# Configured during control node setup (offer_control_node_setup)
-dns:
-  enabled: false
-
-# System Users Configuration
-system_users:
+# Target: System Users
+target_system_users:
   create_admin_user: $(if [[ ${ENABLE_SYSTEM_USERS:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
 $(if [[ ${ENABLE_SYSTEM_USERS:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOUSERS
   admin_user: "${ADMIN_USERNAME:-admin}"
@@ -1159,86 +1025,238 @@ $(if [[ ${ENABLE_SYSTEM_USERS:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOUSERS
 EOUSERS
 fi)
   disable_root_password: true
+  additional_users: []
 
-# LVM Configuration
-lvm_config:
-  auto_extend_ubuntu: $(if [[ ${ENABLE_LVM_CONFIG:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-  custom_lvs: []
-  create_lvs: []
+# Target: Dockge (Container Management)
+target_dockge:
+  enabled: $(if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  port: ${DOCKGE_PORT:-5001}
+  version: "1"
 
-# Note: Authentik, Step-CA, and Semaphore are control node services
-# They are configured during control node setup (offer_control_node_setup)
+# Target: Netdata (System Monitoring)
+target_netdata:
+  enabled: $(if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  port: ${NETDATA_PORT:-19999}
+  version: "latest"
+  claim_token: "${NETDATA_CLAIM_TOKEN:-}"
+  claim_rooms: ""
+  alarms:
+    enabled: true
+    cpu_warning: 80
+    cpu_critical: 95
+    ram_warning: 80
+    ram_critical: 95
+    disk_warning: 80
+    disk_critical: 90
+    check_interval_minutes: 5
+  uptime_kuma_push_urls:
+    cpu: ""
+    ram: ""
+    disk: ""
+    system: ""
 
-# Uptime Kuma (Local Instance)
-uptime_kuma:
-  enabled: $(if [[ ${ENABLE_UPTIME_KUMA:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-  port: ${UPTIME_KUMA_PORT:-3001}
+# Target: Restic (Encrypted Backups)
+target_restic:
+  enabled: $(if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+$(if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOB
+  schedule: "${BACKUP_SCHEDULE}"
+  retention:
+    keep_daily: 7
+    keep_weekly: 4
+    keep_monthly: 6
+    keep_yearly: 2
+  destinations:
+    nas:
+      enabled: $(if [[ $BACKUP_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+      path: "${NAS_MOUNT}/restic"
+    local:
+      enabled: $(if [[ $BACKUP_LOCAL =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+      path: "/opt/backups/restic"
+    s3:
+      enabled: $(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+$(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOS3
+      bucket: "${S3_BUCKET}"
+      endpoint: "s3.amazonaws.com"
+      region: "${S3_REGION}"
+EOS3
+fi)
+    b2:
+      enabled: false
+  include_paths:
+    - "{{ target_dockge_stacks_dir }}"
+    - "{{ target_dockge_data_dir }}"
+    - "/etc"
+    - "/root"
+    - "/home"
+  exclude_patterns:
+    - "*.tmp"
+    - "*.log"
+    - "cache"
+    - "*.cache"
+EOB
+fi)
 
-# Lynis Security Auditing
-lynis:
-  enabled: $(if [[ ${ENABLE_LYNIS:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-  schedule: "Sun *-*-* 03:00:00"
-  scan_dir: "/var/log/lynis"
-  retention_days: 90
+# Target: Security
+target_security:
+  basic_hardening: true
+  lynis:
+    enabled: $(if [[ $ENABLE_LYNIS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+    schedule: "0 3 * * 0"
+  fail2ban:
+    enabled: $(if [[ $ENABLE_FAIL2BAN =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+    sshd_maxretry: 3
+    sshd_bantime: 86400
+  ufw:
+    enabled: $(if [[ $ENABLE_UFW =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+    default_incoming: deny
+    default_outgoing: allow
+  ssh_hardening:
+    enabled: $(if [[ $ENABLE_SSH_HARDENING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+    permit_root_login: $(if [[ $SSH_NO_ROOT =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "false"; else echo "true"; fi)
+    password_authentication: $(if [[ $SSH_NO_PASSWORD =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "false"; else echo "true"; fi)
+    pubkey_authentication: true
+    max_auth_tries: 3
 
-# Note: Watchtower is a centralized service
-# Configured during control node setup (offer_control_node_setup)
-watchtower:
+# Target: Logging (Loki + Promtail + Grafana)
+target_logging:
+  loki:
+    enabled: $(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+    port: ${LOKI_PORT:-3100}
+    retention_period: "744h"
+  promtail:
+    enabled: $(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+    additional_jobs: []
+  grafana:
+    enabled: $(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+    port: ${GRAFANA_PORT:-3000}
+
+# Target: Reverse Proxy (Optional)
+target_reverse_proxy:
   enabled: false
+  traefik:
+    port: 80
+    dashboard_port: 8080
+    https_port: 443
+    version: "v3.0"
 
-# Note: Reverse Proxy (Traefik) is a centralized service
-# Configured during control node setup (offer_control_node_setup)
-reverse_proxy:
+# Target: Watchtower (Container Auto-Updates)
+target_watchtower:
   enabled: false
+  schedule: "0 4 * * *"
+  cleanup: true
 
-# Self-Update Configuration (Ansible Pull)
-self_update:
-  enabled: $(if [[ ${ENABLE_SELF_UPDATE:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-  schedule: "${SELF_UPDATE_SCHEDULE:-0 5 * * *}"
-  git_repo: "https://github.com/thelasttenno/Server-Helper.git"
-  branch: "main"
-  version: "v1.0.0"
-  playbook: "playbooks/setup.yml"
-  log_file: "/var/log/ansible-pull.log"
-  check_only: $(if [[ ${SELF_UPDATE_CHECK_ONLY:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+# Target: Docker Configuration
+target_docker:
+  version: "latest"
+  compose_version: "v2"
+  storage_driver: "overlay2"
+  log_driver: "json-file"
+  log_max_size: "10m"
+  log_max_file: "3"
 
-# Docker Configuration
-docker:
-  edition: "ce"
-  compose_version: "2.23.0"
-  daemon_config:
-    log_driver: "json-file"
-    log_opts:
-      max_size: "10m"
-      max_file: "3"
-    storage_driver: "overlay2"
-
-  networks:
-    - name: "monitoring"
-      driver: "bridge"
-    - name: "proxy"
-      driver: "bridge"
-
-# Notifications
-notifications:
-  email:
+# Target: System Maintenance
+target_maintenance:
+  auto_cleanup:
+    enabled: true
+    disk_threshold: 80
+    schedule: "0 5 * * 0"
+  auto_updates:
     enabled: false
-  discord:
+    schedule: "0 6 * * 0"
+    auto_reboot: false
+    reboot_time: "03:00"
+
+# Target: Virtualization
+target_virtualization:
+  qemu_guest_agent: false
+
+# Target: Performance Tuning
+target_performance:
+  tuning_enabled: false
+
+# =============================================================================
+# CONTROL NODE CONFIGURATION
+# =============================================================================
+
+control_node_install_dir: "/opt/control-node"
+
+# Control: Uptime Kuma (Centralized Monitoring)
+control_uptime_kuma:
+  enabled: true
+  port: 3001
+  version: "1"
+
+# Control: Grafana (Centralized Dashboards)
+control_grafana:
+  enabled: true
+  port: 3000
+  version: "latest"
+  admin_user: "admin"
+
+# Control: Loki (Centralized Log Aggregation)
+control_loki:
+  enabled: true
+  port: 3100
+  version: "latest"
+  retention_period: "744h"
+
+# Control: Netdata Parent (Centralized Metrics)
+control_netdata:
+  enabled: true
+  port: 19999
+  version: "latest"
+  stream_api_key: "{{ vault_netdata_stream_api_key | default('changeme') }}"
+
+# Control: Scanopy/Trivy (Container Security)
+control_scanopy:
+  enabled: true
+  port: 8080
+  trivy_version: "latest"
+
+# Control: PruneMate (Docker Cleanup)
+control_prunemate:
+  enabled: true
+  schedule: "0 3 * * 0"
+
+# =============================================================================
+# SERVICE DISCOVERY & AUTO-REGISTRATION
+# =============================================================================
+# When enabled, services automatically register with the control node.
+
+control_node_ip: ""  # Set during control node setup
+
+service_discovery:
+  enabled: false  # Enabled after control node setup
+  netdata_streaming:
     enabled: false
-  telegram:
+    api_key: "{{ control_netdata.stream_api_key }}"
+  log_aggregation:
     enabled: false
+    extra_labels:
+      environment: "production"
+  uptime_monitoring:
+    enabled: false
+    monitored_services:
+      - name: "Dockge"
+        type: "http"
+        port: "{{ target_dockge.port }}"
+      - name: "Netdata"
+        type: "http"
+        port: "{{ target_netdata.port }}"
+      - name: "Grafana"
+        type: "http"
+        port: "{{ target_logging.grafana.port }}"
+      - name: "SSH"
+        type: "port"
+        port: 22
+  dns_registration:
+    enabled: false
+    domain: "internal"
 
-# Note: Main logging config is defined earlier with loki/promtail/grafana settings
-
-# Performance
-performance:
-  max_parallel_tasks: 10
-  connection_timeout: 30
-
-# Feature flags
-features:
-  experimental: false
-  debug_mode: false
+# =============================================================================
+# DEBUG & FEATURE FLAGS
+# =============================================================================
+debug_mode: false
 EOF
 
     print_success "Configuration file created: $config_file"
@@ -1758,6 +1776,29 @@ offer_control_node_setup() {
                 print_warning "Re-run setup on targets to enable streaming:"
                 print_info "  ansible-playbook playbooks/setup-targets.yml"
             fi
+
+            # Offer to run service auto-registration
+            echo
+            read -p "Auto-register all target services with Uptime Kuma? (Y/n): " -r RUN_REGISTRATION
+            RUN_REGISTRATION=${RUN_REGISTRATION:-y}
+
+            if [[ $RUN_REGISTRATION =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                print_info "Registering target services with Uptime Kuma..."
+                if ansible-playbook playbooks/register-services.yml -v; then
+                    print_success "Services auto-registered with Uptime Kuma!"
+                    echo
+                    print_info "All target services are now monitored in Uptime Kuma:"
+                    echo "  http://${CONTROL_NODE_IP}:3001"
+                else
+                    print_warning "Service registration had issues (non-critical)"
+                    print_info "You can run it manually later with:"
+                    print_info "  ansible-playbook playbooks/register-services.yml"
+                fi
+            else
+                print_info "Skipping auto-registration"
+                print_info "You can register services later with:"
+                print_info "  ansible-playbook playbooks/register-services.yml"
+            fi
         else
             print_warning "Control node setup failed (optional)"
             print_info "You can run it manually later with:"
@@ -1774,33 +1815,55 @@ offer_control_node_setup() {
 update_config_for_streaming() {
     local config_file="group_vars/all.yml"
 
-    # Append streaming configuration
+    # Append service discovery and streaming configuration
     cat >> "$config_file" <<EOF
 
 # =============================================================================
-# CENTRALIZED MONITORING (Control Node)
+# SERVICE DISCOVERY & CENTRALIZED MONITORING
 # =============================================================================
 # Added by setup.sh for centralized monitoring
+# This enables target nodes to stream metrics/logs to control node
+
 control_node_ip: "${CONTROL_NODE_IP}"
 
-# Target Promtail -> Central Loki
-target_promtail:
-  send_to_central: $(if [[ $ENABLE_CENTRAL_LOKI =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+# Service Discovery Configuration
+service_discovery:
+  enabled: true
 
-# Target Netdata -> Central Netdata Parent
-target_netdata:
-  stream_to_parent: $(if [[ $ENABLE_CENTRAL_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  # Netdata parent-child streaming
+  netdata_streaming:
+    enabled: $(if [[ $ENABLE_CENTRAL_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+
+  # Promtail -> Central Loki log aggregation
+  log_aggregation:
+    enabled: $(if [[ $ENABLE_CENTRAL_LOKI =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+    extra_labels: {}
+
+  # Auto-register targets with Uptime Kuma
+  uptime_monitoring:
+    enabled: true
+
+  # Register targets in Pi-hole DNS
+  dns_registration:
+    enabled: $(if [[ ${ENABLE_DNS:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
 
 # Control Node Service Configuration
 control_loki:
+  enabled: true
   port: 3100
 
 control_netdata:
+  enabled: true
   port: 19999
   stream_api_key: "{{ vault_netdata_stream_api_key }}"
 
 control_grafana:
+  enabled: true
   port: 3000
+
+control_uptime_kuma:
+  enabled: true
+  port: 3001
 EOF
 }
 

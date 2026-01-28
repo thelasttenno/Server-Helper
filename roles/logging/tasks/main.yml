@@ -1,10 +1,15 @@
 ---
 # Logging & Visualization Stack Setup
 # Installs Loki + Promtail + Grafana for centralized logging
+# Supports sending logs to control node's Loki when service_discovery is enabled
+
+- name: Set logging stack directory
+  ansible.builtin.set_fact:
+    logging_stack_dir: "{{ target_dockge_stacks_dir }}/logging"
 
 - name: Create logging stack directory
   ansible.builtin.file:
-    path: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}"
+    path: "{{ logging_stack_dir }}"
     state: directory
     mode: '0755'
     owner: root
@@ -12,7 +17,7 @@
 
 - name: Create Grafana provisioning directories
   ansible.builtin.file:
-    path: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}/grafana-provisioning/{{ item }}"
+    path: "{{ logging_stack_dir }}/grafana-provisioning/{{ item }}"
     state: directory
     mode: '0755'
     owner: root
@@ -20,20 +25,22 @@
   loop:
     - datasources
     - dashboards
+  when: target_logging.grafana.enabled | default(true)
 
 - name: Deploy Loki configuration
   ansible.builtin.template:
     src: loki-config.yml.j2
-    dest: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}/loki-config.yml"
+    dest: "{{ logging_stack_dir }}/loki-config.yml"
     mode: '0644'
     owner: root
     group: root
   notify: Restart logging stack
+  when: target_logging.loki.enabled | default(true)
 
 - name: Deploy Promtail configuration
   ansible.builtin.template:
     src: promtail-config.yml.j2
-    dest: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}/promtail-config.yml"
+    dest: "{{ logging_stack_dir }}/promtail-config.yml"
     mode: '0644'
     owner: root
     group: root
@@ -42,25 +49,27 @@
 - name: Deploy Grafana datasource provisioning
   ansible.builtin.template:
     src: grafana-provisioning/datasources/loki.yml.j2
-    dest: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}/grafana-provisioning/datasources/loki.yml"
+    dest: "{{ logging_stack_dir }}/grafana-provisioning/datasources/loki.yml"
     mode: '0644'
     owner: root
     group: root
   notify: Restart logging stack
+  when: target_logging.grafana.enabled | default(true)
 
 - name: Deploy Grafana dashboard provisioning
   ansible.builtin.template:
     src: grafana-provisioning/dashboards/dashboards.yml.j2
-    dest: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}/grafana-provisioning/dashboards/dashboards.yml"
+    dest: "{{ logging_stack_dir }}/grafana-provisioning/dashboards/dashboards.yml"
     mode: '0644'
     owner: root
     group: root
   notify: Restart logging stack
+  when: target_logging.grafana.enabled | default(true)
 
 - name: Deploy logging docker-compose file
   ansible.builtin.template:
     src: docker-compose.logging.yml.j2
-    dest: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}/docker-compose.yml"
+    dest: "{{ logging_stack_dir }}/docker-compose.yml"
     mode: '0644'
     owner: root
     group: root
@@ -73,54 +82,59 @@
 
 - name: Start logging stack
   community.docker.docker_compose:
-    project_src: "{{ logging.stack_dir | default('/opt/dockge/stacks/logging') }}"
+    project_src: "{{ logging_stack_dir }}"
     state: present
     pull: true
   register: logging_output
 
 - name: Wait for Loki to be ready
   ansible.builtin.uri:
-    url: "http://localhost:{{ logging.loki.port | default('3100') }}/ready"
+    url: "http://localhost:{{ target_logging.loki.port | default(3100) }}/ready"
     method: GET
     status_code: 200
   retries: 30
   delay: 5
-  when: logging.loki.enabled | default(true)
+  when:
+    - target_logging.loki.enabled | default(true)
+    - not (service_discovery.log_aggregation.enabled | default(false) and control_node_ip | default('') | length > 0)
 
 - name: Wait for Grafana to be ready
   ansible.builtin.uri:
-    url: "http://localhost:{{ logging.grafana.port | default('3000') }}/api/health"
+    url: "http://localhost:{{ target_logging.grafana.port | default(3000) }}/api/health"
     method: GET
     status_code: 200
   retries: 30
   delay: 5
-  when: logging.grafana.enabled | default(true)
+  when: target_logging.grafana.enabled | default(true)
 
-- name: Display logging stack information (local mode)
+- name: Display logging stack information (standalone mode)
   ansible.builtin.debug:
     msg:
       - "Logging stack deployed successfully!"
-      - "Grafana: http://{{ ansible_default_ipv4.address }}:{{ logging.grafana.port | default('3000') }}"
-      - "  Username: {{ logging.grafana.admin_user | default('admin') }}"
+      - "Grafana: http://{{ ansible_default_ipv4.address }}:{{ target_logging.grafana.port | default(3000) }}"
+      - "  Username: admin"
       - "  Password: [stored in vault]"
-      - "Loki: http://{{ ansible_default_ipv4.address }}:{{ logging.loki.port | default('3100') }}"
-      - "Promtail: Running on host {{ hostname | default(ansible_hostname) }}"
+      - "Loki: http://{{ ansible_default_ipv4.address }}:{{ target_logging.loki.port | default(3100) }}"
+      - "Promtail: Running on host {{ target_hostname | default(ansible_hostname) }}"
       - ""
       - "Next steps:"
       - "1. Access Grafana and explore pre-configured Loki datasource"
       - "2. Create dashboards or import existing ones"
       - "3. Use Explore feature to query logs"
-  when: not (target_promtail.send_to_central | default(false))
+  when: not (service_discovery.log_aggregation.enabled | default(false) and control_node_ip | default('') | length > 0)
 
-- name: Display logging stack information (central mode)
+- name: Display logging stack information (centralized mode)
   ansible.builtin.debug:
     msg:
       - "Promtail deployed - sending logs to central Loki!"
       - "Central Loki: http://{{ control_node_ip }}:{{ control_loki.port | default(3100) }}"
-      - "Promtail: Running on host {{ hostname | default(ansible_hostname) }}"
+      - "Promtail: Running on host {{ target_hostname | default(ansible_hostname) }}"
       - ""
-      - "Logs from this host will appear in the central Grafana dashboard"
+      - "Logs from this host will appear in the control node's Grafana dashboard"
       - "Access central Grafana at: http://{{ control_node_ip }}:{{ control_grafana.port | default(3000) }}"
+      - ""
+      - "Auto-registration: ENABLED"
   when:
-    - target_promtail.send_to_central | default(false)
+    - service_discovery.enabled | default(false)
+    - service_discovery.log_aggregation.enabled | default(false)
     - control_node_ip | default('') | length > 0

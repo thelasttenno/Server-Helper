@@ -1,171 +1,182 @@
 ---
 # Netdata Role - Deploy and configure Netdata monitoring
 # This role deploys Netdata container and configures health alarms
+# Supports streaming to parent (control node) for centralized monitoring
 
 - name: Create Netdata stack directory
   ansible.builtin.file:
-    path: "{{ dockge_stacks_dir }}/netdata"
+    path: "{{ target_dockge_stacks_dir }}/netdata"
     state: directory
     mode: '0755'
-  when: monitoring.netdata.enabled | default(true)
+  when: target_netdata.enabled | default(true)
+
+- name: Ensure monitoring network exists
+  community.docker.docker_network:
+    name: monitoring
+    state: present
 
 - name: Deploy Netdata docker-compose file
   ansible.builtin.template:
     src: docker-compose.netdata.yml.j2
-    dest: "{{ dockge_stacks_dir }}/netdata/compose.yaml"
+    dest: "{{ target_dockge_stacks_dir }}/netdata/compose.yaml"
     mode: '0644'
-  when: monitoring.netdata.enabled | default(true)
+  when: target_netdata.enabled | default(true)
 
 - name: Deploy Netdata stream.conf for parent streaming
   ansible.builtin.template:
     src: stream.conf.j2
-    dest: "{{ dockge_stacks_dir }}/netdata/stream.conf"
+    dest: "{{ target_dockge_stacks_dir }}/netdata/stream.conf"
     mode: '0644'
   when:
-    - monitoring.netdata.enabled | default(true)
-    - target_netdata.stream_to_parent | default(false)
+    - target_netdata.enabled | default(true)
+    - service_discovery.enabled | default(false)
+    - service_discovery.netdata_streaming.enabled | default(false)
     - control_node_ip | default('') | length > 0
   notify: restart netdata
 
 - name: Start Netdata container
   community.docker.docker_compose:
-    project_src: "{{ dockge_stacks_dir }}/netdata"
+    project_src: "{{ target_dockge_stacks_dir }}/netdata"
     state: present
     pull: true
-  when: monitoring.netdata.enabled | default(true)
+  when: target_netdata.enabled | default(true)
 
 - name: Wait for Netdata container to be healthy
-  uri:
-    url: "http://localhost:{{ monitoring.netdata.port }}/api/v1/info"
+  ansible.builtin.uri:
+    url: "http://localhost:{{ target_netdata.port }}/api/v1/info"
     status_code: 200
   register: netdata_health
   until: netdata_health.status == 200
   retries: 30
   delay: 5
-  when: monitoring.netdata.enabled | default(true)
+  when: target_netdata.enabled | default(true)
 
 - name: Create Netdata config directories
-  file:
+  ansible.builtin.file:
     path: "{{ item }}"
     state: directory
     mode: '0755'
   loop:
-    - "{{ dockge.data_dir }}/stacks/netdata/config"
-    - "{{ dockge.data_dir }}/stacks/netdata/config/health.d"
-    - "{{ dockge.data_dir }}/stacks/netdata/config/health_alarm_notify.conf.d"
-  when: monitoring.netdata.enabled | default(true)
+    - "{{ target_dockge_stacks_dir }}/netdata/config"
+    - "{{ target_dockge_stacks_dir }}/netdata/config/health.d"
+    - "{{ target_dockge_stacks_dir }}/netdata/config/health_alarm_notify.conf.d"
+  when: target_netdata.enabled | default(true)
 
 - name: Configure CPU alarm
-  template:
+  ansible.builtin.template:
     src: health.d/cpu.conf.j2
-    dest: "{{ dockge.data_dir }}/stacks/netdata/config/health.d/cpu.conf"
+    dest: "{{ target_dockge_stacks_dir }}/netdata/config/health.d/cpu.conf"
     mode: '0644'
-  when: 
-    - monitoring.netdata.enabled | default(true)
-    - monitoring.netdata.alarms.enabled | default(true)
+  when:
+    - target_netdata.enabled | default(true)
+    - target_netdata.alarms.enabled | default(true)
   notify: restart netdata
 
 - name: Configure RAM alarm
-  template:
+  ansible.builtin.template:
     src: health.d/ram.conf.j2
-    dest: "{{ dockge.data_dir }}/stacks/netdata/config/health.d/ram.conf"
+    dest: "{{ target_dockge_stacks_dir }}/netdata/config/health.d/ram.conf"
     mode: '0644'
-  when: 
-    - monitoring.netdata.enabled | default(true)
-    - monitoring.netdata.alarms.enabled | default(true)
+  when:
+    - target_netdata.enabled | default(true)
+    - target_netdata.alarms.enabled | default(true)
   notify: restart netdata
 
 - name: Configure disk alarm
-  template:
+  ansible.builtin.template:
     src: health.d/disk.conf.j2
-    dest: "{{ dockge.data_dir }}/stacks/netdata/config/health.d/disk.conf"
+    dest: "{{ target_dockge_stacks_dir }}/netdata/config/health.d/disk.conf"
     mode: '0644'
-  when: 
-    - monitoring.netdata.enabled | default(true)
-    - monitoring.netdata.alarms.enabled | default(true)
+  when:
+    - target_netdata.enabled | default(true)
+    - target_netdata.alarms.enabled | default(true)
   notify: restart netdata
 
 - name: Configure Docker container monitoring
-  template:
+  ansible.builtin.template:
     src: health.d/docker.conf.j2
-    dest: "{{ dockge.data_dir }}/stacks/netdata/config/health.d/docker.conf"
+    dest: "{{ target_dockge_stacks_dir }}/netdata/config/health.d/docker.conf"
     mode: '0644'
-  when: 
-    - monitoring.netdata.enabled | default(true)
-    - monitoring.netdata.alarms.enabled | default(true)
+  when:
+    - target_netdata.enabled | default(true)
+    - target_netdata.alarms.enabled | default(true)
   notify: restart netdata
 
 - name: Create Uptime Kuma notification script
-  template:
+  ansible.builtin.template:
     src: notify_uptime_kuma.sh.j2
     dest: /usr/local/bin/netdata_notify_uptime_kuma.sh
     mode: '0755'
   when:
-    - monitoring.netdata.enabled | default(true)
-    - monitoring.netdata.alarms.enabled | default(true)
-    - monitoring.netdata.alarms.uptime_kuma_urls.cpu | default('') | length > 0
+    - target_netdata.enabled | default(true)
+    - target_netdata.alarms.enabled | default(true)
+    - target_netdata.uptime_kuma_push_urls.cpu | default('') | length > 0
 
 - name: Configure Netdata alarm notifications
-  template:
+  ansible.builtin.template:
     src: health_alarm_notify.conf.j2
-    dest: "{{ dockge.data_dir }}/stacks/netdata/config/health_alarm_notify.conf.d/uptime_kuma.conf"
+    dest: "{{ target_dockge_stacks_dir }}/netdata/config/health_alarm_notify.conf.d/uptime_kuma.conf"
     mode: '0644'
   when:
-    - monitoring.netdata.enabled | default(true)
-    - monitoring.netdata.alarms.enabled | default(true)
+    - target_netdata.enabled | default(true)
+    - target_netdata.alarms.enabled | default(true)
   notify: restart netdata
 
 - name: Create Netdata API health check script
-  template:
+  ansible.builtin.template:
     src: check_netdata_health.sh.j2
     dest: /usr/local/bin/check_netdata_health.sh
     mode: '0755'
-  when: monitoring.netdata.enabled | default(true)
+  when: target_netdata.enabled | default(true)
 
 - name: Create systemd timer for Netdata health checks
-  template:
+  ansible.builtin.template:
     src: netdata-health-check.timer.j2
     dest: /etc/systemd/system/netdata-health-check.timer
     mode: '0644'
   when:
-    - monitoring.netdata.enabled | default(true)
-    - monitoring.netdata.alarms.enabled | default(true)
+    - target_netdata.enabled | default(true)
+    - target_netdata.alarms.enabled | default(true)
   notify:
     - reload systemd
     - enable netdata health check timer
 
 - name: Create systemd service for Netdata health checks
-  template:
+  ansible.builtin.template:
     src: netdata-health-check.service.j2
     dest: /etc/systemd/system/netdata-health-check.service
     mode: '0644'
   when:
-    - monitoring.netdata.enabled | default(true)
-    - monitoring.netdata.alarms.enabled | default(true)
+    - target_netdata.enabled | default(true)
+    - target_netdata.alarms.enabled | default(true)
   notify:
     - reload systemd
     - enable netdata health check timer
 
-- name: Display Netdata information
-  debug:
+- name: Display Netdata information (standalone mode)
+  ansible.builtin.debug:
     msg:
       - "Netdata is configured!"
-      - "Access at: http://{{ ansible_host }}:{{ monitoring.netdata.port }}"
+      - "Access at: http://{{ ansible_default_ipv4.address }}:{{ target_netdata.port }}"
       - "Alarms configured for:"
-      - "  - CPU usage (warning: {{ monitoring.netdata.alarms.cpu_warning }}%, critical: {{ monitoring.netdata.alarms.cpu_critical }}%)"
-      - "  - RAM usage (warning: {{ monitoring.netdata.alarms.ram_warning }}%, critical: {{ monitoring.netdata.alarms.ram_critical }}%)"
-      - "  - Disk usage (warning: {{ monitoring.netdata.alarms.disk_warning }}%, critical: {{ monitoring.netdata.alarms.disk_critical }}%)"
+      - "  - CPU usage (warning: {{ target_netdata.alarms.cpu_warning }}%, critical: {{ target_netdata.alarms.cpu_critical }}%)"
+      - "  - RAM usage (warning: {{ target_netdata.alarms.ram_warning }}%, critical: {{ target_netdata.alarms.ram_critical }}%)"
+      - "  - Disk usage (warning: {{ target_netdata.alarms.disk_warning }}%, critical: {{ target_netdata.alarms.disk_critical }}%)"
       - "  - Docker containers (tracks all running containers)"
-      - "Health checks run every {{ monitoring.netdata.alarms.check_interval_minutes | default(5) }} minutes"
-  when: monitoring.netdata.enabled | default(true)
+      - "Health checks run every {{ target_netdata.alarms.check_interval_minutes | default(5) }} minutes"
+  when:
+    - target_netdata.enabled | default(true)
+    - not (service_discovery.netdata_streaming.enabled | default(false) and control_node_ip | default('') | length > 0)
 
 - name: Display Netdata streaming status
-  debug:
+  ansible.builtin.debug:
     msg:
       - "Netdata is streaming to parent node!"
       - "Parent: {{ control_node_ip }}:{{ control_netdata.port | default(19999) }}"
-      - "This node's metrics will appear in the parent's dashboard"
+      - "This node's metrics will appear in the control node's dashboard"
+      - "Auto-registration: ENABLED"
   when:
-    - monitoring.netdata.enabled | default(true)
-    - target_netdata.stream_to_parent | default(false)
+    - target_netdata.enabled | default(true)
+    - service_discovery.enabled | default(false)
+    - service_discovery.netdata_streaming.enabled | default(false)
     - control_node_ip | default('') | length > 0
