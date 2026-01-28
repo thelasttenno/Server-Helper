@@ -252,18 +252,33 @@ prompt_target_nodes() {
         TARGET_USER=${TARGET_USER:-ansible}
         TARGET_USERS+=("$TARGET_USER")
 
-        # Test SSH connectivity
+        # Test SSH connectivity and copy keys if needed
         print_info "Testing SSH connectivity to ${TARGET_HOST}..."
         if [[ "$USE_SSH_KEYS" == "yes" ]]; then
             if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}" "echo 'Connected'" &>/dev/null; then
-                print_success "SSH connectivity test passed for ${TARGET_HOSTNAME}"
+                print_success "SSH key already configured for ${TARGET_HOSTNAME}"
             else
-                print_warning "SSH connectivity test failed for ${TARGET_HOSTNAME}"
-                print_info "Make sure the target node is bootstrapped and SSH keys are configured"
-                print_info "You can run: ssh-copy-id ${TARGET_USER}@${TARGET_HOST}"
+                print_warning "SSH key not configured for ${TARGET_HOSTNAME}"
+                read -p "Copy SSH key to ${TARGET_HOST} now? (requires password) (Y/n): " -r COPY_KEY
+                echo
+                if [[ ! $COPY_KEY =~ ^[Nn]$ ]]; then
+                    print_info "Copying SSH key to ${TARGET_USER}@${TARGET_HOST}..."
+                    print_info "You will be prompted for the password on ${TARGET_HOST}"
+                    if ssh-copy-id -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}"; then
+                        print_success "SSH key copied successfully to ${TARGET_HOSTNAME}"
+                    else
+                        print_error "Failed to copy SSH key to ${TARGET_HOSTNAME}"
+                        print_info "You may need to:"
+                        print_info "  1. Enable password auth on target: sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config && sudo systemctl restart sshd"
+                        print_info "  2. Or manually copy the key: ssh-copy-id ${TARGET_USER}@${TARGET_HOST}"
+                    fi
+                else
+                    print_warning "Skipping SSH key copy for ${TARGET_HOSTNAME}"
+                    print_info "You can manually run: ssh-copy-id ${TARGET_USER}@${TARGET_HOST}"
+                fi
             fi
         else
-            print_warning "Skipping connectivity test (password auth requires manual intervention)"
+            print_warning "Skipping connectivity test (password auth mode)"
         fi
     done
 
@@ -368,14 +383,7 @@ prompt_config() {
         read -p "Netdata Cloud claim token (optional): " NETDATA_CLAIM_TOKEN
     fi
 
-    read -p "Enable Uptime Kuma? (Y/n): " -r ENABLE_UPTIME_KUMA
-    echo
-    ENABLE_UPTIME_KUMA=${ENABLE_UPTIME_KUMA:-y}
-
-    if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then
-        read -p "Uptime Kuma port [3001]: " UPTIME_KUMA_PORT
-        UPTIME_KUMA_PORT=${UPTIME_KUMA_PORT:-3001}
-    fi
+    # Note: Uptime Kuma is installed on command node only via setup-control.yml
 
     # Container management
     echo
@@ -587,7 +595,7 @@ fi)
 
 # Monitoring Configuration
 monitoring:
-  enabled: $(if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]] || [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  enabled: $(if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
 
 $(if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EON
   netdata:
@@ -610,28 +618,7 @@ echo "  netdata:"
 echo "    enabled: false"
 fi)
 
-$(if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOK
-  uptime_kuma:
-    enabled: true
-    port: ${UPTIME_KUMA_PORT}
-    admin_username: "admin"
-    admin_password: "{{ vault_uptime_kuma_credentials.password }}"
-
-    monitors:
-      - name: "Netdata Health"
-        type: "http"
-        url: "http://localhost:${NETDATA_PORT}/api/v1/info"
-        interval: 60
-
-      - name: "Dockge Health"
-        type: "http"
-        url: "http://localhost:${DOCKGE_PORT}"
-        interval: 60
-EOK
-else
-echo "  uptime_kuma:"
-echo "    enabled: false"
-fi)
+# Uptime Kuma is installed on command node only (setup-control.yml)
 
 # Container Management
 dockge:
@@ -654,7 +641,6 @@ security:
     - ${SSH_PORT:-22}
 $(if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${DOCKGE_PORT}"; fi)
 $(if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${NETDATA_PORT}"; fi)
-$(if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "    - ${UPTIME_KUMA_PORT}"; fi)
 
   ssh_hardening: $(if [[ $ENABLE_SSH_HARDENING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
   ssh_port: ${SSH_PORT:-22}
@@ -956,7 +942,6 @@ run_playbook() {
     print_warning "This will configure ${#TARGET_HOSTS[@]} target server(s) with:"
     if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Dockge (Container Management)"; fi
     if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Netdata (Monitoring)"; fi
-    if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Uptime Kuma (Alerting)"; fi
     if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Restic Backups"; fi
     if [[ $ENABLE_FAIL2BAN =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - fail2ban (Security)"; fi
     if [[ $ENABLE_UFW =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - UFW Firewall"; fi
@@ -1062,17 +1047,12 @@ show_completion_message() {
         if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then
             echo -e "  ${GREEN}Netdata:${NC}     http://${host_ip}:${NETDATA_PORT}"
         fi
-        if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then
-            echo -e "  ${GREEN}Uptime Kuma:${NC} http://${host_ip}:${UPTIME_KUMA_PORT}"
-        fi
         echo
     done
 
     print_info "Next steps:"
     echo "  1. Change default admin passwords on first login"
-    if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then
-        echo "  2. Configure Uptime Kuma notification endpoints"
-    fi
+    echo "  2. Run setup-control.yml to install Uptime Kuma on this command node"
     if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then
         echo "  3. Verify backup repositories are initialized"
     fi
