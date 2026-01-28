@@ -1,0 +1,29 @@
+---
+# Proxy Role - Default Variables
+
+# Base directory for Traefik
+proxy_base_dir: "/opt/traefik"
+proxy_config_dir: "{{ proxy_base_dir }}/config"
+proxy_certs_dir: "{{ proxy_base_dir }}/certs"
+proxy_dynamic_dir: "{{ proxy_config_dir }}/dynamic"
+
+# Traefik version
+proxy_traefik_version: "{{ target_reverse_proxy.traefik.version | default('v3.0') }}"
+
+# Ports
+proxy_http_port: "{{ target_reverse_proxy.traefik.port | default(80) }}"
+proxy_https_port: "{{ target_reverse_proxy.traefik.https_port | default(443) }}"
+proxy_dashboard_port: "{{ target_reverse_proxy.traefik.dashboard_port | default(8080) }}"
+
+# Dashboard settings
+proxy_dashboard_enabled: "{{ target_reverse_proxy.traefik.dashboard_enabled | default(true) }}"
+proxy_dashboard_insecure: "{{ target_reverse_proxy.traefik.dashboard_insecure | default(true) }}"
+
+# HTTPS redirect
+proxy_force_https: "{{ target_reverse_proxy.force_https | default(true) }}"
+
+# Logging
+proxy_log_level: "{{ target_reverse_proxy.traefik.log_level | default('INFO') }}"
+
+# Docker network
+proxy_network_name: "proxy"

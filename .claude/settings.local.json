@@ -16,7 +16,8 @@
       "Bash(then echo \"MISSING: $template\")",
       "Bash(ansible-playbook:*)",
       "Bash(git update-index:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(bash:*)"
     ]
   }
 }

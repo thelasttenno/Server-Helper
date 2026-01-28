@@ -715,33 +715,14 @@ prompt_config() {
 
     # Logging configuration
     echo
-    echo -e "${BOLD}Log Collection & Visualization:${NC}"
-    echo "  This installs a complete logging system:"
-    echo "  - Promtail: Collects logs from your containers and system"
-    echo "  - Loki: Stores and indexes all your logs"
-    echo "  - Grafana: Beautiful dashboards to search and visualize logs"
+    echo -e "${BOLD}Log Collection (Promtail):${NC}"
+    echo "  Promtail collects logs from your containers and system,"
+    echo "  then streams them to the central Loki server on your control node."
+    echo "  View all logs in the centralized Grafana dashboard."
     echo
-    read -p "Enable log collection and dashboards? (Y/n): " -r ENABLE_LOGGING
+    read -p "Enable log collection? (Y/n): " -r ENABLE_LOGGING
     echo
     ENABLE_LOGGING=${ENABLE_LOGGING:-y}
-
-    if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then
-        echo "  Grafana is where you'll view your logs and create dashboards"
-        read -p "Grafana dashboard port [3000]: " GRAFANA_PORT
-        GRAFANA_PORT=${GRAFANA_PORT:-3000}
-
-        echo "  Set a password for the Grafana admin account (username: admin)"
-        read -sp "Grafana admin password [auto-generate]: " GRAFANA_ADMIN_PASSWORD
-        echo
-        if [[ -z "$GRAFANA_ADMIN_PASSWORD" ]]; then
-            GRAFANA_ADMIN_PASSWORD=$(openssl rand -base64 16)
-            print_info "Generated Grafana admin password (will be shown at end)"
-        fi
-
-        echo "  Loki is the log storage backend (usually doesn't need changing)"
-        read -p "Loki log storage port [3100]: " LOKI_PORT
-        LOKI_PORT=${LOKI_PORT:-3100}
-    fi
 
     # Note: Centralized monitoring (Uptime Kuma, central Grafana/Loki/Netdata)
     # is installed on command node via setup-control.yml after target setup
@@ -826,25 +807,35 @@ prompt_config() {
     # System Users Configuration
     echo -e "${BOLD}System User Management:${NC}"
     echo "  Create a dedicated admin user on target servers for better security."
+    echo "  This user will have sudo access and can be used instead of the default"
+    echo "  user (e.g., 'ubuntu' or 'root') for everyday administration."
     read -p "Create a dedicated admin user? (y/N): " -r ENABLE_SYSTEM_USERS
     echo
     ENABLE_SYSTEM_USERS=${ENABLE_SYSTEM_USERS:-n}
 
     if [[ $ENABLE_SYSTEM_USERS =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        echo "  Username for the new admin account:"
         read -p "Admin username [admin]: " ADMIN_USERNAME
         ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
 
-        echo "  Set password for admin user:"
+        echo
+        echo "  Set a password for this admin user (used for sudo and console login):"
         read -sp "Admin password: " ADMIN_PASSWORD
         echo
 
+        echo
+        echo "  Optional: Add an SSH public key for passwordless login to this user."
+        echo "  You can find your public key in ~/.ssh/id_rsa.pub on your computer."
+        echo "  Format: ssh-rsa AAAA... user@host"
         read -p "Admin SSH public key (press Enter to skip): " ADMIN_SSH_KEY
     fi
 
     # LVM Configuration
     echo
     echo -e "${BOLD}Disk Management (LVM):${NC}"
-    echo "  Auto-extend Ubuntu LVM to use full disk space."
+    echo "  LVM (Logical Volume Manager) is used by Ubuntu to manage disk partitions."
+    echo "  Ubuntu often doesn't use all available disk space by default."
+    echo "  This option automatically extends the root partition to use the full disk."
     read -p "Enable auto LVM extension? (Y/n): " -r ENABLE_LVM_CONFIG
     echo
     ENABLE_LVM_CONFIG=${ENABLE_LVM_CONFIG:-y}
@@ -852,47 +843,40 @@ prompt_config() {
     # Self-Update (Ansible Pull)
     echo
     echo -e "${BOLD}Self-Update (Ansible Pull):${NC}"
-    echo "  Automatically keep your server configuration up to date."
-    echo "  Runs daily to pull latest changes from your Git repository."
+    echo "  Automatically keep your server configuration up to date by pulling"
+    echo "  from a Git repository. Uses 'ansible-pull' to fetch and run playbooks."
+    echo "  This ensures your servers stay in sync with your infrastructure-as-code."
     read -p "Enable automatic self-updates? (Y/n): " -r ENABLE_SELF_UPDATE
     echo
     ENABLE_SELF_UPDATE=${ENABLE_SELF_UPDATE:-y}
 
     if [[ $ENABLE_SELF_UPDATE =~ ^[Yy]([Ee][Ss])?$ ]]; then
-        echo "  When should self-updates run? (default: 5:00 AM daily)"
+        echo "  Git repository URL containing your Server-Helper configuration."
+        echo "  This can be a public GitHub URL or a private repo with SSH access."
+        echo "  Example: https://github.com/yourusername/Server-Helper.git"
+        read -p "Git repository URL: " SELF_UPDATE_REPO_URL
+        while [[ -z "$SELF_UPDATE_REPO_URL" ]]; do
+            print_warning "Repository URL is required for self-updates"
+            read -p "Git repository URL: " SELF_UPDATE_REPO_URL
+        done
+
+        echo
+        echo "  Branch to pull updates from (usually 'main' or 'master')"
+        read -p "Git branch [main]: " SELF_UPDATE_BRANCH
+        SELF_UPDATE_BRANCH=${SELF_UPDATE_BRANCH:-main}
+
+        echo
+        echo "  When should self-updates run? Uses cron format."
+        echo "  Default: 5:00 AM daily (0 5 * * *)"
         read -p "Update schedule [0 5 * * *]: " SELF_UPDATE_SCHEDULE
         SELF_UPDATE_SCHEDULE=${SELF_UPDATE_SCHEDULE:-0 5 * * *}
 
+        echo
+        echo "  Check-only mode tests if changes would be applied without actually"
+        echo "  making them. Useful for reviewing updates before deployment."
         read -p "Check only (don't apply changes)? (y/N): " -r SELF_UPDATE_CHECK_ONLY
         SELF_UPDATE_CHECK_ONLY=${SELF_UPDATE_CHECK_ONLY:-n}
     fi
-
-    # Note: DNS, Traefik, Watchtower, Authentik, Step-CA, and Semaphore are
-    # centralized services configured in the control node setup phase
-
-    # Uptime Kuma on Target Nodes
-    echo
-    echo -e "${BOLD}Uptime Kuma (Local Monitoring):${NC}"
-    echo "  Install Uptime Kuma on target servers for local uptime monitoring."
-    echo "  (Central Uptime Kuma is installed separately on control node)"
-    echo
-    read -p "Enable Uptime Kuma on target servers? (y/N): " -r ENABLE_UPTIME_KUMA
-    echo
-    ENABLE_UPTIME_KUMA=${ENABLE_UPTIME_KUMA:-n}
-
-    if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then
-        read -p "Uptime Kuma port [3001]: " UPTIME_KUMA_PORT
-        UPTIME_KUMA_PORT=${UPTIME_KUMA_PORT:-3001}
-    fi
-
-    # Inventory configuration
-    echo
-    echo -e "${BOLD}Target Server Configuration:${NC}"
-    read -p "Target server IP/hostname [localhost]: " TARGET_HOST
-    TARGET_HOST=${TARGET_HOST:-localhost}
-
-    read -p "SSH username for target server [$USER]: " TARGET_USER
-    TARGET_USER=${TARGET_USER:-$USER}
 
     echo
     print_success "Configuration complete!"
@@ -1117,22 +1101,15 @@ target_security:
     pubkey_authentication: true
     max_auth_tries: 3
 
-# Target: Logging (Loki + Promtail + Grafana)
+# Target: Logging (Promtail only - streams to central Loki)
 target_logging:
-  loki:
-    enabled: $(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-    port: ${LOKI_PORT:-3100}
-    retention_period: "744h"
   promtail:
     enabled: $(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
     additional_jobs: []
-  grafana:
-    enabled: $(if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-    port: ${GRAFANA_PORT:-3000}
 
 # Target: Reverse Proxy (Optional)
 target_reverse_proxy:
-  enabled: false
+  enabled: true
   traefik:
     port: 80
     dashboard_port: 8080
@@ -1165,6 +1142,20 @@ target_maintenance:
     schedule: "0 6 * * 0"
     auto_reboot: false
     reboot_time: "03:00"
+
+# Target: Ansible Pull (Self-Update)
+# Automatically pulls and applies configuration from a Git repository
+target_ansible_pull:
+  enabled: $(if [[ ${ENABLE_SELF_UPDATE:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+$(if [[ ${ENABLE_SELF_UPDATE:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOAP
+  repo_url: "${SELF_UPDATE_REPO_URL}"
+  branch: "${SELF_UPDATE_BRANCH:-main}"
+  schedule: "${SELF_UPDATE_SCHEDULE:-0 5 * * *}"
+  check_only: $(if [[ ${SELF_UPDATE_CHECK_ONLY:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  playbook: "playbooks/setup-targets.yml"
+  log_file: "/var/log/ansible-pull.log"
+EOAP
+fi)
 
 # Target: Virtualization
 target_virtualization:
@@ -1243,9 +1234,6 @@ service_discovery:
       - name: "Netdata"
         type: "http"
         port: "{{ target_netdata.port }}"
-      - name: "Grafana"
-        type: "http"
-        port: "{{ target_logging.grafana.port }}"
       - name: "SSH"
         type: "port"
         port: 22
@@ -1333,9 +1321,6 @@ vault_uptime_kuma_credentials:
 # Monitoring & Observability
 vault_netdata_claim_token: "${NETDATA_CLAIM_TOKEN}"
 vault_netdata_stream_api_key: "${NETDATA_STREAM_API_KEY:-11111111-2222-3333-4444-555555555555}"
-
-# Grafana Admin Password
-vault_grafana_admin_password: "${GRAFANA_ADMIN_PASSWORD:-admin}"
 
 # Control Node Grafana (for centralized monitoring)
 vault_control_grafana_password: "${CONTROL_GRAFANA_PASSWORD:-admin}"
@@ -1493,11 +1478,10 @@ run_playbook() {
         echo "Services to be configured:"
         if [[ $ENABLE_DOCKGE =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Dockge (Container Management)"; fi
         if [[ $ENABLE_NETDATA =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Netdata (Monitoring)"; fi
-        if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Loki + Promtail + Grafana (Logging)"; fi
+        if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Promtail (Log Collection)"; fi
         if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Restic Backups"; fi
         if [[ $ENABLE_FAIL2BAN =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - fail2ban (Security)"; fi
         if [[ $ENABLE_UFW =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - UFW Firewall"; fi
-        if [[ ${ENABLE_UPTIME_KUMA:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - Uptime Kuma (Monitoring)"; fi
         if [[ ${ENABLE_SYSTEM_USERS:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - System Users (Admin Account)"; fi
         if [[ ${ENABLE_LVM_CONFIG:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - LVM Config (Disk Management)"; fi
         if [[ ${ENABLE_NAS:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  - NAS Mounts (Network Storage)"; fi
@@ -1581,11 +1565,15 @@ offer_control_node_setup() {
         CONTROL_NODE_IP=${CONTROL_NODE_IP:-$control_ip}
 
         echo
-        echo "  Send logs from all servers to one central location?"
+        echo "  Centralized log collection streams all server logs (Docker, system, apps)"
+        echo "  to Loki on this control node. View all logs in one Grafana dashboard."
         read -p "Enable centralized log collection? (Y/n): " -r ENABLE_CENTRAL_LOKI
         ENABLE_CENTRAL_LOKI=${ENABLE_CENTRAL_LOKI:-y}
 
-        echo "  Send metrics from all servers to one central dashboard?"
+        echo
+        echo "  Centralized metrics streaming sends CPU, memory, disk, and network data"
+        echo "  from all servers to a parent Netdata on this control node. View all"
+        echo "  server health metrics in one dashboard."
         read -p "Enable centralized metrics dashboard? (Y/n): " -r ENABLE_CENTRAL_NETDATA
         ENABLE_CENTRAL_NETDATA=${ENABLE_CENTRAL_NETDATA:-y}
 
@@ -1596,7 +1584,10 @@ offer_control_node_setup() {
         fi
 
         # Generate control node Grafana password
-        echo "  Set a password for the central Grafana dashboard (username: admin)"
+        echo
+        echo "  Grafana is your central dashboard for viewing logs and metrics from all servers."
+        echo "  Set a password for the admin account (username: admin)."
+        echo "  Press Enter to auto-generate a secure password."
         read -sp "Central Grafana admin password [auto-generate]: " CONTROL_GRAFANA_PASSWORD
         echo
         if [[ -z "$CONTROL_GRAFANA_PASSWORD" ]]; then
@@ -2000,12 +1991,14 @@ update_vault_for_control_services() {
     local vault_file="group_vars/vault.yml"
     local vault_password_file=".vault_password"
 
-    # Only proceed if any control node services are enabled
+    # Only proceed if any control node services or centralized monitoring is enabled
     if [[ ! ${ENABLE_DNS:-n} =~ ^[Yy]([Ee][Ss])?$ ]] && \
        [[ ! ${ENABLE_REVERSE_PROXY:-n} =~ ^[Yy]([Ee][Ss])?$ ]] && \
        [[ ! ${ENABLE_AUTHENTIK:-n} =~ ^[Yy]([Ee][Ss])?$ ]] && \
        [[ ! ${ENABLE_STEP_CA:-n} =~ ^[Yy]([Ee][Ss])?$ ]] && \
-       [[ ! ${ENABLE_SEMAPHORE:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+       [[ ! ${ENABLE_SEMAPHORE:-n} =~ ^[Yy]([Ee][Ss])?$ ]] && \
+       [[ ! ${ENABLE_CENTRAL_NETDATA:-n} =~ ^[Yy]([Ee][Ss])?$ ]] && \
+       [[ ! ${ENABLE_CENTRAL_LOKI:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
         return 0
     fi
 
@@ -2087,6 +2080,24 @@ vault_cloudflare_credentials:
 EOF
     fi
 
+    # Centralized monitoring secrets (Netdata streaming, Grafana)
+    if [[ ${ENABLE_CENTRAL_NETDATA:-n} =~ ^[Yy]([Ee][Ss])?$ ]] || [[ -n "${NETDATA_STREAM_API_KEY:-}" ]]; then
+        cat >> "$temp_vault" <<EOF
+# Netdata Stream API Key - used for parent-child streaming
+# Target Netdata instances use this key to authenticate when streaming to the control node
+vault_netdata_stream_api_key: "${NETDATA_STREAM_API_KEY}"
+
+EOF
+    fi
+
+    if [[ -n "${CONTROL_GRAFANA_PASSWORD:-}" ]]; then
+        cat >> "$temp_vault" <<EOF
+# Central Grafana admin password (overrides the default from initial setup)
+vault_control_grafana_password: "${CONTROL_GRAFANA_PASSWORD}"
+
+EOF
+    fi
+
     # Re-encrypt the vault
     if ansible-vault encrypt "$temp_vault" --vault-password-file="$vault_password_file" --output="$vault_file"; then
         print_success "Vault updated with control node service secrets"
@@ -2117,7 +2128,6 @@ show_completion_message() {
             # Use default ports for re-runs
             echo -e "  ${GREEN}Dockge:${NC}      http://${host_ip}:5001"
             echo -e "  ${GREEN}Netdata:${NC}     http://${host_ip}:19999"
-            echo -e "  ${GREEN}Grafana:${NC}     http://${host_ip}:3000"
         else
             if [[ ${ENABLE_DOCKGE:-} =~ ^[Yy]([Ee][Ss])?$ ]]; then
                 echo -e "  ${GREEN}Dockge:${NC}      http://${host_ip}:${DOCKGE_PORT:-5001}"
@@ -2126,11 +2136,7 @@ show_completion_message() {
                 echo -e "  ${GREEN}Netdata:${NC}     http://${host_ip}:${NETDATA_PORT:-19999}"
             fi
             if [[ ${ENABLE_LOGGING:-} =~ ^[Yy]([Ee][Ss])?$ ]]; then
-                echo -e "  ${GREEN}Grafana:${NC}     http://${host_ip}:${GRAFANA_PORT:-3000}"
-                echo -e "  ${GREEN}Loki:${NC}        http://${host_ip}:${LOKI_PORT:-3100}"
-            fi
-            if [[ ${ENABLE_UPTIME_KUMA:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
-                echo -e "  ${GREEN}Uptime Kuma:${NC} http://${host_ip}:${UPTIME_KUMA_PORT:-3001}"
+                echo -e "  ${GREEN}Promtail:${NC}    (streaming logs to control node)"
             fi
         fi
         echo
@@ -2162,16 +2168,13 @@ show_completion_message() {
     fi
 
     # Show generated passwords if any
-    if [[ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]] || [[ -n "${DOCKGE_ADMIN_PASSWORD:-}" ]] || [[ -n "${CONTROL_GRAFANA_PASSWORD:-}" ]]; then
+    if [[ -n "${DOCKGE_ADMIN_PASSWORD:-}" ]] || [[ -n "${CONTROL_GRAFANA_PASSWORD:-}" ]]; then
         echo -e "${BOLD}Generated Credentials (save these!):${NC}"
         if [[ -n "${DOCKGE_ADMIN_PASSWORD:-}" ]]; then
             echo -e "  ${YELLOW}Dockge:${NC}          admin / ${DOCKGE_ADMIN_PASSWORD}"
         fi
-        if [[ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]]; then
-            echo -e "  ${YELLOW}Grafana:${NC}         admin / ${GRAFANA_ADMIN_PASSWORD}"
-        fi
         if [[ -n "${CONTROL_GRAFANA_PASSWORD:-}" ]]; then
-            echo -e "  ${YELLOW}Central Grafana:${NC} admin / ${CONTROL_GRAFANA_PASSWORD}"
+            echo -e "  ${YELLOW}Grafana:${NC}         admin / ${CONTROL_GRAFANA_PASSWORD}"
         fi
         echo
         print_warning "These passwords are stored encrypted in group_vars/vault.yml"
