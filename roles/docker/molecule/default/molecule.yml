@@ -17,6 +17,9 @@ platforms:
     command: /lib/systemd/systemd
 provisioner:
   name: ansible
+  config_options:
+    defaults:
+      roles_path: ../../..
   playbooks:
     converge: converge.yml
     verify: verify.yml
