@@ -84,7 +84,7 @@
           - curl
           - wget
           - git
-          - vim
+          - nano
           - htop
           - python3
           - python3-apt
