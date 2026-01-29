@@ -36,3 +36,14 @@ provisioner:
         vault_control_grafana_password: "test-password"
 verifier:
   name: ansible
+scenario:
+  test_sequence:
+    - dependency
+    - destroy
+    - syntax
+    - create
+    - prepare
+    - converge
+    - idempotence
+    - verify
+    - destroy
