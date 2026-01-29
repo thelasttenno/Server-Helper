@@ -8,9 +8,11 @@
         name: docker
         state: present
 
-    - name: Install Docker CLI (for docker group to be meaningful)
+    - name: Install Docker and compose plugin
       ansible.builtin.apt:
-        name: docker.io
+        name:
+          - docker.io
+          - docker-compose-v2
         state: present
         update_cache: true
       when: ansible_os_family == "Debian"
