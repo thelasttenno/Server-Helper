@@ -70,15 +70,9 @@ The setup wizard will:
 ### Option 2: Manual Setup
 
 ```bash
-# Install system dependencies
+# Install system dependencies and Ansible
 sudo apt update
-sudo apt install -y python3 python3-pip python3-venv git curl
-
-# Install Ansible
-pip3 install --user ansible ansible-lint
-
-# Add to PATH (add to ~/.bashrc for persistence)
-export PATH="$HOME/.local/bin:$PATH"
+sudo apt install -y python3 python3-pip git curl ansible ansible-lint
 
 # Clone repository
 git clone https://github.com/yourusername/server-helper.git

@@ -9,7 +9,8 @@
 #
 # Dependencies:
 #   - scripts/lib/ui_utils.sh (required)
-#   - molecule (pip install molecule molecule-docker)
+#   - molecule (not in apt, use pipx for PEP 668 compliance)
+#     Install: pipx install molecule && pipx inject molecule molecule-plugins[docker]
 #   - Docker daemon running
 #
 
@@ -46,7 +47,11 @@ testing_check_dependencies() {
 
     if ! command -v molecule &>/dev/null; then
         print_error "Molecule is not installed"
-        echo "Install with: pip install molecule molecule-docker"
+        echo "Install via pipx (PEP 668 compliant):"
+        echo "  sudo apt install pipx"
+        echo "  pipx install molecule"
+        echo "  pipx inject molecule molecule-plugins[docker]"
+        echo "  pipx ensurepath  # if molecule command not found"
         ((missing++))
     fi
 

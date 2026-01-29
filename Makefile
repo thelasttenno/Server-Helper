@@ -70,8 +70,12 @@ help:
 
 install-test-deps:
 	@echo "Installing test dependencies..."
-	pip install -r requirements-test.txt
-	@echo "Done!"
+	@echo "Installing apt packages..."
+	@sudo apt-get install -y -qq pipx python3-pytest python3-docker yamllint ansible-lint || true
+	@echo "Installing molecule via pipx (PEP 668 compliant)..."
+	pipx install molecule || pipx upgrade molecule
+	pipx inject molecule molecule-plugins[docker] pytest-testinfra
+	@echo "Done! Run 'pipx ensurepath' if molecule command is not found."
 
 test:
 	@./scripts/test-all-roles.sh

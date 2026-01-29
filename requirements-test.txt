@@ -1,6 +1,9 @@
 # Server Helper - Test Dependencies
 # ==================================
-# Install with: pip install -r requirements-test.txt
+# WARNING: Ubuntu 24.04+ blocks pip installs (PEP 668). Use pipx:
+#   pipx install molecule
+#   pipx inject molecule molecule-plugins[docker] pytest-testinfra
+# Or use: make install-test-deps
 
 # Molecule - Ansible role testing framework
 molecule>=6.0.0
