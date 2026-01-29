@@ -5,6 +5,9 @@
 # Master toggle (from target_dockge config)
 dockge_enabled: "{{ target_dockge.enabled | default(true) }}"
 
+# Skip actual Docker deployment (for molecule testing)
+dockge_skip_deploy: false
+
 # Container settings
 dockge_container_name: "dockge"
 dockge_image: "louislam/dockge"

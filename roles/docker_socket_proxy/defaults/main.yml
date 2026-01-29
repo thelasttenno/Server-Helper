@@ -5,6 +5,9 @@
 # Master toggle
 docker_socket_proxy_enabled: true
 
+# Skip actual Docker deployment (for molecule testing)
+docker_socket_proxy_skip_deploy: false
+
 # Container settings
 docker_socket_proxy_container_name: "docker-socket-proxy"
 docker_socket_proxy_image: "tecnativa/docker-socket-proxy"

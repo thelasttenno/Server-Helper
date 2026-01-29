@@ -4,6 +4,9 @@
 # Master toggle (from target_watchtower config)
 watchtower_enabled: "{{ target_watchtower.enabled | default(false) }}"
 
+# Skip actual Docker deployment (for molecule testing)
+watchtower_skip_deploy: false
+
 # Container name
 watchtower_container_name: "watchtower"
 

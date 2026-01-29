@@ -43,7 +43,9 @@
         state: present
         pull: always
       become: true
-      when: promtail_compose.changed or promtail_config.changed
+      when:
+        - not promtail_skip_deploy | default(false)
+        - promtail_compose.changed or promtail_config.changed
 
     # Ensure Promtail is running
     - name: Ensure Promtail is running
@@ -51,4 +53,6 @@
         project_src: "{{ promtail_stack_dir }}"
         state: present
       become: true
-      when: not (promtail_compose.changed or promtail_config.changed)
+      when:
+        - not promtail_skip_deploy | default(false)
+        - not (promtail_compose.changed or promtail_config.changed)

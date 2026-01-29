@@ -4,6 +4,9 @@
 # Master toggle (from control_step_ca config)
 step_ca_enabled: "{{ control_step_ca.enabled | default(true) }}"
 
+# Skip actual Docker deployment (for molecule testing)
+step_ca_skip_deploy: false
+
 # Container settings
 step_ca_container_name: "step-ca"
 step_ca_image: "smallstep/step-ca"

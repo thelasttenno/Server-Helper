@@ -33,6 +33,7 @@ provisioner:
           port: 9443
           ca_name: "Test CA"
         vault_step_ca_password: "test-ca-password"
+        step_ca_skip_deploy: true  # Skip docker compose in DinD tests
 verifier:
   name: ansible
 scenario:

@@ -34,6 +34,7 @@ provisioner:
           version: "latest"
           oidc_enabled: false
         vault_control_grafana_password: "test-password"
+        grafana_skip_deploy: true  # Skip docker compose in DinD tests
 verifier:
   name: ansible
 scenario:

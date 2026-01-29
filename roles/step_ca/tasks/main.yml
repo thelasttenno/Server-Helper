@@ -75,7 +75,10 @@
         entrypoint: ["/bin/bash", "/init-ca.sh"]
         user: "0:0"
       become: true
-      when: not ca_config_stat.stat.exists and step_ca_init_enabled | bool
+      when:
+        - not step_ca_skip_deploy | default(false)
+        - not ca_config_stat.stat.exists
+        - step_ca_init_enabled | bool
 
     # Deploy docker-compose file
     - name: Deploy Step-CA docker-compose
@@ -95,7 +98,9 @@
         state: present
         pull: always
       become: true
-      when: step_ca_compose.changed
+      when:
+        - not step_ca_skip_deploy | default(false)
+        - step_ca_compose.changed
 
     # Ensure Step-CA is running
     - name: Ensure Step-CA is running
@@ -103,7 +108,9 @@
         project_src: "{{ step_ca_stack_dir }}"
         state: present
       become: true
-      when: not step_ca_compose.changed
+      when:
+        - not step_ca_skip_deploy | default(false)
+        - not step_ca_compose.changed
 
     # Wait for Step-CA to be ready
     - name: Wait for Step-CA to be ready
@@ -116,6 +123,7 @@
       until: step_ca_health.status == 200
       retries: 30
       delay: 2
+      when: not step_ca_skip_deploy | default(false)
 
     # Copy root CA to shared location
     - name: Copy root CA certificate
@@ -127,6 +135,7 @@
         group: docker
         mode: "0644"
       become: true
+      when: not step_ca_skip_deploy | default(false)
 
     # Deploy setup guide
     - name: Deploy Step-CA setup guide

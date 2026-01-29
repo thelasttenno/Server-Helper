@@ -35,6 +35,7 @@ provisioner:
           admin_password: "test-password"
           secret_key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
           postgres_password: "test-postgres-password"
+        authentik_skip_deploy: true  # Skip docker compose in DinD tests
 verifier:
   name: ansible
 scenario:

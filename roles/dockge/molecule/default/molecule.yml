@@ -34,6 +34,7 @@ provisioner:
         vault_dockge_credentials:
           username: "admin"
           password: "test-password"
+        dockge_skip_deploy: true  # Skip docker compose in DinD tests
 verifier:
   name: ansible
 scenario:

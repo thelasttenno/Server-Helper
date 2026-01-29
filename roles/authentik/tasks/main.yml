@@ -59,7 +59,9 @@
         state: present
         pull: always
       become: true
-      when: authentik_compose.changed
+      when:
+        - not authentik_skip_deploy | default(false)
+        - authentik_compose.changed
 
     # Ensure Authentik is running
     - name: Ensure Authentik is running
@@ -67,7 +69,9 @@
         project_src: "{{ authentik_stack_dir }}"
         state: present
       become: true
-      when: not authentik_compose.changed
+      when:
+        - not authentik_skip_deploy | default(false)
+        - not authentik_compose.changed
 
     # Wait for Authentik to be ready
     - name: Wait for Authentik to be ready
@@ -79,6 +83,7 @@
       until: authentik_health.status == 200
       retries: 60
       delay: 5
+      when: not authentik_skip_deploy | default(false)
 
     # Deploy setup guide
     - name: Deploy Authentik setup guide

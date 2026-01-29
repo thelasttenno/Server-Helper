@@ -36,6 +36,7 @@ provisioner:
         vault_traefik_dashboard:
           username: "admin"
           password: "test-password"
+        traefik_skip_deploy: true  # Skip docker compose in DinD tests
 verifier:
   name: ansible
 scenario:

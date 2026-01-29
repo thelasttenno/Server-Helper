@@ -31,6 +31,7 @@ provisioner:
           version: "2.9.0"
           port: 3100
           retention_period: "744h"
+        loki_skip_deploy: true  # Skip docker compose in DinD tests
 verifier:
   name: ansible
 scenario:

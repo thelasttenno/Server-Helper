@@ -32,6 +32,7 @@ provisioner:
           pihole_port: 8053
           dns_port: 5353  # Non-standard to avoid conflicts
         vault_pihole_password: "test-password"
+        pihole_skip_deploy: true  # Skip docker compose in DinD tests
 verifier:
   name: ansible
 scenario:

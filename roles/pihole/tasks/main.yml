@@ -108,7 +108,9 @@
         state: present
         pull: always
       become: true
-      when: pihole_compose.changed
+      when:
+        - not pihole_skip_deploy | default(false)
+        - pihole_compose.changed
 
     # Ensure Pi-hole is running
     - name: Ensure Pi-hole is running
@@ -116,7 +118,9 @@
         project_src: "{{ pihole_stack_dir }}"
         state: present
       become: true
-      when: not pihole_compose.changed
+      when:
+        - not pihole_skip_deploy | default(false)
+        - not pihole_compose.changed
 
     # Wait for Pi-hole to be ready
     - name: Wait for Pi-hole web interface
@@ -128,6 +132,7 @@
       until: pihole_health.status in [200, 302]
       retries: 30
       delay: 2
+      when: not pihole_skip_deploy | default(false)
 
     # Set up gravity (blocklists)
     - name: Update Pi-hole gravity
@@ -135,7 +140,9 @@
         container: "{{ pihole_container_name }}"
         command: pihole -g
       become: true
-      when: pihole_compose.changed
+      when:
+        - not pihole_skip_deploy | default(false)
+        - pihole_compose.changed
       async: 300
       poll: 0
 

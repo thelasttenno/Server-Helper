@@ -32,7 +32,9 @@
         state: present
         pull: always
       become: true
-      when: watchtower_compose.changed
+      when:
+        - not watchtower_skip_deploy | default(false)
+        - watchtower_compose.changed
 
     # Ensure Watchtower is running
     - name: Ensure Watchtower is running
@@ -40,4 +42,6 @@
         project_src: "{{ watchtower_stack_dir }}"
         state: present
       become: true
-      when: not watchtower_compose.changed
+      when:
+        - not watchtower_skip_deploy | default(false)
+        - not watchtower_compose.changed

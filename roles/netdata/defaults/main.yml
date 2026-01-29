@@ -4,6 +4,9 @@
 # Master toggle (from target_netdata config for targets, control_netdata for control)
 netdata_enabled: "{{ target_netdata.enabled | default(control_netdata.enabled | default(true)) }}"
 
+# Skip actual Docker deployment (for molecule testing)
+netdata_skip_deploy: false
+
 # Deployment mode: "parent" (control node) or "child" (target nodes)
 netdata_mode: "{{ control_netdata.mode | default('child') }}"
 

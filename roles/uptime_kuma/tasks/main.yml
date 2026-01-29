@@ -42,7 +42,9 @@
         state: present
         pull: always
       become: true
-      when: uptime_kuma_compose.changed
+      when:
+        - not uptime_kuma_skip_deploy | default(false)
+        - uptime_kuma_compose.changed
 
     # Ensure Uptime Kuma is running
     - name: Ensure Uptime Kuma is running
@@ -50,7 +52,9 @@
         project_src: "{{ uptime_kuma_stack_dir }}"
         state: present
       become: true
-      when: not uptime_kuma_compose.changed
+      when:
+        - not uptime_kuma_skip_deploy | default(false)
+        - not uptime_kuma_compose.changed
 
     # Wait for Uptime Kuma to be ready
     - name: Wait for Uptime Kuma to be ready
@@ -62,6 +66,7 @@
       until: uptime_kuma_health.status in [200, 302]
       retries: 30
       delay: 2
+      when: not uptime_kuma_skip_deploy | default(false)
 
     # Deploy setup guide
     - name: Deploy Uptime Kuma setup guide

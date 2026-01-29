@@ -4,6 +4,9 @@
 # Master toggle (from control_loki config)
 loki_enabled: "{{ control_loki.enabled | default(true) }}"
 
+# Skip actual Docker deployment (for molecule testing)
+loki_skip_deploy: false
+
 # Container settings
 loki_container_name: "loki"
 loki_image: "grafana/loki"

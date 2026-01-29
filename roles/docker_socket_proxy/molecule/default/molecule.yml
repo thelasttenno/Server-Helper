@@ -29,6 +29,7 @@ provisioner:
         target_docker_proxy:
           enabled: true
           port: 2375
+        docker_socket_proxy_skip_deploy: true  # Skip docker compose in DinD tests
 verifier:
   name: ansible
 scenario:

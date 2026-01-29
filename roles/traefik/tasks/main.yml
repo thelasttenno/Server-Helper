@@ -34,6 +34,7 @@
         name: "{{ traefik_docker_network }}"
         state: present
       become: true
+      when: not traefik_skip_deploy | default(false)
 
     # Deploy static configuration
     - name: Deploy Traefik static configuration
@@ -86,7 +87,9 @@
         state: present
         pull: always
       become: true
-      when: traefik_compose.changed or traefik_static_config.changed
+      when:
+        - not traefik_skip_deploy | default(false)
+        - traefik_compose.changed or traefik_static_config.changed
 
     # Ensure Traefik is running
     - name: Ensure Traefik is running
@@ -94,7 +97,9 @@
         project_src: "{{ traefik_stack_dir }}"
         state: present
       become: true
-      when: not (traefik_compose.changed or traefik_static_config.changed)
+      when:
+        - not traefik_skip_deploy | default(false)
+        - not (traefik_compose.changed or traefik_static_config.changed)
 
     # Wait for Traefik to be ready
     - name: Wait for Traefik to be ready
@@ -106,4 +111,6 @@
       until: traefik_health.status == 200
       retries: 30
       delay: 2
-      when: traefik_api_enabled | bool
+      when:
+        - not traefik_skip_deploy | default(false)
+        - traefik_api_enabled | bool

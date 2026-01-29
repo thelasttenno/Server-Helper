@@ -53,7 +53,9 @@
         state: present
         pull: always
       become: true
-      when: loki_compose.changed or loki_config.changed
+      when:
+        - not loki_skip_deploy | default(false)
+        - loki_compose.changed or loki_config.changed
 
     # Ensure Loki is running
     - name: Ensure Loki is running
@@ -61,7 +63,9 @@
         project_src: "{{ loki_stack_dir }}"
         state: present
       become: true
-      when: not (loki_compose.changed or loki_config.changed)
+      when:
+        - not loki_skip_deploy | default(false)
+        - not (loki_compose.changed or loki_config.changed)
 
     # Wait for Loki to be ready
     - name: Wait for Loki to be ready
@@ -73,3 +77,4 @@
       until: loki_health.status == 200
       retries: 30
       delay: 2
+      when: not loki_skip_deploy | default(false)

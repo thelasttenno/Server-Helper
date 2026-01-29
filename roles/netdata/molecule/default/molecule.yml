@@ -32,6 +32,7 @@ provisioner:
         target_netdata:
           enabled: true
           version: "stable"
+        netdata_skip_deploy: true  # Skip docker compose in DinD tests
 verifier:
   name: ansible
 scenario:

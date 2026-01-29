@@ -84,7 +84,9 @@
         state: present
         pull: always
       become: true
-      when: netdata_compose.changed
+      when:
+        - not netdata_skip_deploy | default(false)
+        - netdata_compose.changed
 
     # Ensure Netdata is running
     - name: Ensure Netdata is running
@@ -92,7 +94,9 @@
         project_src: "{{ netdata_stack_dir }}"
         state: present
       become: true
-      when: not netdata_compose.changed
+      when:
+        - not netdata_skip_deploy | default(false)
+        - not netdata_compose.changed
 
     # Claim to Netdata Cloud (optional)
     - name: Claim to Netdata Cloud
@@ -104,6 +108,7 @@
           -url={{ netdata_claim_url }}
       become: true
       when:
+        - not netdata_skip_deploy | default(false)
         - netdata_claim_token != ""
         - netdata_claim_rooms != ""
       failed_when: false

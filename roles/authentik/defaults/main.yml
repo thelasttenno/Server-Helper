@@ -4,6 +4,9 @@
 # Master toggle (from control_authentik config)
 authentik_enabled: "{{ control_authentik.enabled | default(true) }}"
 
+# Skip actual Docker deployment (for molecule testing)
+authentik_skip_deploy: false
+
 # Container settings
 authentik_image: "ghcr.io/goauthentik/server"
 authentik_image_tag: "{{ control_authentik.version | default('2024.2') }}"

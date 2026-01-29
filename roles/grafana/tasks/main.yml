@@ -88,7 +88,9 @@
         state: present
         pull: always
       become: true
-      when: grafana_compose.changed or grafana_config.changed or grafana_datasources.changed
+      when:
+        - not grafana_skip_deploy | default(false)
+        - grafana_compose.changed or grafana_config.changed or grafana_datasources.changed
 
     # Ensure Grafana is running
     - name: Ensure Grafana is running
@@ -96,7 +98,9 @@
         project_src: "{{ grafana_stack_dir }}"
         state: present
       become: true
-      when: not (grafana_compose.changed or grafana_config.changed or grafana_datasources.changed)
+      when:
+        - not grafana_skip_deploy | default(false)
+        - not (grafana_compose.changed or grafana_config.changed or grafana_datasources.changed)
 
     # Wait for Grafana to be ready
     - name: Wait for Grafana to be ready
@@ -108,3 +112,4 @@
       until: grafana_health.status == 200
       retries: 30
       delay: 2
+      when: not grafana_skip_deploy | default(false)

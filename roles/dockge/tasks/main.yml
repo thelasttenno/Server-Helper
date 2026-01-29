@@ -52,7 +52,9 @@
         state: present
         pull: always
       become: true
-      when: dockge_compose.changed
+      when:
+        - not dockge_skip_deploy | default(false)
+        - dockge_compose.changed
 
     # Ensure Dockge is running
     - name: Ensure Dockge is running
@@ -60,7 +62,9 @@
         project_src: "{{ dockge_stack_dir }}"
         state: present
       become: true
-      when: not dockge_compose.changed
+      when:
+        - not dockge_skip_deploy | default(false)
+        - not dockge_compose.changed
 
     # Wait for Dockge to be ready
     - name: Wait for Dockge to be ready
@@ -72,3 +76,4 @@
       until: dockge_health.status in [200, 302]
       retries: 30
       delay: 2
+      when: not dockge_skip_deploy | default(false)

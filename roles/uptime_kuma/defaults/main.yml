@@ -4,6 +4,9 @@
 # Master toggle (from control_uptime_kuma config)
 uptime_kuma_enabled: "{{ control_uptime_kuma.enabled | default(true) }}"
 
+# Skip actual Docker deployment (for molecule testing)
+uptime_kuma_skip_deploy: false
+
 # Container settings
 uptime_kuma_container_name: "uptime-kuma"
 uptime_kuma_image: "louislam/uptime-kuma"

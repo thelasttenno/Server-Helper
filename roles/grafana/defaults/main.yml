@@ -4,6 +4,9 @@
 # Master toggle (from control_grafana config)
 grafana_enabled: "{{ control_grafana.enabled | default(true) }}"
 
+# Skip actual Docker deployment (for molecule testing)
+grafana_skip_deploy: false
+
 # Container settings
 grafana_container_name: "grafana"
 grafana_image: "grafana/grafana-oss"

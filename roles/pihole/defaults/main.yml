@@ -4,6 +4,9 @@
 # Master toggle (from control_dns config)
 pihole_enabled: "{{ control_dns.enabled | default(true) }}"
 
+# Skip actual Docker deployment (for molecule testing)
+pihole_skip_deploy: false
+
 # Container settings
 pihole_container_name: "pihole"
 pihole_image: "pihole/pihole"

@@ -4,6 +4,9 @@
 # Master toggle (from control_traefik config)
 traefik_enabled: "{{ control_traefik.enabled | default(true) }}"
 
+# Skip actual Docker deployment (for molecule testing)
+traefik_skip_deploy: false
+
 # Container settings
 traefik_container_name: "traefik"
 traefik_image: "traefik"

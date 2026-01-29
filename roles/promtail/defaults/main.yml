@@ -4,6 +4,9 @@
 # Master toggle (from target_logging.promtail config)
 promtail_enabled: "{{ target_logging.promtail.enabled | default(true) }}"
 
+# Skip actual Docker deployment (for molecule testing)
+promtail_skip_deploy: false
+
 # Container settings
 promtail_container_name: "promtail"
 promtail_image: "grafana/promtail"

@@ -32,7 +32,9 @@
         state: present
         pull: always
       become: true
-      when: docker_socket_proxy_compose.changed
+      when:
+        - not docker_socket_proxy_skip_deploy | default(false)
+        - docker_socket_proxy_compose.changed
 
     # Ensure Docker Socket Proxy is running
     - name: Ensure Docker Socket Proxy is running
@@ -40,7 +42,9 @@
         project_src: "{{ docker_socket_proxy_stack_dir }}"
         state: present
       become: true
-      when: not docker_socket_proxy_compose.changed
+      when:
+        - not docker_socket_proxy_skip_deploy | default(false)
+        - not docker_socket_proxy_compose.changed
 
     # Configure UFW to restrict access to control node only
     - name: Configure UFW rule for Docker Socket Proxy
@@ -51,7 +55,9 @@
         from_ip: "{{ docker_socket_proxy_allowed_ip }}"
         comment: "Docker Socket Proxy - Control Node Only"
       become: true
-      when: security_ufw_enabled | default(true) | bool
+      when:
+        - not docker_socket_proxy_skip_deploy | default(false)
+        - security_ufw_enabled | default(true) | bool
 
     - name: Block Docker Socket Proxy from all other IPs
       community.general.ufw:
@@ -60,7 +66,9 @@
         proto: tcp
         comment: "Docker Socket Proxy - Block Others"
       become: true
-      when: security_ufw_enabled | default(true) | bool
+      when:
+        - not docker_socket_proxy_skip_deploy | default(false)
+        - security_ufw_enabled | default(true) | bool
 
     # Verify the proxy is accessible
     - name: Verify Docker Socket Proxy is responding
@@ -72,6 +80,7 @@
       until: proxy_health.status == 200
       retries: 10
       delay: 2
+      when: not docker_socket_proxy_skip_deploy | default(false)
 
     - name: Display Docker Socket Proxy status
       ansible.builtin.debug:
