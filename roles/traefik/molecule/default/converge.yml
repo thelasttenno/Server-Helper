@@ -1,0 +1,17 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  vars:
+    target_domain: "test.local"
+    control_traefik:
+      enabled: true
+      http_port: 80
+      https_port: 443
+      dashboard_port: 8080
+      version: "v3.0"
+    vault_traefik_dashboard:
+      username: "admin"
+      password: "test-password"
+  roles:
+    - role: traefik

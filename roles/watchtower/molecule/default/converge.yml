@@ -1,0 +1,8 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  vars:
+    watchtower_skip_deploy: true
+  roles:
+    - role: watchtower

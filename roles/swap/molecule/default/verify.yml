@@ -1,0 +1,21 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Check if swap role was skipped
+      ansible.builtin.set_fact:
+        swap_was_skipped: "{{ swap_skip | default(false) }}"
+
+    - name: Check swapfile exists (if not skipped)
+      ansible.builtin.stat:
+        path: /swapfile
+      register: swapfile
+      when: not swap_was_skipped
+
+    - name: Verify sysctl swappiness is configured
+      ansible.builtin.command: sysctl vm.swappiness
+      register: swappiness
+      changed_when: false
+      failed_when: "'10' not in swappiness.stdout"
+      when: not swap_was_skipped

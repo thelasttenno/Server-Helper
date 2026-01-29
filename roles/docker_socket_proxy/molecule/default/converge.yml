@@ -1,0 +1,10 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  vars:
+    target_docker_proxy:
+      enabled: true
+      port: 2375
+  roles:
+    - role: docker_socket_proxy

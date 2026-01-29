@@ -1,0 +1,33 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Check common packages are installed
+      ansible.builtin.package:
+        name: "{{ item }}"
+        state: present
+      check_mode: true
+      register: pkg_check
+      failed_when: pkg_check.changed
+      loop:
+        - curl
+        - wget
+        - htop
+        - vim
+        - git
+        - jq
+
+    - name: Check chrony is running
+      ansible.builtin.service:
+        name: chrony
+        state: started
+      check_mode: true
+      register: chrony_check
+      failed_when: chrony_check.changed
+
+    - name: Verify sysctl config exists
+      ansible.builtin.stat:
+        path: /etc/sysctl.d/99-server-helper.conf
+      register: sysctl_file
+      failed_when: not sysctl_file.stat.exists

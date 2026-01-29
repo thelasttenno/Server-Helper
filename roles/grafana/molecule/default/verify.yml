@@ -1,0 +1,22 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Check stack directory exists
+      ansible.builtin.stat:
+        path: /opt/stacks/grafana
+      register: stack_dir
+      failed_when: not stack_dir.stat.exists
+
+    - name: Check compose file exists
+      ansible.builtin.stat:
+        path: /opt/stacks/grafana/compose.yaml
+      register: compose_file
+      failed_when: not compose_file.stat.exists
+
+    - name: Check grafana.ini exists
+      ansible.builtin.stat:
+        path: /opt/stacks/grafana/config/grafana.ini
+      register: grafana_ini
+      failed_when: not grafana_ini.stat.exists

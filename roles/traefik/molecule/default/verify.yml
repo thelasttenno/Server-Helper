@@ -1,0 +1,28 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Check stack directory exists
+      ansible.builtin.stat:
+        path: /opt/stacks/traefik
+      register: stack_dir
+      failed_when: not stack_dir.stat.exists
+
+    - name: Check compose file exists
+      ansible.builtin.stat:
+        path: /opt/stacks/traefik/compose.yaml
+      register: compose_file
+      failed_when: not compose_file.stat.exists
+
+    - name: Check traefik.yml exists
+      ansible.builtin.stat:
+        path: /opt/stacks/traefik/traefik.yml
+      register: traefik_yml
+      failed_when: not traefik_yml.stat.exists
+
+    - name: Check dynamic config exists
+      ansible.builtin.stat:
+        path: /opt/stacks/traefik/config/dynamic-config.yml
+      register: dynamic_conf
+      failed_when: not dynamic_conf.stat.exists

@@ -1,0 +1,10 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  vars:
+    common_upgrade_packages: false
+    common_microcode_enabled: false
+    common_set_hostname: false
+  roles:
+    - role: common

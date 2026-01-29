@@ -1,0 +1,22 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Check stack directory exists
+      ansible.builtin.stat:
+        path: /opt/stacks/step-ca
+      register: stack_dir
+      failed_when: not stack_dir.stat.exists
+
+    - name: Check compose file exists
+      ansible.builtin.stat:
+        path: /opt/stacks/step-ca/compose.yaml
+      register: compose_file
+      failed_when: not compose_file.stat.exists
+
+    - name: Check init script exists
+      ansible.builtin.stat:
+        path: /opt/stacks/step-ca/scripts/init-ca.sh
+      register: init_script
+      failed_when: not init_script.stat.exists

@@ -1,0 +1,22 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Check restic is installed
+      ansible.builtin.command: restic version
+      register: restic_version
+      changed_when: false
+      failed_when: restic_version.rc != 0
+
+    - name: Check backup script exists
+      ansible.builtin.stat:
+        path: /usr/local/bin/restic-backup.sh
+      register: backup_script
+      failed_when: not backup_script.stat.exists
+
+    - name: Check systemd timer exists
+      ansible.builtin.stat:
+        path: /etc/systemd/system/restic-backup.timer
+      register: backup_timer
+      failed_when: not backup_timer.stat.exists

@@ -59,7 +59,11 @@ testing_check_dependencies() {
         print_error "Docker is not installed"
         ((missing++))
     elif ! docker info &>/dev/null 2>&1; then
-        print_error "Docker daemon is not running"
+        if groups | grep -q docker; then
+            print_error "Docker daemon is not running"
+        else
+            print_error "User not in docker group. Run: sudo usermod -aG docker \$USER && newgrp docker"
+        fi
         ((missing++))
     fi
 

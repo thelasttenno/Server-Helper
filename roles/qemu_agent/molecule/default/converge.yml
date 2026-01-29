@@ -1,0 +1,8 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  vars:
+    qemu_agent_skip: true  # Skip in container - no QEMU
+  roles:
+    - role: qemu_agent

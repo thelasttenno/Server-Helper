@@ -1,0 +1,26 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: docker
+platforms:
+  - name: instance
+    image: geerlingguy/docker-ubuntu2404-ansible
+    pre_build_image: true
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - /var/run/docker.sock:/var/run/docker.sock
+    cgroupns_mode: host
+    command: /lib/systemd/systemd
+provisioner:
+  name: ansible
+  playbooks:
+    converge: converge.yml
+    verify: verify.yml
+  inventory:
+    host_vars:
+      instance:
+        watchtower_skip_deploy: true  # Just test template generation
+verifier:
+  name: ansible

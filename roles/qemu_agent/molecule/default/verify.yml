@@ -1,0 +1,8 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Verify role completed (skip mode)
+      ansible.builtin.debug:
+        msg: "QEMU agent role completed in skip mode (no QEMU in container)"

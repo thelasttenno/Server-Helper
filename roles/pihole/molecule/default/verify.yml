@@ -1,0 +1,22 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Check stack directory exists
+      ansible.builtin.stat:
+        path: /opt/stacks/pihole
+      register: stack_dir
+      failed_when: not stack_dir.stat.exists
+
+    - name: Check compose file exists
+      ansible.builtin.stat:
+        path: /opt/stacks/pihole/compose.yaml
+      register: compose_file
+      failed_when: not compose_file.stat.exists
+
+    - name: Check unbound config exists
+      ansible.builtin.stat:
+        path: /opt/stacks/pihole/unbound/unbound.conf
+      register: unbound_conf
+      failed_when: not unbound_conf.stat.exists
