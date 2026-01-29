@@ -1,0 +1,43 @@
+---
+# Watchtower deployment tasks
+
+- name: Watchtower deployment
+  when: watchtower_enabled | bool
+  block:
+    # Create stack directory
+    - name: Create Watchtower stack directory
+      ansible.builtin.file:
+        path: "{{ watchtower_stack_dir }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0755"
+      become: true
+
+    # Deploy docker-compose file
+    - name: Deploy Watchtower docker-compose
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ watchtower_stack_dir }}/compose.yaml"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+      register: watchtower_compose
+
+    # Deploy the stack
+    - name: Deploy Watchtower stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ watchtower_stack_dir }}"
+        state: present
+        pull: always
+      become: true
+      when: watchtower_compose.changed
+
+    # Ensure Watchtower is running
+    - name: Ensure Watchtower is running
+      community.docker.docker_compose_v2:
+        project_src: "{{ watchtower_stack_dir }}"
+        state: present
+      become: true
+      when: not watchtower_compose.changed

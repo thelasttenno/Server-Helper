@@ -1,0 +1,90 @@
+---
+# Traefik role defaults (Control Node)
+
+# Master toggle
+traefik_enabled: true
+
+# Container settings
+traefik_container_name: "traefik"
+traefik_image: "traefik"
+traefik_image_tag: "v3.0"
+
+# Stack directory (Dockge compatible)
+traefik_stack_dir: "/opt/stacks/traefik"
+
+# Network ports
+traefik_http_port: 80
+traefik_https_port: 443
+traefik_dashboard_port: 8080
+
+# Dashboard settings
+traefik_dashboard_enabled: true
+traefik_dashboard_insecure: false  # Set true for local dev only
+
+# API settings
+traefik_api_enabled: true
+
+# Log level: DEBUG, INFO, WARN, ERROR
+traefik_log_level: "INFO"
+
+# Access logs
+traefik_access_log_enabled: true
+
+# Docker provider
+traefik_docker_provider_enabled: true
+traefik_docker_network: "traefik-public"
+traefik_docker_exposedbydefault: false
+
+# File provider for dynamic config
+traefik_file_provider_enabled: true
+
+# ACME/Let's Encrypt settings
+traefik_acme_enabled: true
+traefik_acme_email: "{{ target_acme_email | default('admin@example.com') }}"
+traefik_acme_storage: "/letsencrypt/acme.json"
+traefik_acme_ca_server: "https://acme-v02.api.letsencrypt.org/directory"
+# Use staging for testing: https://acme-staging-v02.api.letsencrypt.org/directory
+
+# DNS challenge for wildcard certs (optional)
+traefik_acme_dns_challenge_enabled: false
+traefik_acme_dns_provider: ""  # cloudflare, route53, etc.
+traefik_acme_dns_env_vars: {}
+
+# HTTP challenge (default)
+traefik_acme_http_challenge_enabled: true
+
+# Internal CA (Step-CA) settings
+traefik_step_ca_enabled: false
+traefik_step_ca_endpoint: "https://step-ca:9000"
+traefik_step_ca_root_ca: "/certs/root_ca.crt"
+
+# TLS settings
+traefik_tls_min_version: "VersionTLS12"
+traefik_tls_cipher_suites: []
+
+# Entrypoints
+traefik_entrypoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: letsencrypt
+
+# Middlewares
+traefik_default_middlewares: []
+
+# Basic auth for dashboard (optional)
+traefik_dashboard_auth_enabled: false
+traefik_dashboard_users: []
+# Example: traefik_dashboard_users: ["admin:$apr1$..."]
+
+# Resource limits
+traefik_memory_limit: "256m"
+traefik_cpu_limit: "0.5"

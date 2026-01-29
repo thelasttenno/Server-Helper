@@ -1,11 +1,27 @@
 ---
-# Dockge Role Default Variables
+# Dockge role defaults (Control Node)
+# Dockge is a Docker Compose stack manager with a web UI
 
-dockge_base_dir: "/opt/dockge"
-dockge_stacks_dir: "{{ dockge_base_dir }}/stacks"
-dockge_data_dir: "{{ dockge_base_dir }}/data"
+# Master toggle
+dockge_enabled: true
 
-dockge:
-  enabled: true
-  port: 5001
-  version: "1"
+# Container settings
+dockge_container_name: "dockge"
+dockge_image: "louislam/dockge"
+dockge_image_tag: "1"
+
+# Stack directory (where Dockge manages other stacks)
+dockge_stacks_dir: "/opt/stacks"
+
+# Dockge's own stack directory
+dockge_stack_dir: "{{ dockge_stacks_dir }}/dockge"
+
+# Network port
+dockge_port: 5001
+
+# Data directory
+dockge_data_dir: "{{ dockge_stack_dir }}/data"
+
+# Resource limits
+dockge_memory_limit: "256m"
+dockge_cpu_limit: "0.5"

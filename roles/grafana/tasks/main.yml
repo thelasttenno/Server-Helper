@@ -1,0 +1,110 @@
+---
+# Grafana deployment tasks (Control Node only)
+
+- name: Grafana deployment
+  when: grafana_enabled | bool
+  block:
+    # Create stack directory
+    - name: Create Grafana stack directory
+      ansible.builtin.file:
+        path: "{{ grafana_stack_dir }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0755"
+      become: true
+
+    # Create provisioning directories
+    - name: Create Grafana provisioning directories
+      ansible.builtin.file:
+        path: "{{ grafana_stack_dir }}/provisioning/{{ item }}"
+        state: directory
+        owner: "472"  # Grafana user inside container
+        group: "472"
+        mode: "0755"
+      loop:
+        - datasources
+        - dashboards
+        - notifiers
+      become: true
+
+    # Create data directory
+    - name: Create Grafana data directory
+      ansible.builtin.file:
+        path: "{{ grafana_stack_dir }}/data"
+        state: directory
+        owner: "472"
+        group: "472"
+        mode: "0755"
+      become: true
+
+    # Deploy grafana.ini
+    - name: Deploy Grafana configuration
+      ansible.builtin.template:
+        src: grafana.ini.j2
+        dest: "{{ grafana_stack_dir }}/grafana.ini"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+      register: grafana_config
+
+    # Deploy datasources provisioning
+    - name: Deploy Grafana datasources provisioning
+      ansible.builtin.template:
+        src: datasources.yml.j2
+        dest: "{{ grafana_stack_dir }}/provisioning/datasources/datasources.yml"
+        owner: "472"
+        group: "472"
+        mode: "0644"
+      become: true
+      register: grafana_datasources
+
+    # Deploy dashboards provisioning
+    - name: Deploy Grafana dashboards provisioning
+      ansible.builtin.template:
+        src: dashboards.yml.j2
+        dest: "{{ grafana_stack_dir }}/provisioning/dashboards/dashboards.yml"
+        owner: "472"
+        group: "472"
+        mode: "0644"
+      become: true
+
+    # Deploy docker-compose file
+    - name: Deploy Grafana docker-compose
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ grafana_stack_dir }}/compose.yaml"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+      register: grafana_compose
+
+    # Deploy the stack
+    - name: Deploy Grafana stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ grafana_stack_dir }}"
+        state: present
+        pull: always
+      become: true
+      when: grafana_compose.changed or grafana_config.changed or grafana_datasources.changed
+
+    # Ensure Grafana is running
+    - name: Ensure Grafana is running
+      community.docker.docker_compose_v2:
+        project_src: "{{ grafana_stack_dir }}"
+        state: present
+      become: true
+      when: not (grafana_compose.changed or grafana_config.changed or grafana_datasources.changed)
+
+    # Wait for Grafana to be ready
+    - name: Wait for Grafana to be ready
+      ansible.builtin.uri:
+        url: "http://localhost:{{ grafana_port }}/api/health"
+        method: GET
+        status_code: 200
+      register: grafana_health
+      until: grafana_health.status == 200
+      retries: 30
+      delay: 2

@@ -1,0 +1,56 @@
+---
+# Watchtower role defaults
+
+# Master toggle
+watchtower_enabled: true
+
+# Container name
+watchtower_container_name: "watchtower"
+
+# Image
+watchtower_image: "containrrr/watchtower"
+watchtower_image_tag: "latest"
+
+# Stacks directory (Dockge compatible)
+watchtower_stack_dir: "/opt/stacks/watchtower"
+
+# Schedule (cron format) - default: 4 AM daily
+watchtower_schedule: "0 0 4 * * *"
+
+# Cleanup old images after update
+watchtower_cleanup: true
+
+# Include stopped containers
+watchtower_include_stopped: false
+
+# Include restarting containers
+watchtower_include_restarting: false
+
+# Rolling restart (update one container at a time)
+watchtower_rolling_restart: false
+
+# Poll interval (seconds) - alternative to schedule
+# watchtower_poll_interval: 86400
+
+# Label filtering - only update containers with specific labels
+watchtower_label_enable: false
+
+# Monitor only (don't update, just notify)
+watchtower_monitor_only: false
+
+# Notifications (optional)
+watchtower_notifications_enabled: false
+watchtower_notification_url: ""  # e.g., discord://webhook_id/webhook_token
+
+# Timeout for container stop (seconds)
+watchtower_stop_timeout: 10
+
+# HTTP API for manual triggers (optional)
+watchtower_http_api_enabled: false
+watchtower_http_api_token: ""
+
+# Revive stopped containers after update
+watchtower_revive_stopped: false
+
+# Lifecycle hooks
+watchtower_lifecycle_hooks: false

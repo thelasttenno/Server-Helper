@@ -1,0 +1,54 @@
+---
+# Promtail deployment tasks
+
+- name: Promtail deployment
+  when: promtail_enabled | bool
+  block:
+    # Create stack directory
+    - name: Create Promtail stack directory
+      ansible.builtin.file:
+        path: "{{ promtail_stack_dir }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0755"
+      become: true
+
+    # Deploy Promtail config
+    - name: Deploy Promtail configuration
+      ansible.builtin.template:
+        src: promtail-config.yml.j2
+        dest: "{{ promtail_stack_dir }}/promtail-config.yml"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+      register: promtail_config
+
+    # Deploy docker-compose file
+    - name: Deploy Promtail docker-compose
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ promtail_stack_dir }}/compose.yaml"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+      register: promtail_compose
+
+    # Deploy the stack
+    - name: Deploy Promtail stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ promtail_stack_dir }}"
+        state: present
+        pull: always
+      become: true
+      when: promtail_compose.changed or promtail_config.changed
+
+    # Ensure Promtail is running
+    - name: Ensure Promtail is running
+      community.docker.docker_compose_v2:
+        project_src: "{{ promtail_stack_dir }}"
+        state: present
+      become: true
+      when: not (promtail_compose.changed or promtail_config.changed)

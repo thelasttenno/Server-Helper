@@ -1,0 +1,6 @@
+# Restic exclude patterns
+# Managed by Ansible - Server Helper
+
+{% for pattern in restic_exclude_patterns %}
+{{ pattern }}
+{% endfor %}

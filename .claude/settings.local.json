@@ -18,7 +18,9 @@
       "Bash(git update-index:*)",
       "Bash(mkdir:*)",
       "Bash(bash:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(findstr:*)",
+      "Bash(grep:*)"
     ]
   }
 }

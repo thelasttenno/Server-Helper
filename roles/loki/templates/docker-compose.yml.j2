@@ -1,0 +1,35 @@
+# Loki - Log aggregation system
+# Managed by Ansible - Server Helper
+# Dockge compatible: /opt/stacks/loki/
+
+services:
+  loki:
+    image: {{ loki_image }}:{{ loki_image_tag }}
+    container_name: {{ loki_container_name }}
+    restart: unless-stopped
+    user: "10001:10001"
+    ports:
+      - "{{ loki_http_port }}:3100"
+      - "{{ loki_grpc_port }}:9096"
+    volumes:
+      - ./loki-config.yml:/etc/loki/local-config.yaml:ro
+      - ./data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    deploy:
+      resources:
+        limits:
+          memory: {{ loki_memory_limit }}
+          cpus: "{{ loki_cpu_limit }}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.loki.rule=Host(`loki.{{ target_domain | default('local') }}`)"
+      - "traefik.http.routers.loki.entrypoints=websecure"
+      - "traefik.http.routers.loki.tls=true"
+      - "traefik.http.services.loki.loadbalancer.server.port=3100"

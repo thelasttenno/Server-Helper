@@ -1,0 +1,21 @@
+#!/bin/bash
+# Lynis Security Scan Script
+# Managed by Ansible - Server Helper
+
+REPORT_DIR="{{ security_lynis_report_dir }}"
+DATE=$(date +%Y%m%d_%H%M%S)
+REPORT_FILE="${REPORT_DIR}/lynis-report-${DATE}.txt"
+
+# Create report directory if needed
+mkdir -p "${REPORT_DIR}"
+
+# Run Lynis audit
+lynis audit system --quiet --no-colors > "${REPORT_FILE}" 2>&1
+
+# Cleanup old reports (keep last 10)
+ls -tp "${REPORT_DIR}"/lynis-report-*.txt 2>/dev/null | tail -n +11 | xargs -r rm --
+
+# Copy latest report to standard location
+cp "${REPORT_FILE}" "${REPORT_DIR}/lynis-report-latest.txt"
+
+echo "Lynis scan complete: ${REPORT_FILE}"

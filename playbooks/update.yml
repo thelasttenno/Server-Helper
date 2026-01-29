@@ -1,130 +1,108 @@
-# Server Helper v1.0.0 - Self-Update Playbook
-# This playbook is run by ansible-pull for automatic updates
-
 ---
-- name: Server Helper Self-Update
-  hosts: localhost
-  connection: local
-  become: yes
-  gather_facts: yes
-  
-  vars:
-    # Override with local configuration if exists
-    config_file: "/opt/ansible/Server-Helper/group_vars/all.yml"
-  
+# Update playbook - System updates and maintenance
+# Performs safe rolling updates across all nodes
+#
+# Usage:
+#   ansible-playbook playbooks/update.yml
+#   ansible-playbook playbooks/update.yml --tags "packages"
+#   ansible-playbook playbooks/update.yml --tags "containers"
+
+- name: Server Helper - System Updates
+  hosts: all
+  become: true
+  gather_facts: true
+  serial: 1  # Rolling updates, one host at a time
+
   pre_tasks:
-    - name: Display update banner
-      debug:
+    - name: Display update information
+      ansible.builtin.debug:
         msg: |
-          ╔════════════════════════════════════════╗
-          ║    Server Helper - Self Update         ║
-          ║    Running via ansible-pull            ║
-          ╚════════════════════════════════════════╝
-    
-    - name: Load local configuration
-      include_vars:
-        file: "{{ config_file }}"
-      when: config_file is file
-      ignore_errors: yes
-    
-    - name: Check current version
-      slurp:
-        src: /etc/server-helper-version.txt
-      register: current_version
-      failed_when: false
-    
-    - name: Display current version
-      debug:
-        msg: "Current version: {{ (current_version.content | b64decode).strip() if current_version.content is defined else 'Unknown' }}"
-  
+          ================================================
+          Updating: {{ inventory_hostname }}
+          ================================================
+
   tasks:
-    # Pull latest changes
-    - name: Ensure git repository is up to date
-      git:
-        repo: "{{ self_update.git_repo }}"
-        dest: "/opt/ansible/Server-Helper"
-        version: "{{ self_update.version | default('main') }}"
-        force: yes
-      register: git_pull
-      when:
-        - self_update is defined
-        - self_update.enabled | default(false)
+    # Package updates
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      tags: [packages]
 
-    - name: Check if updates were pulled
-      debug:
-        msg: "{{ 'Changes detected - applying updates' if git_pull.changed | default(false) else 'No changes detected' }}"
-      when: git_pull is defined
+    - name: Upgrade all packages
+      ansible.builtin.apt:
+        upgrade: safe
+        autoremove: true
+        autoclean: true
+      register: apt_upgrade
+      tags: [packages]
 
-    # Run setup playbook if changes detected
-    # NOTE: Uses setup-targets.yml for the new control/target architecture
-    # This maintains the ansible-pull self-update mechanism on target nodes
-    - name: Run setup playbook
-      command: >
-        ansible-playbook
-        /opt/ansible/Server-Helper/playbooks/setup-targets.yml
-        --inventory localhost,
-        --connection local
-      when:
-        - git_pull is defined
-        - git_pull.changed | default(false) or not (self_update.check_only | default(false))
-      register: setup_result
-    
-    - name: Display setup result
-      debug:
-        msg: "{{ setup_result.stdout_lines }}"
-      when: setup_result is defined and setup_result.stdout_lines is defined
-  
+    - name: Display upgraded packages
+      ansible.builtin.debug:
+        msg: "{{ apt_upgrade.stdout_lines | default(['No packages upgraded']) }}"
+      when: apt_upgrade.changed
+      tags: [packages]
+
+    # Container updates via Watchtower
+    - name: Trigger Watchtower update check
+      community.docker.docker_container_exec:
+        container: watchtower
+        command: /watchtower --run-once
+      register: watchtower_update
+      failed_when: false
+      tags: [containers]
+
+    - name: Display Watchtower output
+      ansible.builtin.debug:
+        msg: "{{ watchtower_update.stdout | default('Watchtower update triggered') }}"
+      tags: [containers]
+
+    # Check if reboot is required
+    - name: Check if reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+      tags: [packages]
+
+    - name: Notify if reboot is required
+      ansible.builtin.debug:
+        msg: "NOTICE: {{ inventory_hostname }} requires a reboot to complete updates"
+      when: reboot_required.stat.exists
+      tags: [packages]
+
   post_tasks:
-    - name: Save update timestamp
-      copy:
-        content: |
-          Last update: {{ ansible_date_time.iso8601 }}
-          Version: {{ self_update.version | default('unknown') }}
-          Changes: {{ 'Yes' if git_pull.changed | default(false) else 'No' }}
-        dest: /var/log/ansible-pull-last-run.txt
-        mode: '0644'
-
-    - name: Update version file
-      copy:
-        content: "{{ self_update.version | default('unknown') }}"
-        dest: /etc/server-helper-version.txt
-        mode: '0644'
-      when: git_pull.changed | default(false)
-
-    - name: Log update completion
-      lineinfile:
-        path: "{{ self_update.log_file | default('/var/log/ansible-pull.log') }}"
-        line: "[{{ ansible_date_time.iso8601 }}] Self-update completed. Changes: {{ 'Yes' if git_pull.changed | default(false) else 'No' }}"
-        create: yes
-        mode: '0644'
-      when: self_update is defined
-
-    - name: Send update heartbeat to Uptime Kuma
-      uri:
-        url: "{{ self_update.uptime_kuma_push_url }}?status=up&msg=self-update-complete"
-        method: POST
-        status_code: [200, 201]
-      when:
-        - self_update is defined
-        - self_update.uptime_kuma_push_url is defined
-        - self_update.uptime_kuma_push_url | length > 0
-      ignore_errors: yes
-
-    - name: Display completion message
-      debug:
+    - name: Display update summary
+      ansible.builtin.debug:
         msg: |
-          ╔════════════════════════════════════════╗
-          ║    Self-Update Complete!               ║
-          ╚════════════════════════════════════════╝
+          ================================================
+          Update Complete: {{ inventory_hostname }}
+          ================================================
+          Packages upgraded: {{ apt_upgrade.changed | default(false) }}
+          Reboot required: {{ reboot_required.stat.exists | default(false) }}
+          ================================================
 
-          📊 Update Status:
-          - Changes detected: {{ 'Yes' if git_pull.changed | default(false) else 'No' }}
-          - Version: {{ self_update.version | default('unknown') }}
-          - Timestamp: {{ ansible_date_time.iso8601 }}
+# Optional: Reboot nodes that require it
+- name: Reboot nodes if required (optional)
+  hosts: all
+  become: true
+  gather_facts: false
+  serial: 1
+  tags: [reboot, never]  # Only runs when explicitly tagged
 
-          📝 Logs:
-          - Update log: {{ self_update.log_file | default('/var/log/ansible-pull.log') }}
-          - Last run: /var/log/ansible-pull-last-run.txt
+  tasks:
+    - name: Check if reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_check
 
-          💡 Next scheduled update: Check systemd timer
-          - systemctl status ansible-pull.timer
+    - name: Reboot the server
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+        msg: "Rebooting for system updates"
+      when: reboot_check.stat.exists
+
+    - name: Wait for server to come back
+      ansible.builtin.wait_for_connection:
+        delay: 30
+        timeout: 300
+      when: reboot_check.stat.exists

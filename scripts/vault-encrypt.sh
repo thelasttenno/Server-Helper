@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # vault-encrypt.sh - Helper script to encrypt files with Ansible Vault
-# Part of Server Helper v1.0.0
+# Part of Server Helper v2.0.0
 #
 # Usage:
 #   ./scripts/vault-encrypt.sh [file]

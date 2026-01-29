@@ -1,0 +1,63 @@
+# Promtail configuration
+# Managed by Ansible - Server Helper
+# Host: {{ promtail_hostname }}
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: {{ promtail_positions_path }}
+
+clients:
+  - url: {{ promtail_loki_url }}
+    batchwait: {{ promtail_batch_wait }}
+    batchsize: {{ promtail_batch_size }}
+    tenant_id: default
+
+scrape_configs:
+{% for log in promtail_log_paths %}
+  # {{ log.name }} logs
+  - job_name: {{ log.name }}
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          host: {{ promtail_hostname }}
+          __path__: {{ log.path }}
+{% for label, value in log.labels.items() %}
+          {{ label }}: {{ value }}
+{% endfor %}
+{% if promtail_pipeline_stages_enabled and log.name == 'docker' %}
+    pipeline_stages:
+      - json:
+          expressions:
+            output: log
+            stream: stream
+            time: time
+      - labels:
+          stream:
+      - timestamp:
+          source: time
+          format: RFC3339Nano
+      - output:
+          source: output
+{% endif %}
+
+{% endfor %}
+
+{% if promtail_extra_scrape_configs | length > 0 %}
+  # Extra scrape configs
+{% for config in promtail_extra_scrape_configs %}
+  - job_name: {{ config.job_name }}
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          host: {{ promtail_hostname }}
+          __path__: {{ config.path }}
+{% for label, value in config.labels.items() %}
+          {{ label }}: {{ value }}
+{% endfor %}
+{% endfor %}
+{% endif %}

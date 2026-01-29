@@ -1,26 +1,19 @@
 ---
-# LVM Configuration Role - Default Variables
+# LVM Configuration role defaults
 
-lvm_config:
-  enabled: true
+# Enable/disable LVM expansion
+lvm_enabled: "{{ target_lvm_config.enabled | default(true) }}"
 
-  # Automatically extend Ubuntu default LV to use all available space
-  auto_extend_ubuntu: true
+# Skip LVM operations (set to true for LXC containers)
+lvm_skip: "{{ lvm_skip | default(false) }}"
 
-  # Custom logical volumes to extend
-  custom_lvs: []
-  # Example:
-  # - lv_path: "/dev/my-vg/my-lv"
-  #   extend_percent: 100  # Percentage of free space to use
-  #   resize_cmd: "resize2fs"  # Command to resize filesystem (resize2fs, xfs_growfs, etc.)
+# Automatically extend Ubuntu's root LV to use all free space
+lvm_auto_extend_ubuntu: "{{ target_lvm_config.auto_extend_ubuntu | default(true) }}"
 
-  # New logical volumes to create
-  create_lvs: []
-  # Example:
-  # - vg: "ubuntu-vg"
-  #   lv: "docker-lv"
-  #   size: "50G"
-  #   fstype: "ext4"
-  #   mount_point: "/var/lib/docker"
-  #   mount_opts: "defaults,noatime"
-  #   create_fs: true
+# Custom logical volumes to extend (optional)
+# Format: { vg_name: "vgname", lv_name: "lvname", size: "+100%FREE" }
+lvm_custom_lvs: "{{ target_lvm_config.custom_lvs | default([]) }}"
+
+# Create new logical volumes (optional)
+# Format: { vg_name: "vgname", lv_name: "lvname", size: "10G", fs_type: "ext4", mount_point: "/data" }
+lvm_create_lvs: "{{ target_lvm_config.create_lvs | default([]) }}"

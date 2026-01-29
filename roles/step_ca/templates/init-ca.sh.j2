@@ -1,0 +1,38 @@
+#!/bin/bash
+# Step-CA Initialization Script
+# Managed by Ansible - Server Helper
+
+set -e
+
+# Check if already initialized
+if [ -f /home/step/config/ca.json ]; then
+    echo "CA already initialized, skipping..."
+    exit 0
+fi
+
+echo "Initializing Step-CA..."
+
+# Initialize the CA
+step ca init \
+    --name="{{ step_ca_name }}" \
+    --dns="{{ step_ca_dns_names | join(',') }}" \
+    --address="{{ step_ca_address }}" \
+    --provisioner="{{ step_ca_provisioner_name }}" \
+    --password-file=/home/step/secrets/password \
+    --provisioner-password-file=/home/step/secrets/password
+
+{% if step_ca_acme_enabled %}
+# Add ACME provisioner
+echo "Adding ACME provisioner..."
+step ca provisioner add {{ step_ca_acme_provisioner_name }} --type ACME
+{% endif %}
+
+# Set proper permissions
+chown -R 1000:1000 /home/step/config
+chown -R 1000:1000 /home/step/certs
+chown -R 1000:1000 /home/step/db
+
+echo "Step-CA initialized successfully!"
+echo ""
+echo "Root CA fingerprint:"
+step certificate fingerprint /home/step/certs/root_ca.crt

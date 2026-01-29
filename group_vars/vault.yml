@@ -1,0 +1,68 @@
+---
+# Server Helper - Vault Secrets
+# ENCRYPT THIS FILE: ansible-vault encrypt group_vars/vault.yml
+#
+# Commands:
+#   Encrypt: ansible-vault encrypt group_vars/vault.yml
+#   Edit:    ansible-vault edit group_vars/vault.yml
+#   View:    ansible-vault view group_vars/vault.yml
+#   Decrypt: ansible-vault decrypt group_vars/vault.yml
+
+# =============================================================================
+# RESTIC BACKUP
+# =============================================================================
+
+vault_restic_password: "CHANGE_ME_restic_repository_password"
+vault_restic_aws_access_key: "CHANGE_ME_minio_access_key"
+vault_restic_aws_secret_key: "CHANGE_ME_minio_secret_key"
+
+# =============================================================================
+# NETDATA STREAMING
+# =============================================================================
+
+# Generate with: uuidgen or openssl rand -hex 16
+vault_netdata_stream_api_key: "CHANGE_ME_netdata_stream_key"
+
+# =============================================================================
+# GRAFANA
+# =============================================================================
+
+vault_grafana_admin_password: "CHANGE_ME_grafana_admin_password"
+
+# =============================================================================
+# PI-HOLE
+# =============================================================================
+
+vault_pihole_web_password: "CHANGE_ME_pihole_web_password"
+
+# =============================================================================
+# STEP-CA (Certificate Authority)
+# =============================================================================
+
+vault_step_ca_provisioner_password: "CHANGE_ME_step_ca_provisioner_password"
+
+# =============================================================================
+# AUTHENTIK (SSO/Identity Provider)
+# =============================================================================
+
+# Generate with: openssl rand -hex 32
+vault_authentik_secret_key: "CHANGE_ME_authentik_secret_key_64_chars"
+vault_authentik_postgres_password: "CHANGE_ME_authentik_postgres_password"
+vault_authentik_admin_email: "admin@example.com"
+vault_authentik_admin_password: "CHANGE_ME_authentik_admin_password"
+# Optional: bootstrap token for API access
+vault_authentik_bootstrap_token: ""
+
+# =============================================================================
+# UPTIME KUMA
+# =============================================================================
+
+vault_uptime_kuma_admin_username: "admin"
+vault_uptime_kuma_admin_password: "CHANGE_ME_uptime_kuma_password"
+
+# =============================================================================
+# NAS CREDENTIALS (Optional)
+# =============================================================================
+
+# vault_nas_username: "backup_user"
+# vault_nas_password: "CHANGE_ME_nas_password"

@@ -1,0 +1,139 @@
+---
+# Step-CA deployment tasks (Control Node)
+
+- name: Step-CA deployment
+  when: step_ca_enabled | bool
+  block:
+    # Create stack directory
+    - name: Create Step-CA stack directory
+      ansible.builtin.file:
+        path: "{{ step_ca_stack_dir }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0755"
+      become: true
+
+    # Create subdirectories
+    - name: Create Step-CA subdirectories
+      ansible.builtin.file:
+        path: "{{ step_ca_stack_dir }}/{{ item }}"
+        state: directory
+        owner: "1000"  # step user inside container
+        group: "1000"
+        mode: "0755"
+      loop:
+        - config
+        - certs
+        - secrets
+        - db
+      become: true
+
+    # Deploy password file for provisioner
+    - name: Deploy provisioner password file
+      ansible.builtin.copy:
+        content: "{{ step_ca_provisioner_password }}"
+        dest: "{{ step_ca_stack_dir }}/secrets/password"
+        owner: "1000"
+        group: "1000"
+        mode: "0600"
+      become: true
+      no_log: true
+
+    # Check if CA is already initialized
+    - name: Check if CA is initialized
+      ansible.builtin.stat:
+        path: "{{ step_ca_stack_dir }}/config/ca.json"
+      register: ca_config_stat
+      become: true
+
+    # Deploy initialization script
+    - name: Deploy Step-CA initialization script
+      ansible.builtin.template:
+        src: init-ca.sh.j2
+        dest: "{{ step_ca_stack_dir }}/init-ca.sh"
+        owner: root
+        group: docker
+        mode: "0755"
+      become: true
+      when: not ca_config_stat.stat.exists and step_ca_init_enabled | bool
+
+    # Initialize CA if not already done
+    - name: Initialize Step-CA
+      community.docker.docker_container:
+        name: step-ca-init
+        image: "{{ step_ca_image }}:{{ step_ca_image_tag }}"
+        state: started
+        detach: false
+        cleanup: true
+        volumes:
+          - "{{ step_ca_stack_dir }}/config:/home/step/config"
+          - "{{ step_ca_stack_dir }}/certs:/home/step/certs"
+          - "{{ step_ca_stack_dir }}/secrets:/home/step/secrets"
+          - "{{ step_ca_stack_dir }}/db:/home/step/db"
+          - "{{ step_ca_stack_dir }}/init-ca.sh:/init-ca.sh:ro"
+        entrypoint: ["/bin/bash", "/init-ca.sh"]
+        user: "0:0"
+      become: true
+      when: not ca_config_stat.stat.exists and step_ca_init_enabled | bool
+
+    # Deploy docker-compose file
+    - name: Deploy Step-CA docker-compose
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ step_ca_stack_dir }}/compose.yaml"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+      register: step_ca_compose
+
+    # Deploy the stack
+    - name: Deploy Step-CA stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ step_ca_stack_dir }}"
+        state: present
+        pull: always
+      become: true
+      when: step_ca_compose.changed
+
+    # Ensure Step-CA is running
+    - name: Ensure Step-CA is running
+      community.docker.docker_compose_v2:
+        project_src: "{{ step_ca_stack_dir }}"
+        state: present
+      become: true
+      when: not step_ca_compose.changed
+
+    # Wait for Step-CA to be ready
+    - name: Wait for Step-CA to be ready
+      ansible.builtin.uri:
+        url: "https://localhost:{{ step_ca_port }}/health"
+        method: GET
+        status_code: 200
+        validate_certs: false
+      register: step_ca_health
+      until: step_ca_health.status == 200
+      retries: 30
+      delay: 2
+
+    # Copy root CA to shared location
+    - name: Copy root CA certificate
+      ansible.builtin.copy:
+        src: "{{ step_ca_stack_dir }}/certs/root_ca.crt"
+        dest: "{{ step_ca_stack_dir }}/certs/root_ca.crt"
+        remote_src: true
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+
+    # Deploy setup guide
+    - name: Deploy Step-CA setup guide
+      ansible.builtin.template:
+        src: setup-guide.md.j2
+        dest: "{{ step_ca_stack_dir }}/SETUP-GUIDE.md"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true

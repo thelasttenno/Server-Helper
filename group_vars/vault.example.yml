@@ -1,341 +1,134 @@
+# Server Helper Vault Example (Secrets)
+# ======================================
+# This file contains sensitive credentials that will be encrypted.
+# Copy this file and encrypt it using Ansible Vault.
+#
+# IMPORTANT: Never commit unencrypted secrets to version control!
+#
+# Usage:
+#   1. Copy this file:
+#      cp group_vars/vault.example.yml group_vars/vault.yml
+#
+#   2. Edit with real values:
+#      nano group_vars/vault.yml
+#
+#   3. Encrypt the file:
+#      ansible-vault encrypt group_vars/vault.yml
+#
+# Or use the setup.sh script which handles this automatically.
+
 ---
-# Ansible Vault - Secrets Template (EXAMPLE - NOT ENCRYPTED)
-#
-# IMPORTANT: This is an EXAMPLE file showing the structure.
-# To use this:
-#   1. Create vault password: openssl rand -base64 32 > .vault_password
-#   2. Create encrypted vault: ansible-vault create group_vars/vault.yml
-#   3. Add your actual secrets (never commit plain text!)
-#
-# Edit encrypted vault: ansible-vault edit group_vars/vault.yml
-
-# =============================================================================
-# SYSTEM USER CREDENTIALS
-# =============================================================================
-
-vault_system_users:
-  # Admin user password
-  admin_password: "change-me-strong-password"
-
-  # Admin user SSH public key (optional)
-  admin_ssh_key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC... user@host"
-
-  # Additional users
-  developer_password: "change-me-developer-password"
-
-# =============================================================================
-# ANSIBLE CONNECTION CREDENTIALS
-# =============================================================================
-
-# SSH password for Ansible connections (if not using SSH keys)
-# Used in inventory as: ansible_ssh_pass: "{{ vault_ansible_ssh_password }}"
-vault_ansible_ssh_password: "change-me-ssh-password"
-
-# Become (sudo) password for privilege escalation
-# Used in inventory as: ansible_become_pass: "{{ vault_ansible_become_password }}"
-vault_ansible_become_password: "change-me-become-password"
-
 # =============================================================================
 # NAS CREDENTIALS
 # =============================================================================
 
 vault_nas_credentials:
-  # Main NAS share
-  - username: "your_nas_user"
-    password: "your_nas_password"
-
-  # Additional shares (if needed)
-  # - username: "another_user"
-  #   password: "another_password"
+  - username: "backup_user"
+    password: "CHANGE_ME_nas_password"
 
 # =============================================================================
 # BACKUP PASSWORDS (Restic)
 # =============================================================================
 
-# Use strong, unique passwords for each repository
 vault_restic_passwords:
-  nas: "change-me-restic-nas-password"
-  s3: "change-me-restic-s3-password"
-  b2: "change-me-restic-b2-password"
-  local: "change-me-restic-local-password"
+  nas: "CHANGE_ME_restic_nas_password"
+  local: "CHANGE_ME_restic_local_password"
+  s3: "CHANGE_ME_restic_s3_password"
+  b2: "CHANGE_ME_restic_b2_password"
 
 # =============================================================================
 # CLOUD PROVIDER CREDENTIALS
 # =============================================================================
 
-# AWS S3 Credentials
-# Get from: AWS Console → IAM → Users → Security Credentials
 vault_aws_credentials:
-  access_key: "AKIAIOSFODNN7EXAMPLE"
-  secret_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  access_key: ""
+  secret_key: ""
 
-# Backblaze B2 Credentials
-# Get from: Backblaze Console → App Keys
 vault_b2_credentials:
-  account_id: "your_b2_account_id"
-  account_key: "your_b2_account_key"
+  account_id: ""
+  account_key: ""
 
 # =============================================================================
-# SERVICE ADMIN CREDENTIALS
+# TARGET NODE SERVICE CREDENTIALS
 # =============================================================================
 
-# Dockge admin account
-# Change these on first login!
 vault_dockge_credentials:
   username: "admin"
-  password: "change-me-on-first-login"
+  password: "CHANGE_ME_dockge_password"
 
-# Uptime Kuma admin account
-# Change these on first login!
+# =============================================================================
+# CONTROL NODE SERVICE CREDENTIALS
+# =============================================================================
+
+# Authentik (SSO/Identity Provider)
+vault_authentik_credentials:
+  admin_password: "CHANGE_ME_authentik_password"
+  secret_key: "CHANGE_ME_long_random_hex_string_64_chars"
+  postgres_password: "CHANGE_ME_postgres_password"
+
+# Grafana OIDC (via Authentik)
+vault_grafana_oidc:
+  client_id: "grafana"
+  client_secret: "CHANGE_ME_grafana_oidc_secret"
+
+# Grafana Admin (if not using Authentik SSO)
+vault_control_grafana_password: "CHANGE_ME_grafana_password"
+
+# Uptime Kuma
 vault_uptime_kuma_credentials:
   username: "admin"
-  password: "change-me-on-first-login"
+  password: "CHANGE_ME_uptime_kuma_password"
 
-# Authentik SSO credentials
-# IMPORTANT: Generate strong random values:
-#   secret_key: openssl rand -base64 60
-#   db_password: openssl rand -base64 32
-vault_authentik_credentials:
-  # Authentik secret key (used for encryption)
-  secret_key: "change-me-use-openssl-rand-base64-60"
+# Step-CA (Certificate Authority)
+vault_step_ca_password: "CHANGE_ME_step_ca_password"
 
-  # PostgreSQL database password
-  db_password: "change-me-strong-db-password"
-
-  # Initial admin account (set during first-time setup)
-  admin_email: "admin@example.com"
-  admin_password: "change-me-on-first-login"
-
-  # Email settings (if email is enabled for password resets, etc.)
-  email_host: "smtp.gmail.com"
-  email_port: 587
-  email_username: "your-email@gmail.com"
-  email_password: "your-smtp-password-or-app-password"
-  email_from: "authentik@example.com"
+# Pi-hole
+vault_pihole_password: "CHANGE_ME_pihole_password"
 
 # =============================================================================
 # MONITORING & OBSERVABILITY
 # =============================================================================
 
-# Netdata Cloud (optional)
-# Get token from: https://app.netdata.cloud → Connect Node
+# Netdata Cloud claim token (optional - get from app.netdata.cloud)
 vault_netdata_claim_token: ""
 
-# Netdata Stream API Key (for centralized metrics)
-# Generate with: uuidgen
+# Netdata streaming API key (for parent-child communication)
+# Generate with: uuidgen or openssl rand -hex 16
 vault_netdata_stream_api_key: "11111111-2222-3333-4444-555555555555"
 
-# Uptime Kuma Push Monitor URLs
-# Create monitors in Uptime Kuma UI, then add URLs here
+# Uptime Kuma push URLs (for health check callbacks)
 vault_uptime_kuma_push_urls:
-  nas: ""              # NAS health check
-  dockge: ""           # Dockge health check
-  system: ""           # System health (Netdata)
-  backup: ""           # Backup success/failure
-  security: ""         # Security scan results
-  update: ""           # Self-update status
-  cpu: ""              # CPU alert push monitor
-  ram: ""              # RAM alert push monitor
-  disk: ""             # Disk alert push monitor
-  docker: ""           # Docker alert push monitor
-
-# Grafana Admin Credentials
-# Change password on first login!
-vault_grafana_admin_password: "change-me-on-first-login"
-
-# Control Node Grafana Password (separate instance on control node)
-# Used for centralized Grafana on the control node
-vault_control_grafana_password: "change-me-on-first-login"
-
-# Grafana SMTP Settings (optional - for email alerts)
-vault_grafana_smtp:
-  host: "smtp.gmail.com"
-  port: 587
-  user: "your-email@gmail.com"
-  password: "your-app-password"
-  from_address: "grafana@example.com"
-
-# Legacy single password field (deprecated, use vault_grafana_smtp instead)
-vault_grafana_smtp_password: "your-smtp-password-or-app-password"
-
-# =============================================================================
-# SEMAPHORE UI (Ansible Automation)
-# =============================================================================
-
-# Semaphore database password
-# Generate with: openssl rand -base64 32
-vault_semaphore_db_password: "change-me-strong-db-password"
-
-# Semaphore database root password (for MySQL only)
-vault_semaphore_db_root_password: "change-me-strong-root-password"
-
-# Semaphore admin credentials
-# Change password on first login!
-vault_semaphore_admin_password: "change-me-on-first-login"
-
-# Semaphore access key encryption secret
-# Generate with: openssl rand -base64 32
-# IMPORTANT: Never change this after initial setup - used to encrypt stored credentials
-vault_semaphore_access_key_encryption: "change-me-use-openssl-rand-base64-32-KEEP-FOREVER"
-
-# Optional: LDAP password (if using LDAP authentication)
-vault_semaphore_ldap_password: ""
-
-# Optional: SMTP password (if using email notifications)
-vault_semaphore_smtp_password: ""
-
-# Optional: Telegram bot token (if using Telegram notifications)
-vault_semaphore_telegram_token: ""
-vault_semaphore_telegram_chat: ""
-
-# Optional: Slack webhook URL (if using Slack notifications)
-vault_semaphore_slack_webhook: ""
-
-# =============================================================================
-# DNS SERVICES (Pi-hole)
-# =============================================================================
-
-# Pi-hole admin password
-# Generate with: openssl rand -base64 32
-vault_dns:
-  pihole_password: "change-me-strong-pihole-password"
+  nas: ""
+  dockge: ""
+  system: ""
+  backup: ""
+  security: ""
+  update: ""
 
 # =============================================================================
 # NOTIFICATION SERVICES
 # =============================================================================
 
-# Email Notifications (SMTP)
 vault_smtp_credentials:
   host: "smtp.gmail.com"
   port: 587
-  username: "your-email@gmail.com"
-  password: "your-app-password"  # Use app-specific password!
-  from_address: "server@example.com"
-  to_addresses:
-    - "admin@example.com"
+  username: ""
+  password: ""
+  from_address: ""
+  to_addresses: []
 
-# Discord Webhook
-# Get from: Server Settings → Integrations → Webhooks
 vault_discord_webhook: ""
 
-# Telegram Bot
-# Get token from: @BotFather
-# Get chat_id from: @userinfobot
 vault_telegram_credentials:
   bot_token: ""
   chat_id: ""
 
-# Slack Webhook
-# Get from: Slack App → Incoming Webhooks
 vault_slack_webhook: ""
 
 # =============================================================================
-# CERTIFICATE MANAGEMENT
+# SYSTEM USERS
 # =============================================================================
 
-# -----------------------------------------
-# SMALLSTEP CA (Internal Certificate Authority)
-# -----------------------------------------
-# Passwords for your self-hosted CA
-# Generate with: openssl rand -base64 32
-
-# Main CA password (used for signing)
-vault_step_ca_password: "change-me-strong-ca-password"
-
-# Provisioner password (for ACME provisioner)
-vault_step_ca_provisioner_password: "change-me-strong-provisioner-password"
-
-# -----------------------------------------
-# DNS-01 CHALLENGE CREDENTIALS
-# -----------------------------------------
-# For Let's Encrypt certificates on PUBLIC domains
-# Using Cloudflare in DNS-ONLY mode (no traffic proxying = maximum privacy)
-
-# Cloudflare DNS API Token
-# Create at: https://dash.cloudflare.com/profile/api-tokens
-# Permissions needed:
-#   - Zone - DNS - Edit
-#   - Zone - Zone - Read
-# Zone Resources: Include your specific zones only
-vault_cloudflare_dns_api_token: "your-cloudflare-dns-api-token"
-
-# Alternative DNS Providers (if not using Cloudflare):
-# Uncomment and fill in for your DNS provider
-
-# AWS Route53
-vault_aws_route53_credentials:
-  access_key: ""
-  secret_key: ""
-  region: "us-east-1"
-
-# DigitalOcean
-vault_digitalocean_api_token: ""
-
-# Namecheap
-vault_namecheap_credentials:
-  api_user: ""
-  api_key: ""
-
-# GoDaddy
-vault_godaddy_credentials:
-  api_key: ""
-  api_secret: ""
-
-# -----------------------------------------
-# TRAEFIK DASHBOARD AUTHENTICATION
-# -----------------------------------------
-# Generate htpasswd hash: htpasswd -nb admin your-password
-# Or use: echo $(htpasswd -nb admin your-password) | sed -e s/\\$/\\$\\$/g
-vault_traefik_dashboard_auth: "admin:$$apr1$$xyz123$$hashedpassword"
-
-# Plain text password (setup.sh auto-generates htpasswd from this)
-vault_traefik_dashboard_password: "change-me-traefik-password"
-
-# -----------------------------------------
-# LEGACY SSL (if not using ACME)
-# -----------------------------------------
-# Custom SSL Certificate (only needed if NOT using Let's Encrypt or Step-CA)
-# vault_ssl_certificate: |
-#   -----BEGIN CERTIFICATE-----
-#   ... your certificate content ...
-#   -----END CERTIFICATE-----
-#
-# vault_ssl_private_key: |
-#   -----BEGIN PRIVATE KEY-----
-#   ... your private key content ...
-#   -----END PRIVATE KEY-----
-
-# =============================================================================
-# ADDITIONAL SECRETS
-# =============================================================================
-
-# Add any custom secrets your setup needs here
-# Examples:
-# vault_database_password: ""
-# vault_api_keys:
-#   service1: ""
-#   service2: ""
-# vault_ssh_private_key: |
-#   -----BEGIN OPENSSH PRIVATE KEY-----
-#   ...
-#   -----END OPENSSH PRIVATE KEY-----
-
-# =============================================================================
-# NOTES
-# =============================================================================
-
-# Password Generation:
-#   openssl rand -base64 32           # Random 32-byte password
-#   pwgen -s 32 1                     # Random 32-char password
-#   
-# Best Practices:
-#   - Use unique passwords for each service
-#   - Use 32+ character passwords
-#   - Rotate passwords periodically
-#   - Never reuse passwords
-#   - Store vault password in password manager
-#
-# After creating vault:
-#   ansible-vault view group_vars/vault.yml    # View secrets
-#   ansible-vault edit group_vars/vault.yml    # Edit secrets
-#   ansible-vault rekey group_vars/vault.yml   # Change vault password
+vault_system_users:
+  admin_password: "CHANGE_ME_admin_password"
+  admin_ssh_key: ""  # ssh-rsa AAAA... user@host

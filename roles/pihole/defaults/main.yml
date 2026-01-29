@@ -1,0 +1,95 @@
+---
+# Pi-hole role defaults (Control Node)
+
+# Master toggle
+pihole_enabled: true
+
+# Container settings
+pihole_container_name: "pihole"
+pihole_image: "pihole/pihole"
+pihole_image_tag: "latest"
+
+# Stack directory (Dockge compatible)
+pihole_stack_dir: "/opt/stacks/pihole"
+
+# Network configuration
+pihole_dns_port: 53
+pihole_web_port: 8053  # Non-standard to avoid conflicts
+
+# Web interface password
+pihole_web_password: "{{ vault_pihole_web_password | default('') }}"
+
+# Upstream DNS (when not using Unbound)
+pihole_upstream_dns:
+  - "1.1.1.1"
+  - "1.0.0.1"
+
+# Unbound recursive resolver
+pihole_unbound_enabled: true
+pihole_unbound_image: "mvance/unbound"
+pihole_unbound_image_tag: "latest"
+
+# Network interface to bind to
+pihole_interface: "eth0"
+
+# DHCP settings (disabled by default)
+pihole_dhcp_enabled: false
+pihole_dhcp_start: ""
+pihole_dhcp_end: ""
+pihole_dhcp_router: ""
+pihole_dhcp_leasetime: 24
+
+# DNS settings
+pihole_dns_bogus_priv: true
+pihole_dns_fqdn_required: true
+pihole_dnssec: true
+
+# Query logging
+pihole_query_logging: true
+
+# Admin email (for notifications)
+pihole_admin_email: ""
+
+# Custom DNS records (local DNS)
+pihole_custom_dns_records: []
+# Example:
+# pihole_custom_dns_records:
+#   - hostname: "server.local"
+#     ip: "192.168.1.10"
+#   - hostname: "nas.local"
+#     ip: "192.168.1.20"
+
+# Custom CNAME records
+pihole_custom_cname_records: []
+# Example:
+# pihole_custom_cname_records:
+#   - hostname: "grafana.local"
+#     target: "control.local"
+
+# Blocklists (additional to defaults)
+pihole_adlists: []
+# Example:
+# pihole_adlists:
+#   - "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+
+# Whitelist domains
+pihole_whitelist: []
+
+# Regex whitelist
+pihole_regex_whitelist: []
+
+# Blacklist domains
+pihole_blacklist: []
+
+# Regex blacklist
+pihole_regex_blacklist: []
+
+# Temperature unit: c or f
+pihole_temperature_unit: "c"
+
+# Web UI theme: default-dark, default-light, lcars
+pihole_web_theme: "default-dark"
+
+# Resource limits
+pihole_memory_limit: "256m"
+pihole_unbound_memory_limit: "128m"

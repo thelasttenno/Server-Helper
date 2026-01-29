@@ -1,0 +1,38 @@
+# Grafana - Monitoring dashboard
+# Managed by Ansible - Server Helper
+# Dockge compatible: /opt/stacks/grafana/
+
+services:
+  grafana:
+    image: {{ grafana_image }}:{{ grafana_image_tag }}
+    container_name: {{ grafana_container_name }}
+    restart: unless-stopped
+    user: "472:472"
+    ports:
+      - "{{ grafana_port }}:3000"
+    volumes:
+      - ./grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./provisioning:/etc/grafana/provisioning:ro
+      - ./data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER={{ grafana_admin_user }}
+      - GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password }}
+      - GF_INSTALL_PLUGINS={{ grafana_plugins | join(',') }}
+    deploy:
+      resources:
+        limits:
+          memory: {{ grafana_memory_limit }}
+          cpus: "{{ grafana_cpu_limit }}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.{{ target_domain | default('local') }}`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls=true"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"

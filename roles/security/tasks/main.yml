@@ -1,42 +1,38 @@
 ---
-# Security Role - Wrapper for community security roles
-# Applies comprehensive security hardening
+# Security role - SSH hardening, UFW, fail2ban, Lynis
 
-- name: Apply general security hardening
-  include_role:
-    name: geerlingguy.security
-  when: target_security.basic_hardening | default(true)
+- name: Display role info
+  ansible.builtin.debug:
+    msg: "Configuring security on {{ inventory_hostname }}"
 
-- name: Setup fail2ban
-  include_role:
-    name: robertdebock.fail2ban
-  when: target_security.fail2ban.enabled | default(true)
+# =============================================================================
+# SSH HARDENING
+# =============================================================================
 
-- name: Setup UFW firewall
-  include_role:
-    name: weareinteractive.ufw
-  vars:
-    ufw_rules:
-      - { rule: "allow", port: "22", proto: "tcp", comment: "SSH" }
-      - { rule: "allow", port: "{{ target_dockge.port }}", proto: "tcp", comment: "Dockge" }
-      - { rule: "allow", port: "{{ target_netdata.port }}", proto: "tcp", comment: "Netdata" }
-      # Note: Uptime Kuma runs on control node only, not target nodes
-  when: target_security.ufw.enabled | default(true)
+- name: Configure SSH hardening
+  ansible.builtin.include_tasks: ssh.yml
+  when: security_ssh_enabled | bool
 
-- name: Harden SSH configuration
-  template:
-    src: sshd_config_hardening.j2
-    dest: /etc/ssh/sshd_config.d/99-hardening.conf
-    mode: '0644'
-  when: target_security.ssh_hardening.enabled | default(true)
-  notify: restart sshd
+# =============================================================================
+# UFW FIREWALL
+# =============================================================================
 
-- name: Display security information
-  debug:
-    msg:
-      - "Security hardening applied!"
-      - "fail2ban: {{ 'enabled' if target_security.fail2ban.enabled | default(true) else 'disabled' }}"
-      - "UFW firewall: {{ 'enabled' if target_security.ufw.enabled | default(true) else 'disabled' }}"
-      - "SSH hardening: {{ 'enabled' if target_security.ssh_hardening.enabled | default(true) else 'disabled' }}"
-      - ""
-      - "Run security audit: ansible-playbook playbooks/security.yml"
+- name: Configure UFW firewall
+  ansible.builtin.include_tasks: ufw.yml
+  when: security_ufw_enabled | bool
+
+# =============================================================================
+# FAIL2BAN
+# =============================================================================
+
+- name: Configure fail2ban
+  ansible.builtin.include_tasks: fail2ban.yml
+  when: security_fail2ban_enabled | bool
+
+# =============================================================================
+# LYNIS
+# =============================================================================
+
+- name: Configure Lynis security auditing
+  ansible.builtin.include_tasks: lynis.yml
+  when: security_lynis_enabled | bool

@@ -1,0 +1,64 @@
+---
+# Step-CA role defaults (Control Node)
+
+# Master toggle
+step_ca_enabled: true
+
+# Container settings
+step_ca_container_name: "step-ca"
+step_ca_image: "smallstep/step-ca"
+step_ca_image_tag: "latest"
+
+# Stack directory (Dockge compatible)
+step_ca_stack_dir: "/opt/stacks/step-ca"
+
+# Network port
+step_ca_port: 9000
+
+# CA configuration
+step_ca_name: "Server Helper CA"
+step_ca_dns_names:
+  - "step-ca"
+  - "step-ca.{{ target_domain | default('local') }}"
+  - "{{ control_node_ip | default('localhost') }}"
+
+step_ca_address: ":9000"
+
+# Provisioner settings
+step_ca_provisioner_name: "admin"
+step_ca_provisioner_password: "{{ vault_step_ca_provisioner_password | default('') }}"
+
+# ACME provisioner for automatic cert issuance
+step_ca_acme_enabled: true
+step_ca_acme_provisioner_name: "acme"
+
+# Certificate validity periods
+step_ca_default_cert_validity: "24h"
+step_ca_max_cert_validity: "2160h"  # 90 days
+step_ca_min_cert_validity: "5m"
+
+# Root CA settings
+step_ca_root_key_type: "EC"
+step_ca_root_key_curve: "P-384"
+
+# Intermediate CA settings
+step_ca_intermediate_key_type: "EC"
+step_ca_intermediate_key_curve: "P-384"
+
+# Database
+step_ca_db_type: "badgerv2"
+
+# Authority settings
+step_ca_claims:
+  minTLSCertDuration: "5m"
+  maxTLSCertDuration: "2160h"
+  defaultTLSCertDuration: "24h"
+  disableRenewal: false
+  allowRenewalAfterExpiry: false
+
+# Resource limits
+step_ca_memory_limit: "256m"
+step_ca_cpu_limit: "0.5"
+
+# Initialize CA on first run
+step_ca_init_enabled: true

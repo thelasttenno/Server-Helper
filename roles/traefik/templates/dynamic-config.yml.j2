@@ -1,0 +1,64 @@
+# Traefik Dynamic Configuration
+# Managed by Ansible - Server Helper
+
+http:
+  # Global middlewares
+  middlewares:
+    # Security headers
+    secure-headers:
+      headers:
+        frameDeny: true
+        browserXssFilter: true
+        contentTypeNosniff: true
+        forceSTSHeader: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 31536000
+        customFrameOptionsValue: "SAMEORIGIN"
+
+    # Rate limiting
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+
+    # Compress responses
+    compress:
+      compress: {}
+
+    # Redirect to HTTPS
+    redirect-to-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+
+{% if traefik_default_middlewares | length > 0 %}
+    # Custom middlewares
+{% for mw in traefik_default_middlewares %}
+    {{ mw.name }}:
+      {{ mw.type }}:
+{% for key, value in mw.config.items() %}
+        {{ key }}: {{ value }}
+{% endfor %}
+{% endfor %}
+{% endif %}
+
+tls:
+  options:
+    default:
+      minVersion: {{ traefik_tls_min_version }}
+{% if traefik_tls_cipher_suites | length > 0 %}
+      cipherSuites:
+{% for cipher in traefik_tls_cipher_suites %}
+        - {{ cipher }}
+{% endfor %}
+{% endif %}
+      sniStrict: true
+
+{% if traefik_step_ca_enabled %}
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/server.crt
+        keyFile: /certs/server.key
+{% endif %}

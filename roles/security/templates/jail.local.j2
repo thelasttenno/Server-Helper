@@ -1,15 +1,30 @@
+# Fail2ban Configuration
+# Managed by Ansible - Server Helper
+
 [DEFAULT]
-bantime = {{ security.fail2ban.sshd_bantime }}
-findtime = 600
-maxretry = {{ security.fail2ban.sshd_maxretry }}
+# Ban settings
+bantime = {{ security_fail2ban_sshd_bantime }}
+findtime = {{ security_fail2ban_sshd_findtime }}
+maxretry = {{ security_fail2ban_sshd_maxretry }}
+
+# Ignore localhost
+ignoreip = 127.0.0.1/8 ::1
+
+# Backend
+backend = systemd
+
+# Email settings (optional)
 destemail = root@localhost
-sendername = Fail2Ban
-action = %(action_mwl)s
+sender = fail2ban@{{ ansible_hostname }}
+mta = sendmail
+
+# Actions
+action = %(action_)s
 
 [sshd]
 enabled = true
-port = ssh
-logpath = %(sshd_log)s
-backend = %(sshd_backend)s
-maxretry = {{ security.fail2ban.sshd_maxretry }}
-bantime = {{ security.fail2ban.sshd_bantime }}
+port = {{ security_ssh_port }}
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = {{ security_fail2ban_sshd_maxretry }}
+bantime = {{ security_fail2ban_sshd_bantime }}

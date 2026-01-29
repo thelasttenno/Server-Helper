@@ -1,0 +1,109 @@
+---
+# Traefik deployment tasks (Control Node)
+
+- name: Traefik deployment
+  when: traefik_enabled | bool
+  block:
+    # Create stack directory
+    - name: Create Traefik stack directory
+      ansible.builtin.file:
+        path: "{{ traefik_stack_dir }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0755"
+      become: true
+
+    # Create subdirectories
+    - name: Create Traefik subdirectories
+      ansible.builtin.file:
+        path: "{{ traefik_stack_dir }}/{{ item }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0755"
+      loop:
+        - config
+        - letsencrypt
+        - certs
+      become: true
+
+    # Create Docker network for Traefik
+    - name: Create Traefik Docker network
+      community.docker.docker_network:
+        name: "{{ traefik_docker_network }}"
+        state: present
+      become: true
+
+    # Deploy static configuration
+    - name: Deploy Traefik static configuration
+      ansible.builtin.template:
+        src: traefik.yml.j2
+        dest: "{{ traefik_stack_dir }}/traefik.yml"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+      register: traefik_static_config
+      notify: Restart traefik
+
+    # Deploy dynamic configuration
+    - name: Deploy Traefik dynamic configuration
+      ansible.builtin.template:
+        src: dynamic-config.yml.j2
+        dest: "{{ traefik_stack_dir }}/config/dynamic.yml"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+
+    # Create acme.json with proper permissions
+    - name: Create ACME storage file
+      ansible.builtin.file:
+        path: "{{ traefik_stack_dir }}/letsencrypt/acme.json"
+        state: touch
+        owner: root
+        group: root
+        mode: "0600"
+      become: true
+      when: traefik_acme_enabled | bool
+
+    # Deploy docker-compose file
+    - name: Deploy Traefik docker-compose
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ traefik_stack_dir }}/compose.yaml"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+      register: traefik_compose
+
+    # Deploy the stack
+    - name: Deploy Traefik stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ traefik_stack_dir }}"
+        state: present
+        pull: always
+      become: true
+      when: traefik_compose.changed or traefik_static_config.changed
+
+    # Ensure Traefik is running
+    - name: Ensure Traefik is running
+      community.docker.docker_compose_v2:
+        project_src: "{{ traefik_stack_dir }}"
+        state: present
+      become: true
+      when: not (traefik_compose.changed or traefik_static_config.changed)
+
+    # Wait for Traefik to be ready
+    - name: Wait for Traefik to be ready
+      ansible.builtin.uri:
+        url: "http://localhost:{{ traefik_dashboard_port }}/ping"
+        method: GET
+        status_code: 200
+      register: traefik_health
+      until: traefik_health.status == 200
+      retries: 30
+      delay: 2
+      when: traefik_api_enabled | bool

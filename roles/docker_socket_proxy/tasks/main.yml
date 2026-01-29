@@ -1,0 +1,82 @@
+---
+# Docker Socket Proxy deployment tasks
+
+- name: Docker Socket Proxy deployment
+  when: docker_socket_proxy_enabled | bool
+  block:
+    # Create stack directory
+    - name: Create Docker Socket Proxy stack directory
+      ansible.builtin.file:
+        path: "{{ docker_socket_proxy_stack_dir }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0755"
+      become: true
+
+    # Deploy docker-compose file
+    - name: Deploy Docker Socket Proxy docker-compose
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ docker_socket_proxy_stack_dir }}/compose.yaml"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+      register: docker_socket_proxy_compose
+
+    # Deploy the stack
+    - name: Deploy Docker Socket Proxy stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ docker_socket_proxy_stack_dir }}"
+        state: present
+        pull: always
+      become: true
+      when: docker_socket_proxy_compose.changed
+
+    # Ensure Docker Socket Proxy is running
+    - name: Ensure Docker Socket Proxy is running
+      community.docker.docker_compose_v2:
+        project_src: "{{ docker_socket_proxy_stack_dir }}"
+        state: present
+      become: true
+      when: not docker_socket_proxy_compose.changed
+
+    # Configure UFW to restrict access to control node only
+    - name: Configure UFW rule for Docker Socket Proxy
+      community.general.ufw:
+        rule: allow
+        port: "{{ docker_socket_proxy_port }}"
+        proto: tcp
+        from_ip: "{{ docker_socket_proxy_allowed_ip }}"
+        comment: "Docker Socket Proxy - Control Node Only"
+      become: true
+      when: security_ufw_enabled | default(true) | bool
+
+    - name: Block Docker Socket Proxy from all other IPs
+      community.general.ufw:
+        rule: deny
+        port: "{{ docker_socket_proxy_port }}"
+        proto: tcp
+        comment: "Docker Socket Proxy - Block Others"
+      become: true
+      when: security_ufw_enabled | default(true) | bool
+
+    # Verify the proxy is accessible
+    - name: Verify Docker Socket Proxy is responding
+      ansible.builtin.uri:
+        url: "http://localhost:{{ docker_socket_proxy_port }}/_ping"
+        method: GET
+        status_code: 200
+      register: proxy_health
+      until: proxy_health.status == 200
+      retries: 10
+      delay: 2
+
+    - name: Display Docker Socket Proxy status
+      ansible.builtin.debug:
+        msg: |
+          Docker Socket Proxy configured:
+          - Port: {{ docker_socket_proxy_port }}
+          - Allowed IP: {{ docker_socket_proxy_allowed_ip }}
+          - Status: OK

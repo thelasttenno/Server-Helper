@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # vault-decrypt.sh - Helper script to decrypt Ansible Vault files
-# Part of Server Helper v1.0.0
+# Part of Server Helper v2.0.0
 #
 # ⚠️ WARNING: Use this script with caution!
 # Decrypted files contain sensitive information and should NOT be committed to Git.

@@ -1,40 +1,89 @@
 ---
-# Lynis Security Auditing Configuration
+# Lynis security auditing tasks
 
-- name: Create Lynis audit script
+- name: Lynis - Add repository key
+  ansible.builtin.apt_key:
+    url: https://packages.cisofy.com/keys/cisofy-software-public.key
+    state: present
+  become: true
+  failed_when: false
+
+- name: Lynis - Add repository
+  ansible.builtin.apt_repository:
+    repo: "deb https://packages.cisofy.com/community/lynis/deb/ stable main"
+    state: present
+    filename: lynis
+  become: true
+  failed_when: false
+
+- name: Lynis - Install from repository
+  ansible.builtin.apt:
+    name: lynis
+    state: present
+    update_cache: yes
+  become: true
+  register: lynis_install
+  failed_when: false
+
+- name: Lynis - Install from Ubuntu repos (fallback)
+  ansible.builtin.apt:
+    name: lynis
+    state: present
+  become: true
+  when: lynis_install.failed | default(false)
+
+- name: Lynis - Create report directory
+  ansible.builtin.file:
+    path: "{{ security_lynis_report_dir }}"
+    state: directory
+    mode: "0750"
+    owner: root
+    group: root
+  become: true
+
+- name: Lynis - Deploy scan script
   ansible.builtin.template:
-    src: lynis_audit.sh.j2
-    dest: "{{ base_install_dir }}/scripts/lynis_audit.sh"
-    mode: '0755'
+    src: lynis-scan.sh.j2
+    dest: /usr/local/bin/lynis-scan.sh
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
 
-- name: Create systemd service for Lynis audit
+- name: Lynis - Create systemd service
   ansible.builtin.template:
-    src: lynis.service.j2
-    dest: /etc/systemd/system/server-helper-lynis.service
-    mode: '0644'
+    src: lynis-scan.service.j2
+    dest: /etc/systemd/system/lynis-scan.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
 
-- name: Create systemd timer for Lynis audit
+- name: Lynis - Create systemd timer
   ansible.builtin.template:
-    src: lynis.timer.j2
-    dest: /etc/systemd/system/server-helper-lynis.timer
-    mode: '0644'
+    src: lynis-scan.timer.j2
+    dest: /etc/systemd/system/lynis-scan.timer
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Reload systemd
 
-- name: Enable and start Lynis timer
+- name: Lynis - Enable timer
   ansible.builtin.systemd:
-    name: server-helper-lynis.timer
+    name: lynis-scan.timer
     state: started
-    enabled: true
-    daemon_reload: true
+    enabled: yes
+    daemon_reload: yes
+  become: true
 
-- name: Run initial Lynis audit
-  ansible.builtin.command: "{{ base_install_dir }}/scripts/lynis_audit.sh"
-  register: lynis_audit
+- name: Lynis - Display version
+  ansible.builtin.command: lynis show version
+  register: lynis_version
   changed_when: false
+  failed_when: false
 
-- name: Display Lynis audit summary
+- name: Lynis - Display info
   ansible.builtin.debug:
-    msg:
-      - "Lynis audit configured!"
-      - "Schedule: {{ security.lynis.schedule }}"
-      - "Reports: {{ base_install_dir }}/reports/"
-      - "Run manually: sudo {{ base_install_dir }}/scripts/lynis_audit.sh"
+    msg: "Lynis {{ lynis_version.stdout }} installed. Scheduled: {{ security_lynis_schedule }}"
+  when: lynis_version.rc == 0

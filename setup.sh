@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Server Helper v1.0.0 - Command Node Setup Script
+# Server Helper v2.0.0 - Command Node Setup Script
 # =================================================
 # This script prepares your COMMAND NODE to manage target servers with Ansible.
 # Run this on your laptop/desktop/control machine, NOT on target servers.
@@ -51,7 +51,7 @@ EXISTING_CONFIG_FOUND=false
 # Function to print colored messages
 print_header() {
     echo -e "\n${BLUE}${BOLD}╔════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}${BOLD}║  Server Helper v1.0.0 Setup            ║${NC}"
+    echo -e "${BLUE}${BOLD}║  Server Helper v2.0.0 Setup            ║${NC}"
     echo -e "${BLUE}${BOLD}║  Command Node Configuration            ║${NC}"
     echo -e "${BLUE}${BOLD}╚════════════════════════════════════════╝${NC}\n"
 }
@@ -163,12 +163,13 @@ show_extras_menu() {
     echo "  1) Vault Management     - Manage Ansible Vault (encrypt/decrypt/edit)"
     echo "  2) Add Server           - Add new server to inventory"
     echo "  3) Open Service UIs     - Open web dashboards in browser"
-    echo "  4) Test All Roles       - Run Molecule tests for all roles"
-    echo "  5) Test Single Role     - Run Molecule test for one role"
-    echo "  6) Test Remediation     - Test auto-remediation system"
-    echo "  7) Back to Main Menu"
+    echo "  4) Validate Fleet       - Check connectivity and service health"
+    echo "  5) Test All Roles       - Run Molecule tests for all roles"
+    echo "  6) Test Single Role     - Run Molecule test for one role"
+    echo "  7) Test Remediation     - Test auto-remediation system"
+    echo "  8) Back to Main Menu"
     echo
-    read -p "Choose an option [1-7]: " -r EXTRAS_CHOICE
+    read -p "Choose an option [1-8]: " -r EXTRAS_CHOICE
     echo
 
     case "$EXTRAS_CHOICE" in
@@ -182,15 +183,18 @@ show_extras_menu() {
             run_open_ui
             ;;
         4)
-            run_test_all_roles
+            run_validate_fleet
             ;;
         5)
-            run_test_single_role
+            run_test_all_roles
             ;;
         6)
-            run_test_remediation
+            run_test_single_role
             ;;
         7)
+            run_test_remediation
+            ;;
+        8)
             show_main_menu
             ;;
         *)
@@ -1212,6 +1216,76 @@ run_open_ui() {
     esac
 
     echo
+    read -p "Press Enter to continue..."
+    show_extras_menu
+}
+
+# =============================================================================
+# FLEET VALIDATION FUNCTIONS
+# =============================================================================
+
+run_validate_fleet() {
+    clear
+    print_header
+    echo -e "${BOLD}Validate Fleet${NC}"
+    echo
+
+    local VALIDATE_SCRIPT="${SCRIPT_DIR}/scripts/validate-fleet.sh"
+
+    if [[ ! -f "$VALIDATE_SCRIPT" ]]; then
+        print_error "Validation script not found: $VALIDATE_SCRIPT"
+        read -p "Press Enter to continue..."
+        show_extras_menu
+        return
+    fi
+
+    echo -e "${BOLD}Fleet validation checks connectivity and health across all nodes:${NC}"
+    echo "  - SSH connectivity to all nodes"
+    echo "  - Docker daemon status"
+    echo "  - Control node services (Traefik, Grafana, Loki, etc.)"
+    echo "  - Target node agents (Netdata, Promtail)"
+    echo "  - Docker Socket Proxy accessibility"
+    echo
+
+    echo -e "${BOLD}Validation modes:${NC}"
+    echo "  1) Full validation     - Complete health check"
+    echo "  2) Quick ping test     - SSH connectivity only"
+    echo "  3) Services only       - Control node services health"
+    echo "  4) Back"
+    echo
+    read -p "Choose [1-4]: " -r VALIDATE_CHOICE
+
+    case "$VALIDATE_CHOICE" in
+        1)
+            echo
+            print_info "Running full fleet validation..."
+            echo
+            bash "$VALIDATE_SCRIPT"
+            ;;
+        2)
+            echo
+            print_info "Running quick connectivity test..."
+            echo
+            bash "$VALIDATE_SCRIPT" --quick
+            ;;
+        3)
+            echo
+            print_info "Running control services health check..."
+            echo
+            bash "$VALIDATE_SCRIPT" --services
+            ;;
+        4)
+            show_extras_menu
+            return
+            ;;
+        *)
+            print_warning "Invalid option"
+            read -p "Press Enter to continue..."
+            show_extras_menu
+            return
+            ;;
+    esac
+
     read -p "Press Enter to continue..."
     show_extras_menu
 }
@@ -2296,6 +2370,17 @@ prompt_config() {
     read -p "Timezone [America/Vancouver]: " TIMEZONE
     TIMEZONE=${TIMEZONE:-America/Vancouver}
 
+    echo
+    echo "  Your domain name for service URLs and SSL certificates"
+    echo "  (e.g., example.com will give you grafana.example.com, auth.example.com, etc.)"
+    read -p "Domain name [homelab.local]: " TARGET_DOMAIN
+    TARGET_DOMAIN=${TARGET_DOMAIN:-homelab.local}
+
+    echo
+    echo "  Docker network subnet (change if conflicts with your existing network)"
+    read -p "Docker network CIDR [172.18.0.0/16]: " DOCKER_NETWORK_SUBNET
+    DOCKER_NETWORK_SUBNET=${DOCKER_NETWORK_SUBNET:-172.18.0.0/16}
+
     # NAS configuration
     echo
     echo -e "${BOLD}Network Storage (NAS):${NC}"
@@ -2359,39 +2444,9 @@ prompt_config() {
             echo
         fi
 
-        echo
-        echo "  AWS S3 provides offsite cloud backup storage (requires AWS account)."
-        read -p "Save backups to Amazon S3 cloud storage? (y/N): " -r BACKUP_S3
-        echo
-        BACKUP_S3=${BACKUP_S3:-n}
-
-        if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then
-            read -p "S3 bucket name (the storage container name in AWS): " S3_BUCKET
-            read -p "AWS region where bucket is located [us-east-1]: " S3_REGION
-            S3_REGION=${S3_REGION:-us-east-1}
-            read -p "AWS Access Key ID (from your AWS account): " AWS_ACCESS_KEY
-            read -sp "AWS Secret Access Key: " AWS_SECRET_KEY
-            echo
-            echo "  Create a password to encrypt your cloud backups (remember this!):"
-            read -sp "Backup encryption password for S3: " RESTIC_S3_PASS
-            echo
-        fi
-
-        echo
-        echo "  Backblaze B2 is an affordable cloud storage alternative to AWS S3."
-        read -p "Save backups to Backblaze B2 cloud storage? (y/N): " -r BACKUP_B2
-        echo
-        BACKUP_B2=${BACKUP_B2:-n}
-
-        if [[ $BACKUP_B2 =~ ^[Yy]([Ee][Ss])?$ ]]; then
-            read -p "B2 bucket name: " B2_BUCKET
-            read -p "B2 Account ID (from Backblaze console): " B2_ACCOUNT_ID
-            read -sp "B2 Application Key: " B2_ACCOUNT_KEY
-            echo
-            echo "  Create a password to encrypt your B2 backups (remember this!):"
-            read -sp "Backup encryption password for B2: " RESTIC_B2_PASS
-            echo
-        fi
+        # S3 and B2 cloud backups disabled - only local and NAS supported
+        BACKUP_S3="n"
+        BACKUP_B2="n"
     fi
 
     # Monitoring configuration
@@ -2413,6 +2468,15 @@ prompt_config() {
         echo "  Netdata Cloud lets you view all servers from app.netdata.cloud (optional)"
         echo "  Get a claim token from https://app.netdata.cloud (leave empty to skip)"
         read -p "Netdata Cloud token (press Enter to skip): " NETDATA_CLAIM_TOKEN
+
+        echo
+        echo "  Alert thresholds - when to get notified about resource usage"
+        read -p "CPU warning threshold % [80]: " ALERT_CPU_WARNING
+        ALERT_CPU_WARNING=${ALERT_CPU_WARNING:-80}
+        read -p "RAM warning threshold % [85]: " ALERT_RAM_WARNING
+        ALERT_RAM_WARNING=${ALERT_RAM_WARNING:-85}
+        read -p "Disk warning threshold % [80]: " ALERT_DISK_WARNING
+        ALERT_DISK_WARNING=${ALERT_DISK_WARNING:-80}
     fi
 
     # Logging configuration
@@ -2425,6 +2489,12 @@ prompt_config() {
     read -p "Enable log collection? (Y/n): " -r ENABLE_LOGGING
     echo
     ENABLE_LOGGING=${ENABLE_LOGGING:-y}
+
+    if [[ $ENABLE_LOGGING =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        echo "  How long to keep logs in Loki (in days)"
+        read -p "Log retention days [30]: " LOG_RETENTION_DAYS
+        LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-30}
+    fi
 
     # Note: Centralized monitoring (Uptime Kuma, central Grafana/Loki/Netdata)
     # is installed on command node via setup-control.yml after target setup
@@ -2446,14 +2516,28 @@ prompt_config() {
         read -p "Container manager port [5001]: " DOCKGE_PORT
         DOCKGE_PORT=${DOCKGE_PORT:-5001}
 
-        echo "  Set a password for the Dockge admin account (username: admin)"
-        read -sp "Dockge admin password [auto-generate]: " DOCKGE_ADMIN_PASSWORD
-        echo
-        if [[ -z "$DOCKGE_ADMIN_PASSWORD" ]]; then
-            DOCKGE_ADMIN_PASSWORD=$(openssl rand -base64 16)
-            print_info "Generated Dockge admin password (will be shown at end)"
+        echo "  Dockge admin credentials"
+        read -p "Change default credentials (admin/admin)? (y/N): " -r CHANGE_DOCKGE_CREDS
+        if [[ $CHANGE_DOCKGE_CREDS =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            read -p "Dockge admin username [admin]: " DOCKGE_ADMIN_USER
+            DOCKGE_ADMIN_USER=${DOCKGE_ADMIN_USER:-admin}
+            read -sp "Dockge admin password: " DOCKGE_ADMIN_PASSWORD
+            echo
+        else
+            DOCKGE_ADMIN_USER="admin"
+            DOCKGE_ADMIN_PASSWORD="admin"
+            print_info "Using default: admin / admin"
         fi
     fi
+
+    # Maintenance window
+    echo
+    echo -e "${BOLD}Maintenance Window:${NC}"
+    echo "  When should automatic updates and maintenance tasks run?"
+    echo "  This sets the preferred time for container updates (Watchtower)."
+    read -p "Maintenance hour (0-23) [4]: " MAINTENANCE_HOUR
+    MAINTENANCE_HOUR=${MAINTENANCE_HOUR:-4}
+    MAINTENANCE_SCHEDULE="0 ${MAINTENANCE_HOUR} * * *"
 
     # Security configuration
     echo
@@ -2642,6 +2726,200 @@ prompt_config() {
         SELF_UPDATE_CHECK_ONLY=${SELF_UPDATE_CHECK_ONLY:-n}
     fi
 
+    # ==========================================================================
+    # CONTROL NODE CONFIGURATION (The Brain)
+    # ==========================================================================
+    # These settings configure the centralized services that run on this machine
+    # (the command/control node) and manage all target servers.
+
+    echo
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}  CONTROL NODE CONFIGURATION${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
+    echo
+    echo "  The Control Node runs centralized services:"
+    echo "  - Grafana (dashboards) + Loki (log aggregation)"
+    echo "  - Netdata Parent (metrics hub)"
+    echo "  - Uptime Kuma (availability monitoring)"
+    echo "  - Traefik (reverse proxy) + Authentik (SSO)"
+    echo "  - Pi-hole + Unbound (DNS)"
+    echo "  - Step-CA (internal SSL certificates)"
+    echo
+
+    # Control Node IP - critical for service discovery
+    echo -e "${BOLD}Control Node Network:${NC}"
+    echo "  Enter the IP address of THIS machine (the control node)."
+    echo "  Target nodes will use this IP to stream metrics and logs."
+    local detected_ip
+    detected_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    read -p "Control node IP address [${detected_ip:-192.168.1.10}]: " CONTROL_NODE_IP
+    CONTROL_NODE_IP=${CONTROL_NODE_IP:-${detected_ip:-192.168.1.10}}
+    echo
+
+    # Authentik (SSO/Identity Provider)
+    echo -e "${BOLD}Authentik (Single Sign-On):${NC}"
+    echo "  Authentik provides OIDC/SSO authentication for Grafana, Traefik dashboard,"
+    echo "  and other services. This eliminates separate logins for each service."
+    echo
+    read -p "Enable Authentik SSO? (Y/n): " -r ENABLE_AUTHENTIK
+    ENABLE_AUTHENTIK=${ENABLE_AUTHENTIK:-y}
+    echo
+
+    if [[ $ENABLE_AUTHENTIK =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        echo "  Authentik admin credentials"
+        read -p "Change default credentials (admin/admin)? (y/N): " -r CHANGE_AUTHENTIK_CREDS
+        if [[ $CHANGE_AUTHENTIK_CREDS =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            read -p "Authentik admin username [admin]: " AUTHENTIK_ADMIN_USER
+            AUTHENTIK_ADMIN_USER=${AUTHENTIK_ADMIN_USER:-admin}
+            read -sp "Authentik admin password: " AUTHENTIK_ADMIN_PASSWORD
+            echo
+        else
+            AUTHENTIK_ADMIN_USER="admin"
+            AUTHENTIK_ADMIN_PASSWORD="admin"
+            print_info "Using default: admin / admin"
+        fi
+
+        # Generate secret key for Authentik
+        AUTHENTIK_SECRET_KEY=$(openssl rand -hex 32)
+        AUTHENTIK_POSTGRES_PASSWORD=$(openssl rand -base64 16)
+    fi
+
+    # Grafana
+    echo
+    echo -e "${BOLD}Grafana (Centralized Dashboards):${NC}"
+    echo "  Grafana displays metrics from Netdata and logs from Loki."
+    echo "  It will be pre-configured with Loki and Netdata datasources."
+    echo
+    if [[ $ENABLE_AUTHENTIK =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        print_info "Grafana will use Authentik for SSO login"
+        CONTROL_GRAFANA_USER="admin"
+        CONTROL_GRAFANA_PASSWORD="managed-by-authentik"
+    else
+        echo "  Grafana admin credentials"
+        read -p "Change default credentials (admin/admin)? (y/N): " -r CHANGE_GRAFANA_CREDS
+        if [[ $CHANGE_GRAFANA_CREDS =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            read -p "Grafana admin username [admin]: " CONTROL_GRAFANA_USER
+            CONTROL_GRAFANA_USER=${CONTROL_GRAFANA_USER:-admin}
+            read -sp "Grafana admin password: " CONTROL_GRAFANA_PASSWORD
+            echo
+        else
+            CONTROL_GRAFANA_USER="admin"
+            CONTROL_GRAFANA_PASSWORD="admin"
+            print_info "Using default: admin / admin"
+        fi
+    fi
+
+    # Netdata Streaming
+    echo
+    echo -e "${BOLD}Netdata Streaming:${NC}"
+    echo "  Target nodes stream metrics to this control node's Netdata."
+    echo "  An API key secures the streaming connection."
+    echo
+    NETDATA_STREAM_API_KEY=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || openssl rand -hex 16)
+    print_info "Generated Netdata stream API key: ${NETDATA_STREAM_API_KEY:0:8}..."
+
+    # Pi-hole (DNS)
+    echo
+    echo -e "${BOLD}Pi-hole (DNS & Ad Blocking):${NC}"
+    echo "  Pi-hole provides DNS resolution with ad-blocking."
+    echo "  Unbound runs as an upstream recursive resolver."
+    echo
+    read -p "Enable Pi-hole + Unbound DNS? (Y/n): " -r ENABLE_DNS
+    ENABLE_DNS=${ENABLE_DNS:-y}
+    echo
+
+    if [[ $ENABLE_DNS =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        echo "  Pi-hole admin dashboard password"
+        read -p "Change default password 'admin'? (y/N): " -r CHANGE_PIHOLE_PASS
+        if [[ $CHANGE_PIHOLE_PASS =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            read -sp "Pi-hole admin password: " PIHOLE_PASSWORD
+            echo
+        else
+            PIHOLE_PASSWORD="admin"
+            print_info "Using default password: admin"
+        fi
+    fi
+
+    # Step-CA (Internal SSL)
+    echo
+    echo -e "${BOLD}Step-CA (Internal Certificate Authority):${NC}"
+    echo "  Step-CA issues SSL certificates for internal services."
+    echo "  Traefik will use ACME to automatically obtain certificates."
+    echo
+    read -p "Enable Step-CA? (Y/n): " -r ENABLE_STEP_CA
+    ENABLE_STEP_CA=${ENABLE_STEP_CA:-y}
+    echo
+
+    if [[ $ENABLE_STEP_CA =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        echo "  Step-CA private key password"
+        read -p "Change default password 'admin'? (y/N): " -r CHANGE_STEPCA_PASS
+        if [[ $CHANGE_STEPCA_PASS =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            read -sp "Step-CA password: " STEP_CA_PASSWORD
+            echo
+        else
+            STEP_CA_PASSWORD="admin"
+            print_info "Using default password: admin"
+        fi
+    fi
+
+    # Uptime Kuma
+    echo
+    echo -e "${BOLD}Uptime Kuma (Availability Monitoring):${NC}"
+    echo "  Uptime Kuma monitors service availability and sends alerts."
+    echo
+    read -p "Enable Uptime Kuma? (Y/n): " -r ENABLE_UPTIME_KUMA
+    ENABLE_UPTIME_KUMA=${ENABLE_UPTIME_KUMA:-y}
+    echo
+
+    if [[ $ENABLE_UPTIME_KUMA =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        echo "  Uptime Kuma admin credentials"
+        read -p "Change default credentials (admin/admin)? (y/N): " -r CHANGE_UPTIMEKUMA_CREDS
+        if [[ $CHANGE_UPTIMEKUMA_CREDS =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            read -p "Uptime Kuma admin username [admin]: " UPTIME_KUMA_USER
+            UPTIME_KUMA_USER=${UPTIME_KUMA_USER:-admin}
+            read -sp "Uptime Kuma admin password: " UPTIME_KUMA_PASSWORD
+            echo
+        else
+            UPTIME_KUMA_USER="admin"
+            UPTIME_KUMA_PASSWORD="admin"
+            print_info "Using default: admin / admin"
+        fi
+    fi
+
+    # Traefik
+    echo
+    echo -e "${BOLD}Traefik (Reverse Proxy):${NC}"
+    echo "  Traefik routes traffic to services and handles SSL termination."
+    echo
+    read -p "Enable Traefik dashboard? (Y/n): " -r ENABLE_TRAEFIK_DASHBOARD
+    ENABLE_TRAEFIK_DASHBOARD=${ENABLE_TRAEFIK_DASHBOARD:-y}
+
+    if [[ $ENABLE_TRAEFIK_DASHBOARD =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        if [[ ! $ENABLE_AUTHENTIK =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo "  Traefik dashboard credentials"
+            read -p "Change default credentials (admin/admin)? (y/N): " -r CHANGE_TRAEFIK_CREDS
+            if [[ $CHANGE_TRAEFIK_CREDS =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                read -p "Traefik dashboard username [admin]: " TRAEFIK_DASHBOARD_USER
+                TRAEFIK_DASHBOARD_USER=${TRAEFIK_DASHBOARD_USER:-admin}
+                read -sp "Traefik dashboard password: " TRAEFIK_DASHBOARD_PASSWORD
+                echo
+            else
+                TRAEFIK_DASHBOARD_USER="admin"
+                TRAEFIK_DASHBOARD_PASSWORD="admin"
+                print_info "Using default: admin / admin"
+            fi
+        else
+            print_info "Traefik dashboard will use Authentik for SSO login"
+        fi
+    fi
+
+    # Let's Encrypt / ACME
+    echo
+    echo -e "${BOLD}SSL Certificates (Let's Encrypt):${NC}"
+    echo "  Email address for certificate expiry notifications"
+    read -p "Let's Encrypt email [admin@${TARGET_DOMAIN}]: " LETSENCRYPT_EMAIL
+    LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL:-admin@${TARGET_DOMAIN}}
+
     echo
     print_success "Configuration complete!"
 }
@@ -2729,6 +3007,10 @@ create_config() {
 target_hostname: "${HOSTNAME_PREFIX}"
 target_timezone: "${TIMEZONE}"
 target_locale: "en_US.UTF-8"
+target_domain: "${TARGET_DOMAIN}"
+
+# Docker Network
+docker_network_subnet: "${DOCKER_NETWORK_SUBNET}"
 
 # Target: Base Directories
 target_base_dir: "/opt/server-helper"
@@ -2790,11 +3072,11 @@ target_netdata:
   claim_rooms: ""
   alarms:
     enabled: true
-    cpu_warning: 80
+    cpu_warning: ${ALERT_CPU_WARNING:-80}
     cpu_critical: 95
-    ram_warning: 80
+    ram_warning: ${ALERT_RAM_WARNING:-85}
     ram_critical: 95
-    disk_warning: 80
+    disk_warning: ${ALERT_DISK_WARNING:-80}
     disk_critical: 90
     check_interval_minutes: 5
   uptime_kuma_push_urls:
@@ -2820,20 +3102,6 @@ $(if [[ $ENABLE_BACKUPS =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOB
     local:
       enabled: $(if [[ $BACKUP_LOCAL =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
       path: "/opt/backups/restic"
-    s3:
-      enabled: $(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-$(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOS3
-      bucket: "${S3_BUCKET}"
-      endpoint: "s3.amazonaws.com"
-      region: "${S3_REGION}"
-EOS3
-fi)
-    b2:
-      enabled: $(if [[ $BACKUP_B2 =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
-$(if [[ $BACKUP_B2 =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOB2
-      bucket: "${B2_BUCKET}"
-EOB2
-fi)
   include_paths:
     - "{{ target_dockge_stacks_dir }}"
     - "{{ target_dockge_data_dir }}"
@@ -2904,12 +3172,12 @@ target_maintenance:
   auto_cleanup:
     enabled: true
     disk_threshold: 80
-    schedule: "0 5 * * 0"
+    schedule: "${MAINTENANCE_SCHEDULE:-0 4 * * *}"
   auto_updates:
     enabled: false
-    schedule: "0 6 * * 0"
+    schedule: "${MAINTENANCE_SCHEDULE:-0 4 * * *}"
     auto_reboot: false
-    reboot_time: "03:00"
+    reboot_time: "0${MAINTENANCE_HOUR:-4}:00"
 
 # Target: Ansible Pull (Self-Update)
 # Automatically pulls and applies configuration from a Git repository
@@ -2937,11 +3205,41 @@ target_performance:
 # CONTROL NODE CONFIGURATION
 # =============================================================================
 
-control_node_install_dir: "/opt/control-node"
+control_node_ip: "${CONTROL_NODE_IP:-}"
+control_node_install_dir: "/opt/stacks"
+
+# Control: Authentik (SSO/Identity Provider)
+control_authentik:
+  enabled: $(if [[ ${ENABLE_AUTHENTIK:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  port: 9000
+  version: "latest"
+
+# Control: Traefik (Reverse Proxy)
+control_traefik:
+  enabled: true
+  http_port: 80
+  https_port: 443
+  dashboard_port: 8080
+  version: "v3.0"
+  acme_email: "${LETSENCRYPT_EMAIL:-admin@${TARGET_DOMAIN}}"
+  dashboard_enabled: $(if [[ ${ENABLE_TRAEFIK_DASHBOARD:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  dashboard_user: "${TRAEFIK_DASHBOARD_USER:-admin}"
+
+# Control: Step-CA (Internal Certificate Authority)
+control_step_ca:
+  enabled: $(if [[ ${ENABLE_STEP_CA:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  port: 9443
+  ca_name: "Server-Helper CA"
+
+# Control: Pi-hole + Unbound (DNS)
+control_dns:
+  enabled: $(if [[ ${ENABLE_DNS:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+  pihole_port: 8053
+  dns_port: 53
 
 # Control: Uptime Kuma (Centralized Monitoring)
 control_uptime_kuma:
-  enabled: true
+  enabled: $(if [[ ${ENABLE_UPTIME_KUMA:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
   port: 3001
   version: "1"
 
@@ -2951,20 +3249,22 @@ control_grafana:
   port: 3000
   version: "latest"
   admin_user: "admin"
+  oidc_enabled: $(if [[ ${ENABLE_AUTHENTIK:-y} =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
 
 # Control: Loki (Centralized Log Aggregation)
 control_loki:
   enabled: true
   port: 3100
   version: "latest"
-  retention_period: "744h"
+  retention_period: "$((${LOG_RETENTION_DAYS:-30} * 24))h"
 
 # Control: Netdata Parent (Centralized Metrics)
 control_netdata:
   enabled: true
   port: 19999
   version: "latest"
-  stream_api_key: "{{ vault_netdata_stream_api_key | default('changeme') }}"
+  mode: "parent"
+  stream_api_key: "{{ vault_netdata_stream_api_key }}"
 
 # Control: Scanopy/Trivy (Container Security)
 control_scanopy:
@@ -2980,17 +3280,19 @@ control_prunemate:
 # =============================================================================
 # SERVICE DISCOVERY & AUTO-REGISTRATION
 # =============================================================================
-# When enabled, services automatically register with the control node.
-
-control_node_ip: ""  # Set during control node setup
+# Target nodes use these settings to connect to control node services.
 
 service_discovery:
-  enabled: false  # Enabled after control node setup
+  enabled: true
+  control_node_ip: "${CONTROL_NODE_IP:-}"
   netdata_streaming:
-    enabled: false
-    api_key: "{{ control_netdata.stream_api_key }}"
+    enabled: true
+    parent_host: "${CONTROL_NODE_IP:-}"
+    parent_port: 19999
+    api_key: "{{ vault_netdata_stream_api_key }}"
   log_aggregation:
-    enabled: false
+    enabled: true
+    loki_url: "http://${CONTROL_NODE_IP:-}:3100/loki/api/v1/push"
     extra_labels:
       environment: "production"
   uptime_monitoring:
@@ -3034,8 +3336,10 @@ create_vault() {
 
     local vault_file="group_vars/vault.yml"
 
-    # Create temporary unencrypted vault file
-    local temp_vault="/tmp/vault_temp.yml"
+    # Create temporary unencrypted vault file with secure cleanup
+    local temp_vault
+    temp_vault=$(mktemp -t vault_temp.XXXXXX.yml)
+    trap 'rm -f "$temp_vault"' EXIT INT TERM
 
     cat > "$temp_vault" <<EOF
 ---
@@ -3052,55 +3356,51 @@ else
 echo "vault_nas_credentials: []"
 fi)
 
-# Restic Passwords
+# Restic Passwords (NAS and Local only)
 vault_restic_passwords:
 $(if [[ $BACKUP_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  nas: \"${RESTIC_NAS_PASS}\""; else echo "  nas: \"\""; fi)
 $(if [[ $BACKUP_LOCAL =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  local: \"${RESTIC_LOCAL_PASS}\""; else echo "  local: \"\""; fi)
-$(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  s3: \"${RESTIC_S3_PASS}\""; else echo "  s3: \"\""; fi)
-$(if [[ $BACKUP_B2 =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  b2: \"${RESTIC_B2_PASS}\""; else echo "  b2: \"\""; fi)
 
-# Cloud Provider Credentials
-$(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOS3
-vault_aws_credentials:
-  access_key: "${AWS_ACCESS_KEY}"
-  secret_key: "${AWS_SECRET_KEY}"
-EOS3
-else
-cat <<EOS3
-vault_aws_credentials:
-  access_key: ""
-  secret_key: ""
-EOS3
-fi)
-
-$(if [[ $BACKUP_B2 =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOB2
-vault_b2_credentials:
-  account_id: "${B2_ACCOUNT_ID}"
-  account_key: "${B2_ACCOUNT_KEY}"
-EOB2
-else
-cat <<EOB2
-vault_b2_credentials:
-  account_id: ""
-  account_key: ""
-EOB2
-fi)
-
-# Service Admin Credentials
+# Service Admin Credentials (default: admin / admin)
 vault_dockge_credentials:
-  username: "admin"
-  password: "${DOCKGE_ADMIN_PASSWORD:-changeme-on-first-login}"
+  username: "${DOCKGE_ADMIN_USER:-admin}"
+  password: "${DOCKGE_ADMIN_PASSWORD:-admin}"
 
 vault_uptime_kuma_credentials:
-  username: "admin"
-  password: "${UPTIME_KUMA_PASSWORD:-changeme-on-first-login}"
+  username: "${UPTIME_KUMA_USER:-admin}"
+  password: "${UPTIME_KUMA_PASSWORD:-admin}"
 
 # Monitoring & Observability
 vault_netdata_claim_token: "${NETDATA_CLAIM_TOKEN}"
 vault_netdata_stream_api_key: "${NETDATA_STREAM_API_KEY:-11111111-2222-3333-4444-555555555555}"
 
 # Control Node Grafana (for centralized monitoring)
+vault_control_grafana_user: "${CONTROL_GRAFANA_USER:-admin}"
 vault_control_grafana_password: "${CONTROL_GRAFANA_PASSWORD:-admin}"
+
+# Control Node: Authentik (SSO/Identity)
+vault_authentik_credentials:
+  admin_user: "${AUTHENTIK_ADMIN_USER:-admin}"
+  admin_password: "${AUTHENTIK_ADMIN_PASSWORD:-admin}"
+  secret_key: "${AUTHENTIK_SECRET_KEY:-$(openssl rand -hex 32)}"
+  postgres_password: "${AUTHENTIK_POSTGRES_PASSWORD:-$(openssl rand -base64 16)}"
+
+# Control Node: Step-CA (Internal SSL)
+vault_step_ca_password: "${STEP_CA_PASSWORD:-admin}"
+
+# Control Node: Pi-hole (DNS)
+vault_pihole_password: "${PIHOLE_PASSWORD:-admin}"
+
+# Control Node: Traefik / Let's Encrypt
+vault_letsencrypt_email: "${LETSENCRYPT_EMAIL:-admin@${TARGET_DOMAIN}}"
+vault_traefik_dashboard:
+  username: "${TRAEFIK_DASHBOARD_USER:-admin}"
+  password: "${TRAEFIK_DASHBOARD_PASSWORD:-admin}"
+
+# Control Node: Grafana OIDC (via Authentik)
+vault_grafana_oidc:
+  client_id: "grafana"
+  client_secret: "$(openssl rand -hex 32)"
 
 vault_uptime_kuma_push_urls:
   nas: ""
@@ -3981,9 +4281,10 @@ update_vault_for_control_services() {
         return 1
     fi
 
-    # Decrypt vault to temp file
+    # Decrypt vault to temp file with secure cleanup
     local temp_vault
-    temp_vault=$(mktemp)
+    temp_vault=$(mktemp -t vault_control.XXXXXX.yml)
+    trap 'rm -f "$temp_vault"' EXIT INT TERM
 
     if ! ansible-vault decrypt "$vault_file" --vault-password-file="$vault_password_file" --output="$temp_vault" 2>/dev/null; then
         print_warning "Failed to decrypt vault, skipping vault update"
@@ -4202,22 +4503,47 @@ show_completion_message() {
     fi
 
     # Show generated passwords if any
-    if [[ -n "${DOCKGE_ADMIN_PASSWORD:-}" ]] || [[ -n "${CONTROL_GRAFANA_PASSWORD:-}" ]] || [[ -n "${UPTIME_KUMA_PASSWORD:-}" ]] || [[ -n "${TRAEFIK_DASHBOARD_PASSWORD:-}" ]]; then
-        echo -e "${BOLD}Generated Credentials (save these!):${NC}"
+    local has_credentials=false
+    if [[ -n "${DOCKGE_ADMIN_PASSWORD:-}" ]] || [[ -n "${CONTROL_GRAFANA_PASSWORD:-}" ]] || \
+       [[ -n "${UPTIME_KUMA_PASSWORD:-}" ]] || [[ -n "${AUTHENTIK_ADMIN_PASSWORD:-}" ]] || \
+       [[ -n "${PIHOLE_PASSWORD:-}" ]] || [[ -n "${STEP_CA_PASSWORD:-}" ]]; then
+        has_credentials=true
+    fi
+
+    if [[ "$has_credentials" == true ]]; then
+        echo -e "${BOLD}Generated Credentials (SAVE THESE!):${NC}"
+        echo -e "${YELLOW}═══════════════════════════════════════════════════════════${NC}"
+        echo
+        echo -e "${BOLD}Target Node Services:${NC}"
         if [[ -n "${DOCKGE_ADMIN_PASSWORD:-}" ]]; then
-            echo -e "  ${YELLOW}Dockge:${NC}          admin / ${DOCKGE_ADMIN_PASSWORD}"
-        fi
-        if [[ -n "${UPTIME_KUMA_PASSWORD:-}" ]]; then
-            echo -e "  ${YELLOW}Uptime Kuma:${NC}     admin / ${UPTIME_KUMA_PASSWORD}"
-        fi
-        if [[ -n "${CONTROL_GRAFANA_PASSWORD:-}" ]]; then
-            echo -e "  ${YELLOW}Grafana:${NC}         admin / ${CONTROL_GRAFANA_PASSWORD}"
-        fi
-        if [[ -n "${TRAEFIK_DASHBOARD_PASSWORD:-}" ]]; then
-            echo -e "  ${YELLOW}Traefik:${NC}         admin / ${TRAEFIK_DASHBOARD_PASSWORD}"
+            echo -e "  Dockge:          ${DOCKGE_ADMIN_USER:-admin} / ${DOCKGE_ADMIN_PASSWORD}"
         fi
         echo
-        print_warning "These passwords are stored encrypted in group_vars/vault.yml"
+        echo -e "${BOLD}Control Node Services:${NC}"
+        if [[ -n "${CONTROL_GRAFANA_PASSWORD:-}" ]] && [[ "${CONTROL_GRAFANA_PASSWORD}" != "managed-by-authentik" ]]; then
+            echo -e "  Grafana:         ${CONTROL_GRAFANA_USER:-admin} / ${CONTROL_GRAFANA_PASSWORD}"
+        fi
+        if [[ -n "${UPTIME_KUMA_PASSWORD:-}" ]]; then
+            echo -e "  Uptime Kuma:     ${UPTIME_KUMA_USER:-admin} / ${UPTIME_KUMA_PASSWORD}"
+        fi
+        if [[ -n "${AUTHENTIK_ADMIN_PASSWORD:-}" ]]; then
+            echo -e "  Authentik:       ${AUTHENTIK_ADMIN_USER:-admin} / ${AUTHENTIK_ADMIN_PASSWORD}"
+        fi
+        if [[ -n "${PIHOLE_PASSWORD:-}" ]]; then
+            echo -e "  Pi-hole:         (web UI) / ${PIHOLE_PASSWORD}"
+        fi
+        if [[ -n "${STEP_CA_PASSWORD:-}" ]]; then
+            echo -e "  Step-CA:         (CA key) / ${STEP_CA_PASSWORD}"
+        fi
+        if [[ -n "${NETDATA_STREAM_API_KEY:-}" ]]; then
+            echo
+            echo -e "${BOLD}Streaming API Keys:${NC}"
+            echo -e "  Netdata Stream:  ${NETDATA_STREAM_API_KEY}"
+        fi
+        echo
+        echo -e "${YELLOW}═══════════════════════════════════════════════════════════${NC}"
+        print_warning "These credentials are stored encrypted in group_vars/vault.yml"
+        print_warning "Vault password file: .vault_password"
         echo
     fi
 

@@ -1,0 +1,75 @@
+---
+# Loki deployment tasks (Control Node only)
+
+- name: Loki deployment
+  when: loki_enabled | bool
+  block:
+    # Create stack directory
+    - name: Create Loki stack directory
+      ansible.builtin.file:
+        path: "{{ loki_stack_dir }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0755"
+      become: true
+
+    # Create data directory
+    - name: Create Loki data directory
+      ansible.builtin.file:
+        path: "{{ loki_stack_dir }}/data"
+        state: directory
+        owner: "10001"  # Loki user inside container
+        group: "10001"
+        mode: "0755"
+      become: true
+
+    # Deploy Loki config
+    - name: Deploy Loki configuration
+      ansible.builtin.template:
+        src: loki-config.yml.j2
+        dest: "{{ loki_stack_dir }}/loki-config.yml"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+      register: loki_config
+
+    # Deploy docker-compose file
+    - name: Deploy Loki docker-compose
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ loki_stack_dir }}/compose.yaml"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+      register: loki_compose
+
+    # Deploy the stack
+    - name: Deploy Loki stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ loki_stack_dir }}"
+        state: present
+        pull: always
+      become: true
+      when: loki_compose.changed or loki_config.changed
+
+    # Ensure Loki is running
+    - name: Ensure Loki is running
+      community.docker.docker_compose_v2:
+        project_src: "{{ loki_stack_dir }}"
+        state: present
+      become: true
+      when: not (loki_compose.changed or loki_config.changed)
+
+    # Wait for Loki to be ready
+    - name: Wait for Loki to be ready
+      ansible.builtin.uri:
+        url: "http://localhost:{{ loki_http_port }}/ready"
+        method: GET
+        status_code: 200
+      register: loki_health
+      until: loki_health.status == 200
+      retries: 30
+      delay: 2

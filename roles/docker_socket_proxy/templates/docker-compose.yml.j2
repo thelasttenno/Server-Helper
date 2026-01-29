@@ -1,0 +1,55 @@
+# Docker Socket Proxy - Secure Docker API Access
+# Managed by Ansible - Server Helper
+# Dockge compatible: /opt/stacks/docker-socket-proxy/
+#
+# SECURITY: Only accessible from {{ docker_socket_proxy_allowed_ip }}
+
+services:
+  docker-socket-proxy:
+    image: {{ docker_socket_proxy_image }}:{{ docker_socket_proxy_image_tag }}
+    container_name: {{ docker_socket_proxy_container_name }}
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "{{ docker_socket_proxy_port }}:2375"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Read-only operations
+      - CONTAINERS={{ docker_socket_proxy_permissions.CONTAINERS }}
+      - IMAGES={{ docker_socket_proxy_permissions.IMAGES }}
+      - NETWORKS={{ docker_socket_proxy_permissions.NETWORKS }}
+      - VOLUMES={{ docker_socket_proxy_permissions.VOLUMES }}
+      - INFO={{ docker_socket_proxy_permissions.INFO }}
+      - VERSION={{ docker_socket_proxy_permissions.VERSION }}
+      - EVENTS={{ docker_socket_proxy_permissions.EVENTS }}
+      - PING={{ docker_socket_proxy_permissions.PING }}
+      # Write operations
+      - POST={{ docker_socket_proxy_permissions.POST }}
+      - BUILD={{ docker_socket_proxy_permissions.BUILD }}
+      - COMMIT={{ docker_socket_proxy_permissions.COMMIT }}
+      - CONFIGS={{ docker_socket_proxy_permissions.CONFIGS }}
+      - DISTRIBUTION={{ docker_socket_proxy_permissions.DISTRIBUTION }}
+      - EXEC={{ docker_socket_proxy_permissions.EXEC }}
+      - GRPC={{ docker_socket_proxy_permissions.GRPC }}
+      - NODES={{ docker_socket_proxy_permissions.NODES }}
+      - PLUGINS={{ docker_socket_proxy_permissions.PLUGINS }}
+      - SECRETS={{ docker_socket_proxy_permissions.SECRETS }}
+      - SERVICES={{ docker_socket_proxy_permissions.SERVICES }}
+      - SESSION={{ docker_socket_proxy_permissions.SESSION }}
+      - SWARM={{ docker_socket_proxy_permissions.SWARM }}
+      - SYSTEM={{ docker_socket_proxy_permissions.SYSTEM }}
+      - TASKS={{ docker_socket_proxy_permissions.TASKS }}
+    deploy:
+      resources:
+        limits:
+          memory: {{ docker_socket_proxy_memory_limit }}
+          cpus: "{{ docker_socket_proxy_cpu_limit }}"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:2375/_ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"

@@ -1,0 +1,47 @@
+---
+# Loki role defaults (Control Node only)
+
+# Master toggle
+loki_enabled: true
+
+# Container settings
+loki_container_name: "loki"
+loki_image: "grafana/loki"
+loki_image_tag: "2.9.0"
+
+# Stack directory (Dockge compatible)
+loki_stack_dir: "/opt/stacks/loki"
+
+# Network ports
+loki_http_port: 3100
+loki_grpc_port: 9096
+
+# Data retention
+loki_retention_period: "744h"  # 31 days
+loki_retention_delete_enabled: true
+
+# Storage configuration
+loki_storage_path: "/loki"
+loki_chunk_target_size: 1536000  # ~1.5MB
+
+# Limits
+loki_ingestion_rate_mb: 4
+loki_ingestion_burst_size_mb: 6
+loki_max_streams_per_user: 10000
+loki_max_entries_limit_per_query: 5000
+
+# Compactor
+loki_compactor_retention_enabled: true
+loki_compactor_retention_delete_delay: "2h"
+loki_compactor_retention_delete_worker_count: 150
+
+# Query settings
+loki_query_timeout: "5m"
+loki_max_query_length: "721h"  # 30 days
+
+# Authentication (optional - typically behind Traefik)
+loki_auth_enabled: false
+
+# Resource limits
+loki_memory_limit: "1g"
+loki_cpu_limit: "1.0"

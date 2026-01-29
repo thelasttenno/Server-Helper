@@ -1,0 +1,45 @@
+#!/bin/bash
+# Restic repository check script
+# Managed by Ansible - Server Helper
+
+set -euo pipefail
+
+# Load environment
+source {{ restic_script_dir }}/restic.env
+
+# Logging
+LOG_FILE="{{ restic_log_dir }}/check-$(date +%Y%m%d-%H%M%S).log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+echo "========================================="
+echo "Restic Check Started: $(date)"
+echo "Host: $(hostname)"
+echo "========================================="
+
+# Check repository integrity
+echo "Checking repository integrity..."
+restic check --verbose
+
+CHECK_EXIT=$?
+
+if [ $CHECK_EXIT -ne 0 ]; then
+    echo "ERROR: Repository check failed with exit code $CHECK_EXIT"
+{% if restic_notify_on_failure and restic_notify_url %}
+    curl -s -X POST "{{ restic_notify_url }}" \
+        -H "Content-Type: application/json" \
+        -d "{\"text\": \"Restic check FAILED on $(hostname) at $(date)\"}" || true
+{% endif %}
+    exit $CHECK_EXIT
+fi
+
+echo ""
+echo "Repository statistics:"
+restic stats
+
+echo ""
+echo "========================================="
+echo "Restic Check Completed: $(date)"
+echo "========================================="
+
+# Cleanup old logs (keep last 30 days)
+find {{ restic_log_dir }} -name "check-*.log" -mtime +30 -delete 2>/dev/null || true

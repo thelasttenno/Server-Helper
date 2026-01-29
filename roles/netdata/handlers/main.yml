@@ -1,18 +1,16 @@
 ---
-# Netdata Role Handlers
+# Netdata role handlers
 
-- name: restart netdata
-  community.docker.docker_container:
-    name: netdata
-    restart: yes
-  ignore_errors: yes
+- name: Restart netdata container
+  community.docker.docker_compose_v2:
+    project_src: "{{ netdata_stack_dir }}"
+    state: present
+    recreate: always
+  become: true
 
-- name: reload systemd
-  systemd:
-    daemon_reload: yes
-
-- name: enable netdata health check timer
-  systemd:
-    name: netdata-health-check.timer
-    enabled: yes
-    state: started
+- name: Reload netdata
+  community.docker.docker_container_exec:
+    container: "{{ netdata_container_name }}"
+    command: "kill -SIGHUP 1"
+  become: true
+  failed_when: false

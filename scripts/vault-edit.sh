@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # vault-edit.sh - Helper script to edit encrypted Ansible Vault files
-# Part of Server Helper v1.0.0
+# Part of Server Helper v2.0.0
 #
 # This is the RECOMMENDED way to edit vault files (no plain text file created).
 #

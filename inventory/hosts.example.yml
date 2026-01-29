@@ -1,271 +1,74 @@
-# ================================================================================
-# Server Helper Inventory - Example
-# ================================================================================
-# This inventory file defines your target nodes for Ansible management.
+# Server Helper Inventory Example
+# ================================
+# Copy this file to hosts.yml and customize for your environment.
+# The setup.sh script will generate this file automatically.
 #
-# QUICK START:
-#   1. Copy this file: cp inventory/hosts.example.yml inventory/hosts.yml
-#   2. Edit hosts.yml with your server IPs and credentials
-#   3. Run: ansible all -m ping  (to test connectivity)
-#   4. Run: ansible-playbook playbooks/setup-targets.yml
-#
-# WHAT GOES HERE:
-#   - Server IP addresses or hostnames
-#   - SSH usernames (the user Ansible will connect as)
-#   - Server groupings (optional, for organizing multiple servers)
-#   - Connection settings (SSH keys, become settings)
-#
-# WHAT DOESN'T GO HERE:
-#   - Service configuration (use group_vars/all.yml instead)
-#   - Secrets/passwords (use group_vars/vault.yml instead)
-#   - Application settings (use group_vars/all.yml instead)
-#
-# ================================================================================
+# Usage: cp inventory/hosts.example.yml inventory/hosts.yml
 
 ---
 all:
-  # ============================================================================
-  # HOSTS: Define your servers here
-  # ============================================================================
-  # Each entry represents one server you want to manage.
-  # The key (e.g., "server01") is a friendly name you'll use to reference it.
-  # ============================================================================
-
   hosts:
-    # ----------------------------------------------------------------------------
-    # Example 1: Basic server configuration
-    # ----------------------------------------------------------------------------
-    server01:
-      # Required: IP address or hostname of the server
-      ansible_host: 192.168.1.100
-
-      # Required: SSH username (should match user created by bootstrap.yml)
+    # Control Node (this machine - runs centralized services)
+    control:
+      ansible_host: 192.168.1.10
       ansible_user: ansible
-
-      # Required: Allow privilege escalation (sudo)
       ansible_become: yes
-
-      # Optional: Specify Python interpreter (usually auto-detected)
       ansible_python_interpreter: /usr/bin/python3
+      ansible_connection: local  # Use local connection for control node
 
-      # Optional: Override hostname for this server
-      # (If not set, uses the key name "server01")
-      # server_hostname: "docker-server-01"
+    # Target Nodes (managed servers)
+    server-01:
+      ansible_host: 192.168.1.101
+      ansible_user: ansible
+      ansible_become: yes
+      ansible_python_interpreter: /usr/bin/python3
+      # Optional: custom hostname for dashboards
+      hostname: "web-server"
 
-      # Optional: Set timezone for this server
-      # (Overrides group_vars/all.yml setting)
-      # server_timezone: "America/New_York"
+    server-02:
+      ansible_host: 192.168.1.102
+      ansible_user: ansible
+      ansible_become: yes
+      ansible_python_interpreter: /usr/bin/python3
+      # Optional: non-standard SSH port
+      ansible_port: 2222
 
-      # Optional: Customize service ports per server
-      # dockge:
-      #   port: 5001
-      # monitoring:
-      #   netdata:
-      #     port: 19999
-
-    # ----------------------------------------------------------------------------
-    # Example 2: Secondary Physical Server (OPTIONAL)
-    # ----------------------------------------------------------------------------
-    # Uncomment and configure a secondary server for:
-    # - Load distribution across multiple physical machines
-    # - Separate environments (dev/staging/prod on different hardware)
-    # - Geographic distribution (different locations)
-    # - Service isolation (separate services per server)
-    #
-    # IMPORTANT: Secondary servers are completely independent by default.
-    # Each gets its own:
-    #   - Dockge instance (manage containers independently)
-    #   - Netdata monitoring (separate metrics)
-    #   - Backup repositories (separate backup storage)
-    #   - Security configuration (separate firewall rules)
-    # ----------------------------------------------------------------------------
-    # server02:
-    #   # Basic connection settings
-    #   ansible_host: 192.168.1.101
-    #   ansible_user: ansible
-    #   ansible_become: yes
-    #
-    #   # Server identification
-    #   server_hostname: "docker-server-02"
-    #   server_role: "secondary"  # Optional: 'primary' or 'secondary' for your reference
-    #   server_id: "02"           # Optional: Used in backup paths for separation
-    #
-    #   # CRITICAL: Different ports to avoid conflicts if both servers are accessible
-    #   # Only needed if both servers share the same network/domain
-    #   dockge:
-    #     port: 5002  # Different from primary (5001)
-    #
-    #   monitoring:
-    #     netdata:
-    #       port: 19998  # Different from primary (19999)
-    #
-    #   # Stagger backup schedules to reduce NAS load
-    #   restic:
-    #     schedule: "0 4 * * *"  # 4 AM (primary runs at 2 AM)
-    #     destinations:
-    #       nas:
-    #         # Separate backup path per server to avoid conflicts
-    #         path: "/mnt/nas/backups/server02"
-    #       # Each server can have different backup destinations
-    #       local:
-    #         enabled: true
-    #         path: "/opt/backups/server02"
-
-    # ----------------------------------------------------------------------------
-    # Example 3: Using hostname instead of IP address
-    # ----------------------------------------------------------------------------
-    # server03:
-    #   ansible_host: docker-node-03.local
-    #   ansible_user: ansible
-    #   ansible_become: yes
-
-    # ----------------------------------------------------------------------------
-    # Example 4: Server with custom SSH port
-    # ----------------------------------------------------------------------------
-    # server04:
-    #   ansible_host: 10.0.0.50
-    #   ansible_port: 2222
-    #   ansible_user: ansible
-    #   ansible_become: yes
-
-    # ----------------------------------------------------------------------------
-    # Example 5: Cloud server with different settings
-    # ----------------------------------------------------------------------------
-    # cloud-server:
-    #   ansible_host: cloud.example.com
-    #   ansible_user: ubuntu  # Cloud providers often use 'ubuntu' user
-    #   ansible_become: yes
-    #   ansible_ssh_private_key_file: ~/.ssh/cloud_key.pem
-
-  # ============================================================================
-  # CHILDREN: Organize servers into groups (optional but recommended)
-  # ============================================================================
-  # Groups let you target specific servers with playbooks or variables.
-  # Example: ansible-playbook playbooks/backup.yml --limit production
-  # ============================================================================
+    # Example: LXC Container (skip LVM and swap)
+    lxc-container:
+      ansible_host: 192.168.1.150
+      ansible_user: ansible
+      ansible_become: yes
+      ansible_python_interpreter: /usr/bin/python3
+      # Skip operations not supported in LXC
+      lvm_skip: true
+      swap_skip: true
+      qemu_agent_skip: true
 
   children:
-    # --------------------------------------------------------------------------
-    # Default group: All servers that should be managed
-    # --------------------------------------------------------------------------
+    # Group: Control Node (centralized services)
+    control_nodes:
+      hosts:
+        control:
+
+    # Group: Target Nodes (managed servers)
+    targets:
+      hosts:
+        server-01:
+        server-02:
+        lxc-container:
+
+    # Group: Physical/VM servers (full features)
     servers:
       hosts:
-        server01:
-        # server02:
-        # server03:
+        server-01:
+        server-02:
 
-    # --------------------------------------------------------------------------
-    # Example: Production vs Development environments
-    # --------------------------------------------------------------------------
-    # production:
-    #   hosts:
-    #     server01:
-    #     server02:
-    #   vars:
-    #     # Production-specific settings
-    #     restic:
-    #       enabled: true
-    #     monitoring:
-    #       netdata:
-    #         claim_token: "prod-claim-token"
-
-    # development:
-    #   hosts:
-    #     server03:
-    #   vars:
-    #     # Development-specific settings
-    #     restic:
-    #       enabled: false  # Don't backup dev servers
-
-    # --------------------------------------------------------------------------
-    # Example: Grouping by function/role
-    # --------------------------------------------------------------------------
-    # webservers:
-    #   hosts:
-    #     server01:
-    #     server02:
-
-    # databases:
-    #   hosts:
-    #     server03:
-
-    # monitoring_nodes:
-    #   hosts:
-    #     server04:
-
-    # --------------------------------------------------------------------------
-    # Example: Grouping by location/datacenter
-    # --------------------------------------------------------------------------
-    # us_east:
-    #   hosts:
-    #     server01:
-    #     server02:
-    #   vars:
-    #     timezone: "America/New_York"
-
-    # eu_west:
-    #   hosts:
-    #     server03:
-    #   vars:
-    #     timezone: "Europe/London"
-
-  # ============================================================================
-  # VARS: Global variables applied to ALL hosts
-  # ============================================================================
-  # These settings apply to every server defined above unless overridden.
-  # ============================================================================
+    # Group: LXC containers (limited features)
+    containers:
+      hosts:
+        lxc-container:
 
   vars:
-    # --------------------------------------------------------------------------
-    # SSH Connection Settings
-    # --------------------------------------------------------------------------
-
-    # Disable strict host key checking (useful for dynamic IPs)
-    # WARNING: Less secure, only use in trusted networks
+    # Global SSH settings
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-
-    # Use SSH key authentication (RECOMMENDED for production)
-    # Uncomment and set path to your private key:
-    # ansible_ssh_private_key_file: ~/.ssh/id_rsa
-
-    # Use password authentication (NOT RECOMMENDED for production)
-    # Store passwords in vault.yml and reference them here:
-    # ansible_ssh_pass: "{{ vault_ansible_ssh_password }}"
-    # ansible_become_pass: "{{ vault_ansible_become_password }}"
-
-    # --------------------------------------------------------------------------
-    # Connection Tuning (Advanced)
-    # --------------------------------------------------------------------------
-
-    # Maximum parallel connections (increase for faster deployments)
-    # ansible_forks: 10
-
-    # SSH connection timeout (increase for slow networks)
-    # ansible_ssh_timeout: 30
-
-    # Enable SSH pipelining (faster, but may not work with some sudo configs)
-    # ansible_ssh_pipelining: true
-
-# ================================================================================
-# NEXT STEPS:
-# ================================================================================
-# 1. Save this file as: inventory/hosts.yml
-# 2. Test connectivity: ansible all -m ping
-# 3. Bootstrap new servers: ansible-playbook playbooks/bootstrap.yml -K
-# 4. Configure servers: ansible-playbook playbooks/setup-targets.yml
-# 5. Setup monitoring: ansible-playbook playbooks/setup-control.yml
-#
-# USEFUL COMMANDS:
-# - List all hosts: ansible-inventory --list
-# - List specific group: ansible-inventory --list production
-# - Test connection: ansible all -m ping
-# - Run on specific host: ansible-playbook playbook.yml --limit server01
-# - Run on group: ansible-playbook playbook.yml --limit production
-#
-# MULTI-SERVER MANAGEMENT:
-# - Setup all servers: ansible-playbook playbooks/setup-targets.yml
-# - Setup only secondary: ansible-playbook playbooks/setup-targets.yml --limit server02
-# - Backup all servers: ansible-playbook playbooks/backup.yml
-# - Update all servers: ansible all -m package -a "name=* state=latest" -b
-# - Check all servers: ansible all -m shell -a "docker ps" -b
-# ================================================================================
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa

@@ -1,31 +1,70 @@
 ---
-# Restic Role Defaults
-restic:
-  destinations:
-    nas:
-      enabled: false
-      path: ""
-      password: ""
-    s3:
-      enabled: false
-      endpoint: ""
-      bucket: ""
-      password: ""
-      access_key: ""
-      secret_key: ""
-    b2:
-      enabled: false
-      bucket: ""
-      password: ""
-      account_id: ""
-      account_key: ""
-    local:
-      enabled: false
-      path: ""
-      password: ""
-  schedule: "0 2 * * *"
-  retention:
-    keep_daily: 7
-    keep_weekly: 4
-    keep_monthly: 6
-    keep_yearly: 1
+# Restic backup role defaults
+
+# Master toggle
+restic_enabled: "{{ target_backup.enabled | default(true) }}"
+
+# Restic binary installation
+restic_version: "0.16.4"
+restic_install_method: "package"  # package or binary
+
+# Repository configuration
+restic_repository: "{{ target_backup.repository | default('') }}"
+restic_password: "{{ vault_restic_password | default('') }}"
+
+# Repository type-specific settings
+# For S3-compatible storage (NAS running MinIO)
+restic_aws_access_key_id: "{{ vault_restic_aws_access_key | default('') }}"
+restic_aws_secret_access_key: "{{ vault_restic_aws_secret_key | default('') }}"
+
+# Backup paths
+restic_backup_paths:
+  - "/opt/stacks"
+  - "/etc"
+
+# Exclude patterns
+restic_exclude_patterns:
+  - "*.tmp"
+  - "*.log"
+  - "*.cache"
+  - "**/node_modules/**"
+  - "**/.git/**"
+  - "**/venv/**"
+  - "**/__pycache__/**"
+
+# Additional exclude file (optional)
+restic_exclude_file: ""
+
+# Backup schedule (cron format) - default: 2 AM daily
+restic_backup_schedule: "{{ target_backup.schedule | default('0 2 * * *') }}"
+
+# Retention policy
+restic_retention_keep_last: "{{ target_backup.retention.keep_last | default(7) }}"
+restic_retention_keep_daily: "{{ target_backup.retention.keep_daily | default(7) }}"
+restic_retention_keep_weekly: "{{ target_backup.retention.keep_weekly | default(4) }}"
+restic_retention_keep_monthly: "{{ target_backup.retention.keep_monthly | default(6) }}"
+restic_retention_keep_yearly: "{{ target_backup.retention.keep_yearly | default(1) }}"
+
+# Prune after backup
+restic_prune_enabled: true
+
+# Check repository integrity (weekly)
+restic_check_enabled: true
+restic_check_schedule: "0 3 * * 0"  # Sunday 3 AM
+
+# Backup script location
+restic_script_dir: "/opt/restic"
+restic_log_dir: "/var/log/restic"
+
+# Notification on failure (optional)
+restic_notify_on_failure: false
+restic_notify_url: ""  # webhook URL for notifications
+
+# Pre/post backup hooks (optional)
+restic_pre_backup_script: ""
+restic_post_backup_script: ""
+
+# Nice/ionice for lower priority
+restic_nice_level: 10
+restic_ionice_class: 2
+restic_ionice_level: 7

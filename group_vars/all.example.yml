@@ -1,73 +1,65 @@
----
-# Server Helper Configuration
+# Server Helper Configuration Example
+# ====================================
+# Copy this file to all.yml and customize for your environment.
+# The setup.sh script will generate this file automatically.
 #
-# This file contains configuration for BOTH target nodes and control node.
 # Variables are organized with prefixes:
-#   - target_*: Services deployed on managed servers (setup-targets.yml)
-#   - control_*: Centralized services on control node (setup-control.yml)
+#   - target_*:  Services deployed on managed servers
+#   - control_*: Centralized services on the control node
 #
-# Copy this file to group_vars/all.yml and customize as needed.
-# Alternatively, run setup.sh to generate configuration interactively.
+# Usage: cp group_vars/all.example.yml group_vars/all.yml
 
+---
 # =============================================================================
 # TARGET NODE CONFIGURATION
 # =============================================================================
+# These settings are applied to all managed target servers.
 
 # Target: System Settings
-target_hostname: "docker-server"
-target_timezone: "UTC"  # Use 'timedatectl list-timezones' to see available
+target_hostname: "server"
+target_timezone: "America/Vancouver"
 target_locale: "en_US.UTF-8"
 
-# Target: Base Directories
+# Target: Base Directories (Dockge-compatible structure)
 target_base_dir: "/opt/server-helper"
-target_dockge_base_dir: "/opt/dockge"
-target_dockge_stacks_dir: "{{ target_dockge_base_dir }}/stacks"
-target_dockge_data_dir: "{{ target_dockge_base_dir }}/data"
+target_dockge_base_dir: "/opt/stacks"
+target_dockge_stacks_dir: "{{ target_dockge_base_dir }}"
+target_dockge_data_dir: "{{ target_dockge_base_dir }}/dockge/data"
 
 # Target: NAS Mounts
 target_nas_mounts:
   enabled: false
-  # shares:
-  #   - name: "primary"
-  #     ip: "192.168.1.100"
-  #     share_name: "share"
-  #     mount_point: "/mnt/nas"
-  #     username: "{{ vault_nas_credentials[0].username }}"
-  #     password: "{{ vault_nas_credentials[0].password }}"
-  #     smb_version: "3.0"
-  #     options: "_netdev,nofail"
+  shares:
+    - name: "backup"
+      ip: "192.168.1.100"
+      share_name: "backup"
+      mount_point: "/mnt/nas/backup"
+      username: "{{ vault_nas_credentials[0].username }}"
+      password: "{{ vault_nas_credentials[0].password }}"
+      smb_version: "3.0"
+      options: "_netdev,nofail"
 
 # Target: LVM Configuration
 target_lvm_config:
-  enabled: false
+  enabled: true
   auto_extend_ubuntu: true
   custom_lvs: []
-  # Example:
-  # - lv_path: "/dev/my-vg/my-lv"
-  #   extend_percent: 100
-  #   resize_cmd: "resize2fs"
   create_lvs: []
-  # Example:
-  # - vg: "ubuntu-vg"
-  #   lv: "docker-lv"
-  #   size: "50G"
-  #   fstype: "ext4"
-  #   mount_point: "/var/lib/docker"
 
 # Target: System Users
 target_system_users:
   create_admin_user: false
-  # admin_user: "admin"
-  # admin_password: "{{ vault_system_users.admin_password }}"
-  # admin_groups:
-  #   - sudo
-  #   - docker
-  # admin_passwordless_sudo: true
-  # admin_ssh_key: "{{ vault_system_users.admin_ssh_key }}"
+  admin_user: "admin"
+  admin_password: "{{ vault_system_users.admin_password }}"
+  admin_groups:
+    - sudo
+    - docker
+  admin_passwordless_sudo: true
+  admin_ssh_key: "{{ vault_system_users.admin_ssh_key }}"
   disable_root_password: true
   additional_users: []
 
-# Target: Dockge (Container Management)
+# Target: Dockge (Container Management UI)
 target_dockge:
   enabled: true
   port: 5001
@@ -78,8 +70,9 @@ target_netdata:
   enabled: true
   port: 19999
   version: "latest"
-  claim_token: ""  # Get from: https://app.netdata.cloud
-  claim_rooms: ""  # Room IDs (comma-separated)
+  mode: "child"  # Streams to control node parent
+  claim_token: ""
+  claim_rooms: ""
   alarms:
     enabled: true
     cpu_warning: 80
@@ -90,56 +83,56 @@ target_netdata:
     disk_critical: 90
     check_interval_minutes: 5
   uptime_kuma_push_urls:
-    cpu: ""      # e.g., http://localhost:3001/api/push/CPU123
-    ram: ""      # e.g., http://localhost:3001/api/push/RAM123
-    disk: ""     # e.g., http://localhost:3001/api/push/DISK123
-    system: ""   # e.g., http://localhost:3001/api/push/SYS123
+    cpu: ""
+    ram: ""
+    disk: ""
+    system: ""
 
 # Target: Restic (Encrypted Backups)
 target_restic:
-  enabled: false
-  # schedule: "0 2 * * *"  # Daily at 2 AM
-  # retention:
-  #   keep_daily: 7
-  #   keep_weekly: 4
-  #   keep_monthly: 6
-  #   keep_yearly: 2
-  # destinations:
-  #   nas:
-  #     enabled: false
-  #     path: "/mnt/nas/restic"
-  #   local:
-  #     enabled: false
-  #     path: "/opt/backups/restic"
-  #   s3:
-  #     enabled: false
-  #     bucket: "my-backup-bucket"
-  #     endpoint: "s3.amazonaws.com"
-  #     region: "us-east-1"
-  #   b2:
-  #     enabled: false
-  # include_paths:
-  #   - "{{ target_dockge_stacks_dir }}"
-  #   - "{{ target_dockge_data_dir }}"
-  #   - "/etc"
-  #   - "/root"
-  #   - "/home"
-  # exclude_patterns:
-  #   - "*.tmp"
-  #   - "*.log"
-  #   - "cache"
-  #   - "*.cache"
+  enabled: true
+  schedule: "0 2 * * *"
+  retention:
+    keep_daily: 7
+    keep_weekly: 4
+    keep_monthly: 6
+    keep_yearly: 2
+  destinations:
+    nas:
+      enabled: false
+      path: "/mnt/nas/backup/restic"
+    local:
+      enabled: true
+      path: "/opt/backups/restic"
+    s3:
+      enabled: false
+      bucket: ""
+      endpoint: "s3.amazonaws.com"
+      region: "us-east-1"
+    b2:
+      enabled: false
+      bucket: ""
+  include_paths:
+    - "{{ target_dockge_stacks_dir }}"
+    - "/etc"
+    - "/root"
+    - "/home"
+  exclude_patterns:
+    - "*.tmp"
+    - "*.log"
+    - "cache"
+    - "*.cache"
 
 # Target: Security
 target_security:
   basic_hardening: true
   lynis:
     enabled: true
-    schedule: "0 3 * * 0"  # Weekly on Sunday at 3 AM
+    schedule: "0 3 * * 0"
   fail2ban:
     enabled: true
     sshd_maxretry: 3
-    sshd_bantime: 86400  # 24 hours
+    sshd_bantime: 86400
   ufw:
     enabled: true
     default_incoming: deny
@@ -151,28 +144,16 @@ target_security:
     pubkey_authentication: true
     max_auth_tries: 3
 
-# Target: Logging (Promtail only - streams to central Loki)
+# Target: Logging (Promtail - streams to Loki)
 target_logging:
   promtail:
     enabled: true
     additional_jobs: []
-    # Example:
-    # - name: "nginx"
-    #   path: "/var/log/nginx/*.log"
-
-# Target: Reverse Proxy (Optional)
-target_reverse_proxy:
-  enabled: true
-  traefik:
-    port: 80
-    dashboard_port: 8080
-    https_port: 443
-    version: "v3.0"
 
 # Target: Watchtower (Container Auto-Updates)
 target_watchtower:
-  enabled: false
-  schedule: "0 4 * * *"  # Daily at 4 AM
+  enabled: true
+  schedule: "0 4 * * *"
   cleanup: true
 
 # Target: Docker Configuration
@@ -189,39 +170,52 @@ target_maintenance:
   auto_cleanup:
     enabled: true
     disk_threshold: 80
-    schedule: "0 5 * * 0"  # Weekly on Sunday at 5 AM
+    schedule: "0 5 * * 0"
   auto_updates:
     enabled: false
     schedule: "0 6 * * 0"
     auto_reboot: false
     reboot_time: "03:00"
 
-# Target: Ansible Pull (Self-Update)
-# Automatically pulls and applies configuration from a Git repository
-target_ansible_pull:
-  enabled: false
-  # repo_url: "https://github.com/youruser/Server-Helper.git"
-  # branch: "main"
-  # schedule: "0 5 * * *"
-  # check_only: false
-  # playbook: "playbooks/setup-targets.yml"
-  # log_file: "/var/log/ansible-pull.log"
-
 # Target: Virtualization
 target_virtualization:
-  qemu_guest_agent: false
-
-# Target: Performance Tuning
-target_performance:
-  tuning_enabled: false
+  qemu_guest_agent: true
 
 # =============================================================================
 # CONTROL NODE CONFIGURATION
 # =============================================================================
+# These settings configure centralized services on the control node.
 
-control_node_install_dir: "/opt/control-node"
+control_node_ip: "192.168.1.10"
+control_node_install_dir: "/opt/stacks"
 
-# Control: Uptime Kuma (Centralized Monitoring)
+# Control: Authentik (SSO/Identity Provider)
+control_authentik:
+  enabled: true
+  port: 9000
+  version: "latest"
+
+# Control: Traefik (Reverse Proxy)
+control_traefik:
+  enabled: true
+  http_port: 80
+  https_port: 443
+  dashboard_port: 8080
+  version: "v3.0"
+
+# Control: Step-CA (Internal Certificate Authority)
+control_step_ca:
+  enabled: true
+  port: 9443
+  ca_name: "Server-Helper CA"
+
+# Control: Pi-hole + Unbound (DNS)
+control_dns:
+  enabled: true
+  pihole_port: 8053
+  dns_port: 53
+
+# Control: Uptime Kuma (Availability Monitoring)
 control_uptime_kuma:
   enabled: true
   port: 3001
@@ -233,20 +227,22 @@ control_grafana:
   port: 3000
   version: "latest"
   admin_user: "admin"
+  oidc_enabled: true  # Use Authentik for SSO
 
 # Control: Loki (Centralized Log Aggregation)
 control_loki:
   enabled: true
   port: 3100
   version: "latest"
-  retention_period: "744h"  # 31 days
+  retention_period: "744h"
 
 # Control: Netdata Parent (Centralized Metrics)
 control_netdata:
   enabled: true
   port: 19999
   version: "latest"
-  stream_api_key: "{{ vault_netdata_stream_api_key | default('changeme') }}"
+  mode: "parent"
+  stream_api_key: "{{ vault_netdata_stream_api_key }}"
 
 # Control: Scanopy/Trivy (Container Security)
 control_scanopy:
@@ -257,26 +253,26 @@ control_scanopy:
 # Control: PruneMate (Docker Cleanup)
 control_prunemate:
   enabled: true
-  schedule: "0 3 * * 0"  # Weekly on Sunday at 3 AM
+  schedule: "0 3 * * 0"
 
 # =============================================================================
 # SERVICE DISCOVERY & AUTO-REGISTRATION
 # =============================================================================
-# When enabled, services automatically register with the control node.
-
-control_node_ip: ""  # Set during control node setup, e.g., "192.168.1.100"
+# Target nodes use these settings to connect to control node services.
 
 service_discovery:
-  enabled: false  # Enabled after control node setup
+  enabled: true
+  control_node_ip: "{{ control_node_ip }}"
   netdata_streaming:
-    enabled: false
-    api_key: "{{ control_netdata.stream_api_key }}"
+    enabled: true
+    parent_host: "{{ control_node_ip }}"
+    parent_port: 19999
+    api_key: "{{ vault_netdata_stream_api_key }}"
   log_aggregation:
-    enabled: false
-    extra_labels:
-      environment: "production"
+    enabled: true
+    loki_url: "http://{{ control_node_ip }}:3100/loki/api/v1/push"
   uptime_monitoring:
-    enabled: false
+    enabled: true
     monitored_services:
       - name: "Dockge"
         type: "http"
@@ -289,7 +285,7 @@ service_discovery:
         port: 22
   dns_registration:
     enabled: false
-    domain: "internal"
+    domain: "local"
 
 # =============================================================================
 # DEBUG & FEATURE FLAGS

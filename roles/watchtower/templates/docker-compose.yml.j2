@@ -1,0 +1,41 @@
+# Watchtower - Container auto-update service
+# Managed by Ansible - Server Helper
+# Dockge compatible: /opt/stacks/watchtower/
+
+services:
+  watchtower:
+    image: {{ watchtower_image }}:{{ watchtower_image_tag }}
+    container_name: {{ watchtower_container_name }}
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+{% if watchtower_lifecycle_hooks %}
+      - ./lifecycle-hooks:/lifecycle-hooks:ro
+{% endif %}
+    environment:
+      - TZ={{ target_timezone | default('America/Vancouver') }}
+      - WATCHTOWER_SCHEDULE={{ watchtower_schedule }}
+      - WATCHTOWER_CLEANUP={{ watchtower_cleanup | string | lower }}
+      - WATCHTOWER_INCLUDE_STOPPED={{ watchtower_include_stopped | string | lower }}
+      - WATCHTOWER_INCLUDE_RESTARTING={{ watchtower_include_restarting | string | lower }}
+      - WATCHTOWER_ROLLING_RESTART={{ watchtower_rolling_restart | string | lower }}
+      - WATCHTOWER_MONITOR_ONLY={{ watchtower_monitor_only | string | lower }}
+      - WATCHTOWER_REVIVE_STOPPED={{ watchtower_revive_stopped | string | lower }}
+      - WATCHTOWER_STOP_TIMEOUT={{ watchtower_stop_timeout }}
+{% if watchtower_label_enable %}
+      - WATCHTOWER_LABEL_ENABLE=true
+{% endif %}
+{% if watchtower_notifications_enabled and watchtower_notification_url %}
+      - WATCHTOWER_NOTIFICATION_URL={{ watchtower_notification_url }}
+{% endif %}
+{% if watchtower_http_api_enabled %}
+      - WATCHTOWER_HTTP_API_UPDATE=true
+      - WATCHTOWER_HTTP_API_PERIODIC_POLLS=true
+{% if watchtower_http_api_token %}
+      - WATCHTOWER_HTTP_API_TOKEN={{ watchtower_http_api_token }}
+{% endif %}
+    ports:
+      - "8080:8080"
+{% endif %}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"

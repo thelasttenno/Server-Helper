@@ -1,0 +1,59 @@
+# Netdata - Real-time monitoring
+# Managed by Ansible - Server Helper
+# Mode: {{ netdata_mode }}
+# Dockge compatible: /opt/stacks/netdata/
+
+services:
+  netdata:
+    image: {{ netdata_image }}:{{ netdata_image_tag }}
+    container_name: {{ netdata_container_name }}
+    hostname: {{ netdata_hostname }}
+    restart: unless-stopped
+    pid: host
+    network_mode: host
+    cap_add:
+      - SYS_PTRACE
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    volumes:
+      - netdataconfig:/etc/netdata
+      - netdatalib:/var/lib/netdata
+      - netdatacache:/var/cache/netdata
+      - ./config/netdata.conf:/etc/netdata/netdata.conf:ro
+{% if netdata_streaming_enabled %}
+      - ./config/stream.conf:/etc/netdata/stream.conf:ro
+{% endif %}
+{% if netdata_mode == "parent" %}
+      - ./config/health.d:/etc/netdata/health.d:ro
+{% endif %}
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /var/log:/host/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - NETDATA_CLAIM_TOKEN={{ netdata_claim_token }}
+      - NETDATA_CLAIM_ROOMS={{ netdata_claim_rooms }}
+      - NETDATA_CLAIM_URL={{ netdata_claim_url }}
+{% if netdata_mode == "parent" %}
+    ports:
+      - "{{ netdata_web_port }}:19999"
+{% endif %}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+{% if netdata_mode == "parent" %}
+      - "traefik.enable=true"
+      - "traefik.http.routers.netdata.rule=Host(`netdata.{{ target_domain | default('local') }}`)"
+      - "traefik.http.routers.netdata.entrypoints=websecure"
+      - "traefik.http.routers.netdata.tls=true"
+      - "traefik.http.services.netdata.loadbalancer.server.port=19999"
+{% endif %}
+
+volumes:
+  netdataconfig:
+  netdatalib:
+  netdatacache:

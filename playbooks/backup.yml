@@ -1,60 +1,133 @@
-# Server Helper v1.0.0 - Backup Playbook
-# Run manual backups: ansible-playbook playbooks/backup.yml
-
 ---
-- name: Run Manual Backup
-  hosts: all
-  become: yes
-  gather_facts: yes
+# Backup playbook - Trigger manual backups
+# Useful for pre-maintenance backups or ad-hoc backup needs
+#
+# Usage:
+#   ansible-playbook playbooks/backup.yml
+#   ansible-playbook playbooks/backup.yml --limit "server1"
+#   ansible-playbook playbooks/backup.yml --tags "docker"
 
-  vars_files:
-    - ../group_vars/all.yml
-    - ../group_vars/vault.yml
+- name: Server Helper - Manual Backup
+  hosts: all
+  become: true
+  gather_facts: true
 
   pre_tasks:
-    - name: Display backup banner
+    - name: Display backup information
       ansible.builtin.debug:
         msg: |
-          ╔════════════════════════════════════════╗
-          ║    Server Helper - Manual Backup       ║
-          ╚════════════════════════════════════════╝
-
-    - name: Check if backups are enabled
-      ansible.builtin.fail:
-        msg: "Backups are not enabled in configuration"
-      when: not (backups.enabled | default(false))
+          ================================================
+          Starting Backup: {{ inventory_hostname }}
+          ================================================
+          Time: {{ ansible_date_time.iso8601 }}
+          ================================================
 
   tasks:
-    - name: Run Restic backup script
-      ansible.builtin.command: "{{ base_install_dir }}/scripts/backup.sh"
-      register: backup_result
-      tags: [backup]
-    
-    - name: Display backup output
+    # Check if restic is configured
+    - name: Check if restic backup is configured
+      ansible.builtin.stat:
+        path: /opt/restic/backup.sh
+      register: restic_script
+      tags: [restic]
+
+    # Stop containers before backup (optional, for consistency)
+    - name: List running Docker stacks
+      ansible.builtin.find:
+        paths: /opt/stacks
+        file_type: directory
+      register: docker_stacks
+      tags: [docker]
+
+    # Backup Docker volumes
+    - name: Create Docker volume backup directory
+      ansible.builtin.file:
+        path: /tmp/docker-backup-{{ ansible_date_time.date }}
+        state: directory
+        mode: "0755"
+      tags: [docker]
+
+    - name: Export Docker compose configs
+      ansible.builtin.copy:
+        src: "{{ item.path }}/compose.yaml"
+        dest: "/tmp/docker-backup-{{ ansible_date_time.date }}/{{ item.path | basename }}-compose.yaml"
+        remote_src: true
+      loop: "{{ docker_stacks.files }}"
+      failed_when: false
+      tags: [docker]
+
+    # Run restic backup
+    - name: Run restic backup
+      ansible.builtin.command: /opt/restic/backup.sh
+      register: restic_backup
+      when: restic_script.stat.exists
+      async: 3600
+      poll: 30
+      tags: [restic]
+
+    - name: Display restic backup result
       ansible.builtin.debug:
-        msg: "{{ backup_result.stdout_lines }}"
-      when: backup_result.stdout_lines is defined
-  
+        msg: "{{ restic_backup.stdout_lines | default(['Restic backup not configured']) }}"
+      when: restic_script.stat.exists
+      tags: [restic]
+
   post_tasks:
-    - name: Send backup heartbeat to Uptime Kuma
-      ansible.builtin.uri:
-        url: "{{ monitoring.uptime_kuma.push_monitors.backup }}?status=up&msg=manual-backup-complete"
-        method: GET
-        status_code: [200, 201]
-      when: monitoring.uptime_kuma.push_monitors.backup | default('') | length > 0
-      ignore_errors: yes
-    
-    - name: Display completion message
+    - name: Display backup summary
       ansible.builtin.debug:
         msg: |
-          ╔════════════════════════════════════════╗
-          ║    Backup Complete!                    ║
-          ╚════════════════════════════════════════╝
-          
-          📊 Check backup status:
-          - Log file: /var/log/restic-backup.log
-          - List snapshots: restic -r /path/to/repo snapshots
-          
-          💡 Restore instructions:
-          1. List snapshots: restic -r <repo> snapshots
-          2. Restore: restic -r <repo> restore <snapshot-id> --target /tmp/restore
+          ================================================
+          Backup Complete: {{ inventory_hostname }}
+          ================================================
+          Restic backup: {{ 'Completed' if restic_script.stat.exists else 'Not configured' }}
+          Docker configs: Exported to /tmp/docker-backup-{{ ansible_date_time.date }}/
+          ================================================
+
+# Control node specific backups
+- name: Control Node Backup
+  hosts: control
+  become: true
+  gather_facts: true
+  tags: [control-backup]
+
+  tasks:
+    - name: Backup Authentik database
+      community.docker.docker_container_exec:
+        container: authentik-postgres
+        command: pg_dump -U authentik authentik
+      register: authentik_db_dump
+      failed_when: false
+
+    - name: Save Authentik database dump
+      ansible.builtin.copy:
+        content: "{{ authentik_db_dump.stdout }}"
+        dest: "/opt/stacks/authentik/backup-{{ ansible_date_time.date }}.sql"
+        mode: "0600"
+      when: authentik_db_dump.rc == 0
+
+    - name: Backup Pi-hole configuration
+      ansible.builtin.archive:
+        path:
+          - /opt/stacks/pihole/pihole
+          - /opt/stacks/pihole/dnsmasq.d
+        dest: "/opt/stacks/pihole/backup-{{ ansible_date_time.date }}.tar.gz"
+        format: gz
+      failed_when: false
+
+    - name: Backup Step-CA configuration
+      ansible.builtin.archive:
+        path:
+          - /opt/stacks/step-ca/config
+          - /opt/stacks/step-ca/certs
+        dest: "/opt/stacks/step-ca/backup-{{ ansible_date_time.date }}.tar.gz"
+        format: gz
+      failed_when: false
+
+    - name: Display control backup summary
+      ansible.builtin.debug:
+        msg: |
+          ================================================
+          Control Node Backups Complete
+          ================================================
+          Authentik DB: /opt/stacks/authentik/backup-{{ ansible_date_time.date }}.sql
+          Pi-hole: /opt/stacks/pihole/backup-{{ ansible_date_time.date }}.tar.gz
+          Step-CA: /opt/stacks/step-ca/backup-{{ ansible_date_time.date }}.tar.gz
+          ================================================

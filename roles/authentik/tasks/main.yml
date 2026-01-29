@@ -1,104 +1,91 @@
 ---
-# Authentik Role - Identity Provider & SSO Setup
+# Authentik deployment tasks (Control Node)
 
-- name: Create Authentik stack directory in Dockge
-  ansible.builtin.file:
-    path: "{{ dockge_stacks_dir }}/authentik"
-    state: directory
-    mode: '0755'
-  when: authentik.enabled | default(false)
+- name: Authentik deployment
+  when: authentik_enabled | bool
+  block:
+    # Create stack directory
+    - name: Create Authentik stack directory
+      ansible.builtin.file:
+        path: "{{ authentik_stack_dir }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0755"
+      become: true
 
-- name: Deploy Authentik docker-compose file
-  ansible.builtin.template:
-    src: docker-compose.authentik.yml.j2
-    dest: "{{ dockge_stacks_dir }}/authentik/compose.yaml"
-    mode: '0644'
-  when: authentik.enabled | default(false)
-  notify: Restart Authentik
+    # Create subdirectories
+    - name: Create Authentik subdirectories
+      ansible.builtin.file:
+        path: "{{ authentik_stack_dir }}/{{ item }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0755"
+      loop:
+        - media
+        - templates
+        - certs
+        - postgres
+        - redis
+      become: true
 
-- name: Create Authentik network
-  community.docker.docker_network:
-    name: authentik
-    state: present
-  when: authentik.enabled | default(false)
+    # Deploy environment file
+    - name: Deploy Authentik environment file
+      ansible.builtin.template:
+        src: authentik.env.j2
+        dest: "{{ authentik_stack_dir }}/.env"
+        owner: root
+        group: docker
+        mode: "0600"
+      become: true
+      no_log: true
 
-- name: Start Authentik stack
-  community.docker.docker_compose_v2:
-    project_src: "{{ dockge_stacks_dir }}/authentik"
-    state: present
-  when: authentik.enabled | default(false)
+    # Deploy docker-compose file
+    - name: Deploy Authentik docker-compose
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ authentik_stack_dir }}/compose.yaml"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+      register: authentik_compose
 
-- name: Wait for Authentik to be ready
-  ansible.builtin.uri:
-    url: "http://localhost:{{ authentik.http_port | default(9000) }}/if/flow/initial-setup/"
-    status_code: [200, 302]
-  register: authentik_health
-  until: authentik_health.status in [200, 302]
-  retries: 60
-  delay: 5
-  when: authentik.enabled | default(false)
+    # Deploy the stack
+    - name: Deploy Authentik stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ authentik_stack_dir }}"
+        state: present
+        pull: always
+      become: true
+      when: authentik_compose.changed
 
-- name: Check if Authentik has been configured
-  ansible.builtin.uri:
-    url: "http://localhost:{{ authentik.http_port | default(9000) }}/if/flow/initial-setup/"
-    method: GET
-    status_code: [200, 302]
-  register: authentik_configured
-  failed_when: false
-  when: authentik.enabled | default(false)
+    # Ensure Authentik is running
+    - name: Ensure Authentik is running
+      community.docker.docker_compose_v2:
+        project_src: "{{ authentik_stack_dir }}"
+        state: present
+      become: true
+      when: not authentik_compose.changed
 
-- name: Create Authentik setup guide
-  ansible.builtin.template:
-    src: authentik-setup-guide.md.j2
-    dest: /root/authentik-setup-guide.md
-    mode: '0644'
-  when: authentik.enabled | default(false)
+    # Wait for Authentik to be ready
+    - name: Wait for Authentik to be ready
+      ansible.builtin.uri:
+        url: "http://localhost:{{ authentik_http_port }}/-/health/ready/"
+        method: GET
+        status_code: 200
+      register: authentik_health
+      until: authentik_health.status == 200
+      retries: 60
+      delay: 5
 
-- name: Display Authentik setup instructions (first time setup)
-  ansible.builtin.debug:
-    msg:
-      - "=============================================="
-      - "    Authentik Setup Required"
-      - "=============================================="
-      - ""
-      - "Authentik is running but requires initial setup:"
-      - ""
-      - "1. Access Authentik:"
-      - "   http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/if/flow/initial-setup/"
-      - ""
-      - "2. Complete initial setup wizard:"
-      - "   - Set admin email: {{ vault_authentik_credentials.admin_email }}"
-      - "   - Set admin password: {{ vault_authentik_credentials.admin_password }}"
-      - ""
-      - "3. After setup, access admin interface:"
-      - "   http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/if/admin/"
-      - ""
-      - "4. Configure authentication:"
-      - "   - Create applications for your services"
-      - "   - Configure OAuth2/OIDC providers"
-      - "   - Setup flows and policies"
-      - "   - Enable MFA/WebAuthn"
-      - ""
-      - "5. Integration examples:"
-      - "   - Grafana: OAuth2 provider"
-      - "   - Netdata: Reverse proxy auth"
-      - "   - Uptime Kuma: Reverse proxy auth"
-      - "   - Custom apps: OIDC/SAML"
-      - ""
-      - "6. Setup guide available at:"
-      - "   /root/authentik-setup-guide.md"
-      - ""
-      - "=============================================="
-  when:
-    - authentik.enabled | default(false)
-    - authentik_configured.status == 200
-
-- name: Display Authentik information (already configured)
-  ansible.builtin.debug:
-    msg:
-      - "Authentik is configured!"
-      - "Admin interface: http://{{ ansible_host }}:{{ authentik.http_port | default(9000) }}/if/admin/"
-      - "Setup guide: /root/authentik-setup-guide.md"
-  when:
-    - authentik.enabled | default(false)
-    - authentik_configured.status == 302
+    # Deploy setup guide
+    - name: Deploy Authentik setup guide
+      ansible.builtin.template:
+        src: setup-guide.md.j2
+        dest: "{{ authentik_stack_dir }}/SETUP-GUIDE.md"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true

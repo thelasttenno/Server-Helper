@@ -1,24 +1,38 @@
 ---
-# Fail2ban Configuration
+# Fail2ban tasks
 
-- name: Create Fail2ban jail.local
+- name: Fail2ban - Install
+  ansible.builtin.apt:
+    name: fail2ban
+    state: present
+  become: true
+
+- name: Fail2ban - Deploy jail.local configuration
   ansible.builtin.template:
     src: jail.local.j2
     dest: /etc/fail2ban/jail.local
-    mode: '0644'
-  notify: Restart Fail2ban
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  become: true
+  notify: Restart fail2ban
 
-- name: Ensure Fail2ban is started and enabled
+- name: Fail2ban - Enable and start service
   ansible.builtin.systemd:
     name: fail2ban
     state: started
-    enabled: true
+    enabled: yes
+  become: true
 
-- name: Display Fail2ban status
+- name: Fail2ban - Get status
   ansible.builtin.command: fail2ban-client status
   register: fail2ban_status
   changed_when: false
+  become: true
+  failed_when: false
 
-- name: Show Fail2ban status
+- name: Fail2ban - Display status
   ansible.builtin.debug:
-    var: fail2ban_status.stdout_lines
+    msg: "{{ fail2ban_status.stdout_lines }}"
+  when: fail2ban_status.rc == 0

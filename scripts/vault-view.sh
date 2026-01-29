@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # vault-view.sh - Helper script to view encrypted Ansible Vault files
-# Part of Server Helper v1.0.0
+# Part of Server Helper v2.0.0
 #
 # This is the SAFE way to view vault files (no plain text file created).
 #

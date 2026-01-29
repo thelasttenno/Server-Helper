@@ -1,0 +1,13 @@
+---
+# Traefik role handlers
+
+- name: Restart traefik
+  community.docker.docker_compose_v2:
+    project_src: "{{ traefik_stack_dir }}"
+    state: present
+    recreate: always
+  become: true
+
+- name: Reload traefik dynamic config
+  ansible.builtin.debug:
+    msg: "Traefik automatically reloads dynamic configuration from file provider"

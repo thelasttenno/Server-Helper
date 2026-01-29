@@ -1,0 +1,33 @@
+# Promtail - Log shipping agent
+# Managed by Ansible - Server Helper
+# Dockge compatible: /opt/stacks/promtail/
+
+services:
+  promtail:
+    image: {{ promtail_image }}:{{ promtail_image_tag }}
+    container_name: {{ promtail_container_name }}
+    restart: unless-stopped
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - promtail-positions:/var/log
+    command: -config.file=/etc/promtail/config.yml
+    ports:
+      - "{{ promtail_http_port }}:9080"
+    deploy:
+      resources:
+        limits:
+          memory: {{ promtail_memory_limit }}
+          cpus: "{{ promtail_cpu_limit }}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9080/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+volumes:
+  promtail-positions:

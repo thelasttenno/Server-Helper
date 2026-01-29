@@ -1,35 +1,58 @@
 ---
-# Netdata Role Default Variables
+# Netdata role defaults
 
-netdata:
-  enabled: true
-  port: 19999
-  
-  # Alarm configuration
-  alarms:
-    enabled: true
-    
-    # CPU thresholds
-    cpu_warning: 80
-    cpu_critical: 95
-    
-    # RAM thresholds
-    ram_warning: 80
-    ram_critical: 95
-    
-    # Disk thresholds
-    disk_warning: 80
-    disk_critical: 90
-    
-    # Health check interval
-    check_interval_minutes: 5
-    
-    # Uptime Kuma push URLs (populated from vault)
-    uptime_kuma_urls:
-      cpu: ""
-      ram: ""
-      disk: ""
-      docker: ""
-  
-  # Netdata Cloud (optional)
-  claim_token: ""
+# Master toggle
+netdata_enabled: true
+
+# Deployment mode: "parent" (control node) or "child" (target nodes)
+netdata_mode: "child"
+
+# Container settings
+netdata_container_name: "netdata"
+netdata_image: "netdata/netdata"
+netdata_image_tag: "stable"
+
+# Stack directory (Dockge compatible)
+netdata_stack_dir: "/opt/stacks/netdata"
+
+# Web interface port (parent only)
+netdata_web_port: 19999
+
+# Streaming configuration
+netdata_streaming_enabled: true
+netdata_stream_api_key: "{{ vault_netdata_stream_api_key | default('') }}"
+
+# Parent node configuration (for child nodes to connect to)
+netdata_parent_host: "{{ control_node_ip | default('') }}"
+netdata_parent_port: 19999
+
+# Parent mode settings
+netdata_parent_allow_from: "*"
+netdata_parent_default_memory_mode: "dbengine"
+netdata_parent_health_enabled_by_default: "auto"
+
+# Child mode settings
+netdata_child_memory_mode: "none"  # Don't store locally, stream to parent
+netdata_child_health_enabled: "no"  # Parent handles alerts
+
+# Data retention (parent only)
+netdata_dbengine_multihost_disk_space: 2048  # MB
+netdata_dbengine_page_cache_size: 64  # MB
+
+# Claim token for Netdata Cloud (optional)
+netdata_claim_token: ""
+netdata_claim_rooms: ""
+netdata_claim_url: "https://app.netdata.cloud"
+
+# Health notifications
+netdata_notifications_enabled: false
+netdata_discord_webhook: ""
+netdata_slack_webhook: ""
+
+# Alarm thresholds
+netdata_alarm_cpu_threshold: 85
+netdata_alarm_ram_threshold: 90
+netdata_alarm_disk_threshold: 90
+
+# Hostname override
+netdata_hostname: "{{ inventory_hostname }}"

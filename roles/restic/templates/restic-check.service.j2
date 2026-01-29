@@ -1,0 +1,20 @@
+[Unit]
+Description=Restic Repository Check Service
+Documentation=https://restic.readthedocs.io/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={{ restic_script_dir }}/check.sh
+Nice=19
+IOSchedulingClass=3
+
+# Security hardening
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths={{ restic_log_dir }}
+ReadOnlyPaths={{ restic_script_dir }}
+
+[Install]
+WantedBy=multi-user.target

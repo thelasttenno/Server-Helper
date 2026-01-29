@@ -1,9 +1,0 @@
----
-# Galaxy roles required for security role testing
-roles:
-  - name: geerlingguy.security
-    version: "3.2.0"
-  - name: robertdebock.fail2ban
-    version: "7.1.1"
-  - name: weareinteractive.ufw
-    version: "1.18.0"

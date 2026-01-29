@@ -1,0 +1,189 @@
+---
+# Common role - Base system configuration for all nodes
+
+- name: Display role info
+  ansible.builtin.debug:
+    msg: "Configuring common system settings on {{ inventory_hostname }}"
+
+# =============================================================================
+# SYSTEM UPDATES
+# =============================================================================
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: true
+
+- name: Upgrade all packages
+  ansible.builtin.apt:
+    upgrade: dist
+    autoremove: yes
+    autoclean: yes
+  become: true
+  when: common_upgrade_packages | default(false)
+
+# =============================================================================
+# BASE PACKAGES
+# =============================================================================
+
+- name: Install common packages
+  ansible.builtin.apt:
+    name: "{{ common_packages }}"
+    state: present
+  become: true
+
+# =============================================================================
+# TIMEZONE & LOCALE
+# =============================================================================
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ common_timezone }}"
+  become: true
+  notify: Restart cron
+
+- name: Ensure locale is generated
+  community.general.locale_gen:
+    name: "{{ common_locale }}"
+    state: present
+  become: true
+
+- name: Set default locale
+  ansible.builtin.lineinfile:
+    path: /etc/default/locale
+    regexp: "^LANG="
+    line: "LANG={{ common_locale }}"
+    create: yes
+  become: true
+
+# =============================================================================
+# CHRONY (NTP)
+# =============================================================================
+
+- name: Install chrony
+  ansible.builtin.apt:
+    name: chrony
+    state: present
+  become: true
+  when: common_chrony_enabled
+
+- name: Configure chrony
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: /etc/chrony/chrony.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  become: true
+  when: common_chrony_enabled
+  notify: Restart chrony
+
+- name: Enable and start chrony
+  ansible.builtin.systemd:
+    name: chrony
+    state: started
+    enabled: yes
+  become: true
+  when: common_chrony_enabled
+
+# =============================================================================
+# CPU MICROCODE
+# =============================================================================
+
+- name: Detect CPU vendor
+  ansible.builtin.shell: |
+    grep -m1 'vendor_id' /proc/cpuinfo | awk '{print $3}'
+  register: cpu_vendor
+  changed_when: false
+  when: common_microcode_enabled
+
+- name: Install Intel microcode
+  ansible.builtin.apt:
+    name: intel-microcode
+    state: present
+  become: true
+  when:
+    - common_microcode_enabled
+    - cpu_vendor.stdout == "GenuineIntel"
+  ignore_errors: yes
+
+- name: Install AMD microcode
+  ansible.builtin.apt:
+    name: amd64-microcode
+    state: present
+  become: true
+  when:
+    - common_microcode_enabled
+    - cpu_vendor.stdout == "AuthenticAMD"
+  ignore_errors: yes
+
+# =============================================================================
+# LOGROTATE FOR DOCKER
+# =============================================================================
+
+- name: Configure logrotate for Docker containers
+  ansible.builtin.template:
+    src: docker-logrotate.j2
+    dest: /etc/logrotate.d/docker-containers
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: common_docker_logrotate_enabled
+
+# =============================================================================
+# SYSCTL TUNING
+# =============================================================================
+
+- name: Apply sysctl settings
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-server-helper.conf
+    reload: yes
+    state: present
+  become: true
+  loop: "{{ common_sysctl_settings | dict2items }}"
+  when: common_sysctl_tuning
+  ignore_errors: yes
+
+# =============================================================================
+# HOSTNAME
+# =============================================================================
+
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+  become: true
+  when: common_set_hostname | default(false)
+
+- name: Update /etc/hosts with hostname
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: "^127\\.0\\.1\\.1"
+    line: "127.0.1.1 {{ inventory_hostname }}"
+    state: present
+  become: true
+  when: common_set_hostname | default(false)
+
+# =============================================================================
+# JOURNAL CONFIGURATION
+# =============================================================================
+
+- name: Configure systemd journal size limit
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: "^#?SystemMaxUse="
+    line: "SystemMaxUse=500M"
+  become: true
+  notify: Restart journald
+
+- name: Configure journal compression
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: "^#?Compress="
+    line: "Compress=yes"
+  become: true
+  notify: Restart journald

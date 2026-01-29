@@ -1,0 +1,58 @@
+---
+# Promtail role defaults (Target Nodes)
+
+# Master toggle
+promtail_enabled: true
+
+# Container settings
+promtail_container_name: "promtail"
+promtail_image: "grafana/promtail"
+promtail_image_tag: "2.9.0"
+
+# Stack directory (Dockge compatible)
+promtail_stack_dir: "/opt/stacks/promtail"
+
+# Loki server connection
+promtail_loki_url: "http://{{ control_node_ip | default('localhost') }}:3100/loki/api/v1/push"
+
+# HTTP server port (for metrics/health)
+promtail_http_port: 9080
+
+# Positions file
+promtail_positions_path: "/var/log/positions.yaml"
+
+# Log paths to scrape
+promtail_log_paths:
+  - name: system
+    path: /var/log/*.log
+    labels:
+      job: system
+  - name: syslog
+    path: /var/log/syslog
+    labels:
+      job: syslog
+  - name: auth
+    path: /var/log/auth.log
+    labels:
+      job: auth
+  - name: docker
+    path: /var/lib/docker/containers/*/*.log
+    labels:
+      job: docker
+
+# Additional scrape configs (advanced)
+promtail_extra_scrape_configs: []
+
+# Pipeline stages for log processing
+promtail_pipeline_stages_enabled: true
+
+# Batch settings
+promtail_batch_wait: "1s"
+promtail_batch_size: 1048576  # 1MB
+
+# Resource limits
+promtail_memory_limit: "256m"
+promtail_cpu_limit: "0.5"
+
+# Hostname label
+promtail_hostname: "{{ inventory_hostname }}"

@@ -1,0 +1,69 @@
+# Loki configuration
+# Managed by Ansible - Server Helper
+
+auth_enabled: {{ loki_auth_enabled | lower }}
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: info
+
+common:
+  path_prefix: {{ loki_storage_path }}
+  storage:
+    filesystem:
+      chunks_directory: {{ loki_storage_path }}/chunks
+      rules_directory: {{ loki_storage_path }}/rules
+  replication_factor: 1
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: boltdb-shipper
+      object_store: filesystem
+      schema: v11
+      index:
+        prefix: index_
+        period: 24h
+
+ruler:
+  alertmanager_url: http://localhost:9093
+
+ingester:
+  chunk_target_size: {{ loki_chunk_target_size }}
+  max_chunk_age: 1h
+  chunk_idle_period: 30m
+  chunk_retain_period: 30s
+  lifecycler:
+    ring:
+      kvstore:
+        store: inmemory
+      replication_factor: 1
+
+limits_config:
+  ingestion_rate_mb: {{ loki_ingestion_rate_mb }}
+  ingestion_burst_size_mb: {{ loki_ingestion_burst_size_mb }}
+  max_streams_per_user: {{ loki_max_streams_per_user }}
+  max_entries_limit_per_query: {{ loki_max_entries_limit_per_query }}
+  retention_period: {{ loki_retention_period }}
+
+compactor:
+  working_directory: {{ loki_storage_path }}/compactor
+  shared_store: filesystem
+  retention_enabled: {{ loki_compactor_retention_enabled | lower }}
+  retention_delete_delay: {{ loki_compactor_retention_delete_delay }}
+  retention_delete_worker_count: {{ loki_compactor_retention_delete_worker_count }}
+
+analytics:
+  reporting_enabled: false

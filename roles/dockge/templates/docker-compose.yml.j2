@@ -1,22 +1,34 @@
-version: '3.8'
+# Dockge - Docker Compose Stack Manager
+# Managed by Ansible - Server Helper
+# Dockge compatible: /opt/stacks/dockge/
 
 services:
   dockge:
-    image: louislam/dockge:{{ dockge.version }}
-    container_name: dockge
+    image: {{ dockge_image }}:{{ dockge_image_tag }}
+    container_name: {{ dockge_container_name }}
     restart: unless-stopped
     ports:
-      - "{{ dockge.port }}:5001"
+      - "{{ dockge_port }}:5001"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - {{ dockge_data_dir }}:/app/data
-      - {{ dockge_stacks_dir }}:/opt/stacks
+      - ./data:/app/data
+      - {{ dockge_stacks_dir }}:{{ dockge_stacks_dir }}
     environment:
-      - DOCKGE_STACKS_DIR=/opt/stacks
-    networks:
-      - server-helper
+      - DOCKGE_STACKS_DIR={{ dockge_stacks_dir }}
+    deploy:
+      resources:
+        limits:
+          memory: {{ dockge_memory_limit }}
+          cpus: "{{ dockge_cpu_limit }}"
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.dockge.rule=Host(`dockge.{{ target_domain | default('local') }}`)"
+      - "traefik.http.routers.dockge.entrypoints=websecure"
+      - "traefik.http.routers.dockge.tls=true"
+      - "traefik.http.services.dockge.loadbalancer.server.port=5001"
 
 networks:
-  server-helper:
-    name: server-helper
-    driver: bridge
+  default:
+    name: {{ traefik_docker_network | default('traefik-public') }}
+    external: true

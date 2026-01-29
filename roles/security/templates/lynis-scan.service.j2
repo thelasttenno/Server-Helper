@@ -1,0 +1,11 @@
+[Unit]
+Description=Lynis Security Audit
+Documentation=https://cisofy.com/lynis/
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/lynis-scan.sh
+User=root
+
+[Install]
+WantedBy=multi-user.target

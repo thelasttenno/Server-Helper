@@ -1,39 +1,74 @@
 ---
-# Dockge Role - Main Tasks
-- name: Create Dockge directories
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    mode: '0755'
-  loop:
-    - "{{ dockge_base_dir }}"
-    - "{{ dockge_stacks_dir }}"
-    - "{{ dockge_data_dir }}"
+# Dockge deployment tasks
 
-- name: Deploy Dockge docker-compose file
-  ansible.builtin.template:
-    src: docker-compose.yml.j2
-    dest: "{{ dockge_base_dir }}/docker-compose.yml"
-    mode: '0644'
-  notify: Restart Dockge
+- name: Dockge deployment
+  when: dockge_enabled | bool
+  block:
+    # Create stacks directory
+    - name: Create stacks directory
+      ansible.builtin.file:
+        path: "{{ dockge_stacks_dir }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0775"
+      become: true
 
-- name: Start Dockge container
-  community.docker.docker_compose_v2:
-    project_src: "{{ dockge_base_dir }}"
-    state: present
+    # Create Dockge stack directory
+    - name: Create Dockge stack directory
+      ansible.builtin.file:
+        path: "{{ dockge_stack_dir }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0755"
+      become: true
 
-- name: Wait for Dockge to be ready
-  ansible.builtin.uri:
-    url: "http://localhost:{{ dockge.port }}"
-    status_code: 200
-  register: dockge_health
-  until: dockge_health.status == 200
-  retries: 30
-  delay: 2
+    # Create data directory
+    - name: Create Dockge data directory
+      ansible.builtin.file:
+        path: "{{ dockge_data_dir }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0755"
+      become: true
 
-- name: Display Dockge access info
-  ansible.builtin.debug:
-    msg:
-      - "Dockge is ready!"
-      - "Access at: http://{{ ansible_default_ipv4.address }}:{{ dockge.port }}"
-      - "All container stacks will be deployed to: {{ dockge_stacks_dir }}"
+    # Deploy docker-compose file
+    - name: Deploy Dockge docker-compose
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ dockge_stack_dir }}/compose.yaml"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+      register: dockge_compose
+
+    # Deploy the stack
+    - name: Deploy Dockge stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ dockge_stack_dir }}"
+        state: present
+        pull: always
+      become: true
+      when: dockge_compose.changed
+
+    # Ensure Dockge is running
+    - name: Ensure Dockge is running
+      community.docker.docker_compose_v2:
+        project_src: "{{ dockge_stack_dir }}"
+        state: present
+      become: true
+      when: not dockge_compose.changed
+
+    # Wait for Dockge to be ready
+    - name: Wait for Dockge to be ready
+      ansible.builtin.uri:
+        url: "http://localhost:{{ dockge_port }}"
+        method: GET
+        status_code: [200, 302]
+      register: dockge_health
+      until: dockge_health.status in [200, 302]
+      retries: 30
+      delay: 2

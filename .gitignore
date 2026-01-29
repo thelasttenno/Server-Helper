@@ -331,3 +331,6 @@ credentials.yaml
 #
 # To check what would be committed:
 #   git add . --dry-run
+.claude/plan.md
+.claude/prompt-v2.md
+.claude/instructions.md

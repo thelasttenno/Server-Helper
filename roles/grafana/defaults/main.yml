@@ -1,0 +1,97 @@
+---
+# Grafana role defaults (Control Node only)
+
+# Master toggle
+grafana_enabled: true
+
+# Container settings
+grafana_container_name: "grafana"
+grafana_image: "grafana/grafana-oss"
+grafana_image_tag: "latest"
+
+# Stack directory (Dockge compatible)
+grafana_stack_dir: "/opt/stacks/grafana"
+
+# Network port
+grafana_port: 3000
+
+# Admin credentials
+grafana_admin_user: "admin"
+grafana_admin_password: "{{ vault_grafana_admin_password | default('admin') }}"
+
+# Allow anonymous access (read-only dashboards)
+grafana_anonymous_enabled: false
+grafana_anonymous_org_role: "Viewer"
+
+# Grafana server settings
+grafana_root_url: "https://grafana.{{ target_domain | default('local') }}"
+grafana_serve_from_sub_path: false
+
+# Disable signup
+grafana_disable_signup: true
+grafana_allow_org_create: false
+
+# SMTP settings (optional)
+grafana_smtp_enabled: false
+grafana_smtp_host: ""
+grafana_smtp_port: 587
+grafana_smtp_user: ""
+grafana_smtp_password: ""
+grafana_smtp_from_address: ""
+grafana_smtp_from_name: "Grafana"
+
+# =============================================================================
+# OAUTH/AUTHENTIK SSO INTEGRATION
+# =============================================================================
+# Set grafana_oauth_enabled: true and configure after Authentik is set up
+# Create an OAuth2 provider in Authentik with:
+#   - Redirect URI: https://grafana.{{ target_domain }}/login/generic_oauth
+#   - Scopes: openid profile email
+
+grafana_oauth_enabled: false
+grafana_oauth_name: "Authentik"
+grafana_oauth_allow_sign_up: true
+grafana_oauth_auto_login: false  # Set true to skip Grafana login page
+grafana_oauth_client_id: "{{ vault_grafana_oauth_client_id | default('') }}"
+grafana_oauth_client_secret: "{{ vault_grafana_oauth_client_secret | default('') }}"
+grafana_oauth_scopes: "openid profile email"
+grafana_oauth_auth_url: "https://auth.{{ target_domain | default('local') }}/application/o/authorize/"
+grafana_oauth_token_url: "https://auth.{{ target_domain | default('local') }}/application/o/token/"
+grafana_oauth_api_url: "https://auth.{{ target_domain | default('local') }}/application/o/userinfo/"
+# Role mapping from Authentik groups
+grafana_oauth_role_attribute_path: "contains(groups[*], 'Grafana Admins') && 'Admin' || contains(groups[*], 'Grafana Editors') && 'Editor' || 'Viewer'"
+
+# =============================================================================
+# DATASOURCES - Auto-provisioned
+# =============================================================================
+grafana_datasources:
+  # Loki for log aggregation
+  - name: Loki
+    type: loki
+    url: "http://loki:3100"
+    is_default: true
+    json_data:
+      maxLines: 1000
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: "traceID=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
+
+  # Netdata for real-time metrics
+  - name: Netdata
+    type: prometheus
+    url: "http://{{ control_node_ip | default('localhost') }}:19999/api/v1/allmetrics?format=prometheus"
+    is_default: false
+    json_data:
+      timeInterval: "1s"
+      httpMethod: GET
+
+# Plugins to install
+grafana_plugins:
+  - grafana-piechart-panel
+  - grafana-clock-panel
+
+# Resource limits
+grafana_memory_limit: "512m"
+grafana_cpu_limit: "1.0"

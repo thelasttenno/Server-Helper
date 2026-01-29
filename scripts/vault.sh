@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # vault.sh - Master Ansible Vault management script
-# Part of Server Helper v1.0.0
+# Part of Server Helper v2.0.0
 #
 # All-in-one tool for vault operations
 #

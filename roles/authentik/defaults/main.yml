@@ -1,26 +1,68 @@
 ---
-# Authentik Role - Default Variables
+# Authentik role defaults (Control Node)
 
-# Authentik Configuration
-authentik:
-  enabled: true
-  version: "2024.12"
-  http_port: 9000
-  https_port: 9443
+# Master toggle
+authentik_enabled: true
 
-  # Database settings
-  db_user: authentik
-  db_name: authentik
+# Container settings
+authentik_image: "ghcr.io/goauthentik/server"
+authentik_image_tag: "2024.2"
 
-  # Email configuration (optional)
-  email:
-    enabled: false
-    host: ""
-    port: 587
-    username: ""
-    use_tls: true
-    use_ssl: false
-    from: "authentik@example.com"
+# Stack directory (Dockge compatible)
+authentik_stack_dir: "/opt/stacks/authentik"
 
-# Dockge integration
-dockge_stacks_dir: "/opt/stacks"
+# Network ports
+authentik_http_port: 9000
+authentik_https_port: 9443
+
+# Secret key (generate with: openssl rand -hex 32)
+authentik_secret_key: "{{ vault_authentik_secret_key | default('') }}"
+
+# PostgreSQL settings
+authentik_postgres_enabled: true
+authentik_postgres_image: "postgres:15-alpine"
+authentik_postgres_db: "authentik"
+authentik_postgres_user: "authentik"
+authentik_postgres_password: "{{ vault_authentik_postgres_password | default('') }}"
+
+# Redis settings
+authentik_redis_enabled: true
+authentik_redis_image: "redis:7-alpine"
+
+# Initial admin account
+authentik_bootstrap_email: "{{ vault_authentik_admin_email | default('admin@example.com') }}"
+authentik_bootstrap_password: "{{ vault_authentik_admin_password | default('') }}"
+authentik_bootstrap_token: "{{ vault_authentik_bootstrap_token | default('') }}"
+
+# Email settings (optional)
+authentik_email_enabled: false
+authentik_email_host: ""
+authentik_email_port: 587
+authentik_email_username: ""
+authentik_email_password: ""
+authentik_email_use_tls: true
+authentik_email_use_ssl: false
+authentik_email_from: "authentik@example.com"
+
+# Error reporting
+authentik_error_reporting_enabled: false
+
+# Domain and branding
+authentik_domain: "auth.{{ target_domain | default('local') }}"
+
+# Outpost settings for embedded outpost
+authentik_outpost_enabled: true
+
+# Worker replicas
+authentik_worker_replicas: 1
+
+# Resource limits
+authentik_server_memory_limit: "1g"
+authentik_worker_memory_limit: "1g"
+authentik_postgres_memory_limit: "512m"
+authentik_redis_memory_limit: "128m"
+
+# Geoip (optional, for location-based policies)
+authentik_geoip_enabled: false
+authentik_geoip_account_id: ""
+authentik_geoip_license_key: ""

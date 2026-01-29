@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # vault-rekey.sh - Helper script to change Ansible Vault password
-# Part of Server Helper v1.0.0
+# Part of Server Helper v2.0.0
 #
 # Use this when:
 #   - Rotating vault password (security best practice)
@@ -138,9 +138,10 @@ if [[ $# -eq 1 && "$1" == "--all" ]]; then
         exit 0
     fi
 
-    # Generate new vault password
+    # Generate new vault password with secure cleanup on interrupt
     info "Generating new vault password..."
     new_password_file=".vault_password_new"
+    trap 'rm -f "$new_password_file"' INT TERM
     openssl rand -base64 32 > "$new_password_file"
     chmod 600 "$new_password_file"
     success "Generated new vault password"

@@ -1,0 +1,6 @@
+# Custom DNS records for Pi-hole
+# Managed by Ansible - Server Helper
+
+{% for record in pihole_custom_dns_records %}
+{{ record.ip }} {{ record.hostname }}
+{% endfor %}

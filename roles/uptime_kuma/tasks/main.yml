@@ -1,0 +1,74 @@
+---
+# Uptime Kuma deployment tasks (Control Node only)
+
+- name: Uptime Kuma deployment
+  when: uptime_kuma_enabled | bool
+  block:
+    # Create stack directory
+    - name: Create Uptime Kuma stack directory
+      ansible.builtin.file:
+        path: "{{ uptime_kuma_stack_dir }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0755"
+      become: true
+
+    # Create data directory
+    - name: Create Uptime Kuma data directory
+      ansible.builtin.file:
+        path: "{{ uptime_kuma_data_dir }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0755"
+      become: true
+
+    # Deploy docker-compose file
+    - name: Deploy Uptime Kuma docker-compose
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ uptime_kuma_stack_dir }}/compose.yaml"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
+      register: uptime_kuma_compose
+
+    # Deploy the stack
+    - name: Deploy Uptime Kuma stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ uptime_kuma_stack_dir }}"
+        state: present
+        pull: always
+      become: true
+      when: uptime_kuma_compose.changed
+
+    # Ensure Uptime Kuma is running
+    - name: Ensure Uptime Kuma is running
+      community.docker.docker_compose_v2:
+        project_src: "{{ uptime_kuma_stack_dir }}"
+        state: present
+      become: true
+      when: not uptime_kuma_compose.changed
+
+    # Wait for Uptime Kuma to be ready
+    - name: Wait for Uptime Kuma to be ready
+      ansible.builtin.uri:
+        url: "http://localhost:{{ uptime_kuma_port }}"
+        method: GET
+        status_code: [200, 302]
+      register: uptime_kuma_health
+      until: uptime_kuma_health.status in [200, 302]
+      retries: 30
+      delay: 2
+
+    # Deploy setup guide
+    - name: Deploy Uptime Kuma setup guide
+      ansible.builtin.template:
+        src: setup-guide.md.j2
+        dest: "{{ uptime_kuma_stack_dir }}/SETUP-GUIDE.md"
+        owner: root
+        group: docker
+        mode: "0644"
+      become: true
