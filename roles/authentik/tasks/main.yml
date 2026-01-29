@@ -23,10 +23,9 @@
   when: authentik.enabled | default(false)
 
 - name: Start Authentik stack
-  community.docker.docker_compose:
+  community.docker.docker_compose_v2:
     project_src: "{{ dockge_stacks_dir }}/authentik"
     state: present
-    pull: true
   when: authentik.enabled | default(false)
 
 - name: Wait for Authentik to be ready

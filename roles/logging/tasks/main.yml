@@ -81,10 +81,9 @@
     state: present
 
 - name: Start logging stack
-  community.docker.docker_compose:
+  community.docker.docker_compose_v2:
     project_src: "{{ logging_stack_dir }}"
     state: present
-    pull: true
   register: logging_output
 
 - name: Wait for Loki to be ready

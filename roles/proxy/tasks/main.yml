@@ -39,10 +39,9 @@
     mode: '0644'
 
 - name: Start Traefik container
-  community.docker.docker_compose:
+  community.docker.docker_compose_v2:
     project_src: "{{ proxy_base_dir }}"
     state: present
-    pull: true
 
 - name: Wait for Traefik to be ready
   ansible.builtin.uri:

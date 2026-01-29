@@ -2,7 +2,6 @@
 # Proxy Role - Handlers
 
 - name: Restart Traefik
-  community.docker.docker_compose:
+  community.docker.docker_compose_v2:
     project_src: "{{ proxy_base_dir }}"
-    state: present
-    restarted: true
+    state: restarted

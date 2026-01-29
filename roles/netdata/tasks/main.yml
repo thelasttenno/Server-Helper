@@ -35,10 +35,9 @@
   notify: restart netdata
 
 - name: Start Netdata container
-  community.docker.docker_compose:
+  community.docker.docker_compose_v2:
     project_src: "{{ target_dockge_stacks_dir }}/netdata"
     state: present
-    pull: true
   when: target_netdata.enabled | default(true)
 
 - name: Wait for Netdata container to be healthy
