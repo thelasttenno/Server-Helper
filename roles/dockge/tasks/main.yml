@@ -18,10 +18,9 @@
   notify: Restart Dockge
 
 - name: Start Dockge container
-  community.docker.docker_compose:
+  community.docker.docker_compose_v2:
     project_src: "{{ dockge_base_dir }}"
     state: present
-    pull: true
 
 - name: Wait for Dockge to be ready
   ansible.builtin.uri:
