@@ -16,3 +16,8 @@
         state: present
         update_cache: true
       when: ansible_os_family == "Debian"
+
+    - name: Create traefik-public network
+      community.docker.docker_network:
+        name: traefik-public
+        state: present
