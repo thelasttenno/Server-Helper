@@ -123,11 +123,12 @@
       when: target_netdata.enabled | default(true)
 
     # ==============================================
-    # Logging & Visualization - Loki + Promtail + Grafana
+    # Logging - Promtail (ships logs to control node's Loki)
+    # NOTE: Loki & Grafana are installed on control node via setup-control.yml
     # ==============================================
     - role: logging
-      tags: ['logging', 'loki', 'promtail', 'grafana', 'visualization']
-      when: target_logging.loki.enabled | default(true) or target_logging.grafana.enabled | default(true)
+      tags: ['logging', 'promtail']
+      when: target_logging.promtail.enabled | default(true)
 
     # ==============================================
     # Backups - Restic
@@ -162,11 +163,8 @@
           {% if target_netdata.enabled | default(true) %}
             ✓ Netdata: http://{{ ansible_default_ipv4.address }}:{{ target_netdata.port }}
           {% endif %}
-          {% if target_logging.grafana.enabled | default(true) %}
-            ✓ Grafana: http://{{ ansible_default_ipv4.address }}:{{ target_logging.grafana.port }}
-          {% endif %}
-          {% if target_logging.loki.enabled | default(true) %}
-            ✓ Loki: http://{{ ansible_default_ipv4.address }}:{{ target_logging.loki.port }}
+          {% if target_logging.promtail.enabled | default(true) %}
+            ✓ Promtail: Shipping logs to control node
           {% endif %}
           {% if target_restic.enabled | default(false) %}
             ✓ Restic Backups: Scheduled for {{ target_restic.schedule }}
@@ -187,7 +185,7 @@
           {% if target_restic.enabled | default(false) %}
             3. Verify backup repositories initialized
           {% endif %}
-            4. Configure monitoring from control node (Uptime Kuma)
+            4. Run setup-control.yml to deploy Loki, Grafana, Uptime Kuma on control node
 
     - name: Save service URLs per node
       ansible.builtin.copy:
@@ -202,18 +200,15 @@
           {% if target_netdata.enabled | default(true) %}
           Netdata: http://{{ ansible_default_ipv4.address }}:{{ target_netdata.port }}
           {% endif %}
-          {% if target_logging.grafana.enabled | default(true) %}
-          Grafana: http://{{ ansible_default_ipv4.address }}:{{ target_logging.grafana.port }}
-          {% endif %}
-          {% if target_logging.loki.enabled | default(true) %}
-          Loki: http://{{ ansible_default_ipv4.address }}:{{ target_logging.loki.port }}
+          {% if target_logging.promtail.enabled | default(true) %}
+          Promtail: Running (logs shipped to control node)
           {% endif %}
           {% if target_reverse_proxy.enabled | default(false) %}
           Traefik Dashboard: http://{{ ansible_default_ipv4.address }}:{{ target_reverse_proxy.traefik.dashboard_port }}
           {% endif %}
 
-          Monitoring:
-          - Centralized Uptime Kuma: Install on control node with playbooks/setup-control.yml
+          Centralized Services (on control node):
+          - Loki, Grafana, Uptime Kuma: Install with playbooks/setup-control.yml
         dest: "{{ target_base_dir }}/service_urls.txt"
         mode: '0644'
 

@@ -1,7 +1,10 @@
 ---
-# Logging & Visualization Stack Setup
-# Installs Loki + Promtail + Grafana for centralized logging
-# Supports sending logs to control node's Loki when service_discovery is enabled
+# Logging Stack Setup - Promtail for Targets
+# Targets only install Promtail to ship logs to the control node's Loki.
+# Loki and Grafana are installed on the CONTROL NODE via setup-control.yml.
+#
+# For standalone mode (no control node), set target_logging.loki.enabled and
+# target_logging.grafana.enabled to true in group_vars/all.yml.
 
 - name: Set logging stack directory
   ansible.builtin.set_fact:
@@ -25,7 +28,7 @@
   loop:
     - datasources
     - dashboards
-  when: target_logging.grafana.enabled | default(true)
+  when: target_logging.grafana.enabled | default(false)
 
 - name: Deploy Loki configuration
   ansible.builtin.template:
@@ -35,7 +38,7 @@
     owner: root
     group: root
   notify: Restart logging stack
-  when: target_logging.loki.enabled | default(true)
+  when: target_logging.loki.enabled | default(false)
 
 - name: Deploy Promtail configuration
   ansible.builtin.template:
@@ -45,6 +48,7 @@
     owner: root
     group: root
   notify: Restart logging stack
+  when: target_logging.promtail.enabled | default(true)
 
 - name: Deploy Grafana datasource provisioning
   ansible.builtin.template:
@@ -54,7 +58,7 @@
     owner: root
     group: root
   notify: Restart logging stack
-  when: target_logging.grafana.enabled | default(true)
+  when: target_logging.grafana.enabled | default(false)
 
 - name: Deploy Grafana dashboard provisioning
   ansible.builtin.template:
@@ -64,7 +68,7 @@
     owner: root
     group: root
   notify: Restart logging stack
-  when: target_logging.grafana.enabled | default(true)
+  when: target_logging.grafana.enabled | default(false)
 
 - name: Deploy logging docker-compose file
   ansible.builtin.template:
@@ -93,9 +97,7 @@
     status_code: 200
   retries: 30
   delay: 5
-  when:
-    - target_logging.loki.enabled | default(true)
-    - not (service_discovery.log_aggregation.enabled | default(false) and control_node_ip | default('') | length > 0)
+  when: target_logging.loki.enabled | default(false)
 
 - name: Wait for Grafana to be ready
   ansible.builtin.uri:
@@ -104,9 +106,9 @@
     status_code: 200
   retries: 30
   delay: 5
-  when: target_logging.grafana.enabled | default(true)
+  when: target_logging.grafana.enabled | default(false)
 
-- name: Display logging stack information (standalone mode)
+- name: Display logging stack information (standalone mode with local Loki/Grafana)
   ansible.builtin.debug:
     msg:
       - "Logging stack deployed successfully!"
@@ -120,20 +122,33 @@
       - "1. Access Grafana and explore pre-configured Loki datasource"
       - "2. Create dashboards or import existing ones"
       - "3. Use Explore feature to query logs"
-  when: not (service_discovery.log_aggregation.enabled | default(false) and control_node_ip | default('') | length > 0)
+  when:
+    - target_logging.loki.enabled | default(false)
+    - target_logging.grafana.enabled | default(false)
 
-- name: Display logging stack information (centralized mode)
+- name: Display Promtail information (centralized mode - logs to control node)
   ansible.builtin.debug:
     msg:
-      - "Promtail deployed - sending logs to central Loki!"
+      - "Promtail deployed - shipping logs to central Loki!"
       - "Central Loki: http://{{ control_node_ip }}:{{ control_loki.port | default(3100) }}"
       - "Promtail: Running on host {{ target_hostname | default(ansible_hostname) }}"
       - ""
       - "Logs from this host will appear in the control node's Grafana dashboard"
       - "Access central Grafana at: http://{{ control_node_ip }}:{{ control_grafana.port | default(3000) }}"
-      - ""
-      - "Auto-registration: ENABLED"
   when:
-    - service_discovery.enabled | default(false)
     - service_discovery.log_aggregation.enabled | default(false)
     - control_node_ip | default('') | length > 0
+
+- name: Display Promtail information (promtail only - no central Loki configured)
+  ansible.builtin.debug:
+    msg:
+      - "Promtail deployed on {{ target_hostname | default(ansible_hostname) }}!"
+      - ""
+      - "NOTE: No central Loki is configured. To enable log aggregation:"
+      - "1. Run setup-control.yml to deploy Loki/Grafana on control node"
+      - "2. Set control_node_ip in group_vars/all.yml"
+      - "3. Set service_discovery.log_aggregation.enabled: true"
+      - "4. Re-run this playbook to update Promtail configuration"
+  when:
+    - not (target_logging.loki.enabled | default(false))
+    - not (service_discovery.log_aggregation.enabled | default(false) and control_node_ip | default('') | length > 0)

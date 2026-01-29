@@ -1,26 +1,26 @@
 ---
 # Default variables for logging role
+# NOTE: These defaults are for TARGETS. Loki & Grafana are disabled by default
+# as they should be installed on the CONTROL NODE via setup-control.yml.
+# Targets only run Promtail to ship logs to the centralized Loki.
 
-logging:
-  # Stack directory
-  stack_dir: /opt/dockge/stacks/logging
-
-  # Loki configuration
+target_logging:
+  # Loki configuration - DISABLED on targets (runs on control node)
   loki:
-    enabled: true
+    enabled: false
     version: latest
     port: 3100
     retention_period: "744h"  # 31 days
 
-  # Promtail configuration
+  # Promtail configuration - ENABLED on targets (ships logs to control node)
   promtail:
     enabled: true
     version: latest
     additional_jobs: []
 
-  # Grafana configuration
+  # Grafana configuration - DISABLED on targets (runs on control node)
   grafana:
-    enabled: true
+    enabled: false
     version: latest
     port: 3000
     admin_user: admin

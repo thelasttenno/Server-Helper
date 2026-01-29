@@ -1,24 +1,22 @@
-# Logging & Visualization Stack - Loki + Promtail + Grafana
+# Logging Stack - Promtail (+ optional Loki/Grafana for standalone mode)
 # Deployed via Dockge
 #
-{% if target_promtail.send_to_central | default(false) and control_node_ip | default('') | length > 0 %}
+{% if service_discovery.log_aggregation.enabled | default(false) and control_node_ip | default('') | length > 0 %}
 # MODE: Centralized - Promtail sends logs to central Loki at {{ control_node_ip }}:{{ control_loki.port | default(3100) }}
-# Local Loki and Grafana can be disabled since logs go to the control node
+# Loki and Grafana run on control node, not here
 {% else %}
-# MODE: Local - Full logging stack running on this host
+# MODE: Standalone - Full logging stack running on this host (if enabled)
 {% endif %}
 
-version: '3.8'
-
 services:
-{% if logging.loki.enabled | default(true) %}
+{% if target_logging.loki.enabled | default(false) %}
   loki:
-    image: grafana/loki:{{ logging.loki.version | default('latest') }}
+    image: grafana/loki:{{ target_logging.loki.version | default('latest') }}
     container_name: loki
     hostname: loki
     restart: unless-stopped
     ports:
-      - "{{ logging.loki.port | default('3100') }}:3100"
+      - "{{ target_logging.loki.port | default('3100') }}:3100"
     volumes:
       - loki_data:/loki
       - ./loki-config.yml:/etc/loki/local-config.yaml:ro
@@ -32,11 +30,11 @@ services:
       retries: 3
 {% endif %}
 
-{% if logging.promtail.enabled | default(true) %}
+{% if target_logging.promtail.enabled | default(true) %}
   promtail:
-    image: grafana/promtail:{{ logging.promtail.version | default('latest') }}
+    image: grafana/promtail:{{ target_logging.promtail.version | default('latest') }}
     container_name: promtail
-    hostname: {{ hostname | default(ansible_hostname) }}-promtail
+    hostname: {{ target_hostname | default(ansible_hostname) }}-promtail
     restart: unless-stopped
     volumes:
       - /var/log:/var/log:ro
@@ -45,36 +43,36 @@ services:
     command: -config.file=/etc/promtail/config.yml
     networks:
       - monitoring
-{% if logging.loki.enabled | default(true) %}
+{% if target_logging.loki.enabled | default(false) %}
     depends_on:
       - loki
 {% endif %}
 {% endif %}
 
-{% if logging.grafana.enabled | default(true) %}
+{% if target_logging.grafana.enabled | default(false) %}
   grafana:
-    image: grafana/grafana:{{ logging.grafana.version | default('latest') }}
+    image: grafana/grafana:{{ target_logging.grafana.version | default('latest') }}
     container_name: grafana
     hostname: grafana
     restart: unless-stopped
     ports:
-      - "{{ logging.grafana.port | default('3000') }}:3000"
+      - "{{ target_logging.grafana.port | default('3000') }}:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana-provisioning:/etc/grafana/provisioning:ro
     environment:
-      - GF_SECURITY_ADMIN_USER={{ logging.grafana.admin_user | default('admin') }}
+      - GF_SECURITY_ADMIN_USER={{ target_logging.grafana.admin_user | default('admin') }}
       - GF_SECURITY_ADMIN_PASSWORD={{ vault_grafana_admin_password | default('admin') }}
-      - GF_SERVER_ROOT_URL=http://{{ ansible_default_ipv4.address | default('localhost') }}:{{ logging.grafana.port | default('3000') }}
+      - GF_SERVER_ROOT_URL=http://{{ ansible_default_ipv4.address | default('localhost') }}:{{ target_logging.grafana.port | default('3000') }}
       - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_INSTALL_PLUGINS={{ logging.grafana.plugins | default('') }}
-{% if logging.grafana.smtp.enabled | default(false) %}
+      - GF_INSTALL_PLUGINS={{ target_logging.grafana.plugins | default('') }}
+{% if target_logging.grafana.smtp.enabled | default(false) %}
       - GF_SMTP_ENABLED=true
-      - GF_SMTP_HOST={{ logging.grafana.smtp.host }}:{{ logging.grafana.smtp.port | default('587') }}
-      - GF_SMTP_USER={{ logging.grafana.smtp.user }}
+      - GF_SMTP_HOST={{ target_logging.grafana.smtp.host }}:{{ target_logging.grafana.smtp.port | default('587') }}
+      - GF_SMTP_USER={{ target_logging.grafana.smtp.user }}
       - GF_SMTP_PASSWORD={{ vault_grafana_smtp_password }}
-      - GF_SMTP_FROM_ADDRESS={{ logging.grafana.smtp.from_address }}
-      - GF_SMTP_FROM_NAME={{ logging.grafana.smtp.from_name | default('Grafana') }}
+      - GF_SMTP_FROM_ADDRESS={{ target_logging.grafana.smtp.from_address }}
+      - GF_SMTP_FROM_NAME={{ target_logging.grafana.smtp.from_name | default('Grafana') }}
 {% endif %}
     networks:
       - monitoring
@@ -85,14 +83,16 @@ services:
       retries: 3
 {% endif %}
 
+{% if target_logging.loki.enabled | default(false) or target_logging.grafana.enabled | default(false) %}
 volumes:
-{% if logging.loki.enabled | default(true) %}
+{% if target_logging.loki.enabled | default(false) %}
   loki_data:
     driver: local
 {% endif %}
-{% if logging.grafana.enabled | default(true) %}
+{% if target_logging.grafana.enabled | default(false) %}
   grafana_data:
     driver: local
+{% endif %}
 {% endif %}
 
 networks:

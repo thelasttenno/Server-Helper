@@ -17,7 +17,8 @@
       "Bash(ansible-playbook:*)",
       "Bash(git update-index:*)",
       "Bash(mkdir:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(xargs:*)"
     ]
   }
 }
