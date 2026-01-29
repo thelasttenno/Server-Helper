@@ -12,6 +12,7 @@
     name: cron
     state: restarted
   become: true
+  failed_when: false  # cron may not exist in containers
 
 - name: Restart journald
   ansible.builtin.systemd:

@@ -1,4 +1,6 @@
 ---
+# Prepare for docker role test
+# Note: We do NOT pre-install Docker here since we're testing the Docker installation itself
 - name: Prepare
   hosts: all
   become: true
@@ -8,11 +10,7 @@
         name: docker
         state: present
 
-    - name: Install Docker and compose plugin
+    - name: Update apt cache
       ansible.builtin.apt:
-        name:
-          - docker.io
-          - docker-compose-v2
-        state: present
         update_cache: true
       when: ansible_os_family == "Debian"
