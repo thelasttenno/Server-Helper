@@ -99,13 +99,14 @@ testing_check_dependencies() {
         testing_install_dependencies
     fi
 
-    # Final check
+    # Final check for molecule
     if ! command -v molecule &>/dev/null; then
         print_error "Molecule installation failed"
         echo "Try manually: pipx install molecule && pipx inject molecule molecule-plugins[docker]"
         ((missing++))
     fi
 
+    # Check for Docker
     if ! command -v docker &>/dev/null; then
         print_error "Docker is not installed"
         ((missing++))
@@ -116,6 +117,27 @@ testing_check_dependencies() {
             print_error "User not in docker group. Run: sudo usermod -aG docker \$USER && newgrp docker"
         fi
         ((missing++))
+    fi
+
+    # Always check for Ansible collections (even if molecule was already installed)
+    # Molecule checks collections BEFORE its dependency install phase runs
+    local molecule_venv="$HOME/.local/share/pipx/venvs/molecule"
+    local galaxy_bin="ansible-galaxy"
+    if [[ -x "$molecule_venv/bin/ansible-galaxy" ]]; then
+        galaxy_bin="$molecule_venv/bin/ansible-galaxy"
+    fi
+
+    if ! "$galaxy_bin" collection list 2>/dev/null | grep -q "ansible.posix"; then
+        print_info "Ansible collections not found, installing..."
+        local collections_dir="$HOME/.ansible/collections"
+        mkdir -p "$collections_dir"
+        if "$galaxy_bin" collection install ansible.posix community.general community.docker \
+            -p "$collections_dir" --force; then
+            print_success "Ansible collections installed"
+        else
+            print_error "Failed to install Ansible collections"
+            ((missing++))
+        fi
     fi
 
     if [[ $missing -gt 0 ]]; then
