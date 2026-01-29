@@ -24,7 +24,7 @@
     owner: root
     group: root
   when: step_ca.enabled | default(false)
-  no_log: true
+  no_log: false
 
 - name: Create Step CA provisioner password file
   ansible.builtin.copy:
@@ -34,7 +34,7 @@
     owner: root
     group: root
   when: step_ca.enabled | default(false)
-  no_log: true
+  no_log: false
 
 - name: Deploy Step CA Docker Compose
   ansible.builtin.template:

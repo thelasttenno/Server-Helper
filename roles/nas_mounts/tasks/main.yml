@@ -22,7 +22,7 @@
     mode: '0600'
   loop: "{{ nas_mounts.shares }}"
   when: nas_mounts.enabled | default(false)
-  no_log: true
+  no_log: false
 
 - name: Add NAS mounts to fstab
   ansible.posix.mount:

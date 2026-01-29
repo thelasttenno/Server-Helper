@@ -24,6 +24,18 @@ vault_system_users:
   developer_password: "change-me-developer-password"
 
 # =============================================================================
+# ANSIBLE CONNECTION CREDENTIALS
+# =============================================================================
+
+# SSH password for Ansible connections (if not using SSH keys)
+# Used in inventory as: ansible_ssh_pass: "{{ vault_ansible_ssh_password }}"
+vault_ansible_ssh_password: "change-me-ssh-password"
+
+# Become (sudo) password for privilege escalation
+# Used in inventory as: ansible_become_pass: "{{ vault_ansible_become_password }}"
+vault_ansible_become_password: "change-me-become-password"
+
+# =============================================================================
 # NAS CREDENTIALS
 # =============================================================================
 
@@ -118,10 +130,18 @@ vault_uptime_kuma_push_urls:
   backup: ""           # Backup success/failure
   security: ""         # Security scan results
   update: ""           # Self-update status
+  cpu: ""              # CPU alert push monitor
+  ram: ""              # RAM alert push monitor
+  disk: ""             # Disk alert push monitor
+  docker: ""           # Docker alert push monitor
 
 # Grafana Admin Credentials
 # Change password on first login!
 vault_grafana_admin_password: "change-me-on-first-login"
+
+# Control Node Grafana Password (separate instance on control node)
+# Used for centralized Grafana on the control node
+vault_control_grafana_password: "change-me-on-first-login"
 
 # Grafana SMTP Password (optional - for email alerts)
 vault_grafana_smtp_password: "your-smtp-password-or-app-password"
@@ -228,21 +248,22 @@ vault_step_ca_provisioner_password: "change-me-strong-provisioner-password"
 vault_cloudflare_dns_api_token: "your-cloudflare-dns-api-token"
 
 # Alternative DNS Providers (if not using Cloudflare):
+# Uncomment and fill in for your DNS provider
 
 # AWS Route53
-# vault_aws_access_key_id: "AKIAIOSFODNN7EXAMPLE"
-# vault_aws_secret_access_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+vault_aws_access_key_id: ""
+vault_aws_secret_access_key: ""
 
 # DigitalOcean
-# vault_digitalocean_api_token: "your-digitalocean-api-token"
+vault_digitalocean_api_token: ""
 
 # Namecheap
-# vault_namecheap_api_user: "your-namecheap-username"
-# vault_namecheap_api_key: "your-namecheap-api-key"
+vault_namecheap_api_user: ""
+vault_namecheap_api_key: ""
 
 # GoDaddy
-# vault_godaddy_api_key: "your-godaddy-api-key"
-# vault_godaddy_api_secret: "your-godaddy-api-secret"
+vault_godaddy_api_key: ""
+vault_godaddy_api_secret: ""
 
 # -----------------------------------------
 # TRAEFIK DASHBOARD AUTHENTICATION

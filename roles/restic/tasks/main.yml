@@ -36,7 +36,7 @@
       failed_when: 
         - nas_init.rc != 0
         - "'already initialized' not in nas_init.stderr"
-      no_log: true
+      no_log: false
       tags: [restic, init, nas]
     
     # S3 repository
@@ -55,7 +55,7 @@
       failed_when:
         - s3_init.rc != 0
         - "'already initialized' not in s3_init.stderr"
-      no_log: true
+      no_log: false
       tags: [restic, init, s3]
     
     # B2 repository
@@ -74,7 +74,7 @@
       failed_when:
         - b2_init.rc != 0
         - "'already initialized' not in b2_init.stderr"
-      no_log: true
+      no_log: false
       tags: [restic, init, b2]
     
     # Local repository
@@ -91,7 +91,7 @@
       failed_when:
         - local_init.rc != 0
         - "'already initialized' not in local_init.stderr"
-      no_log: true
+      no_log: false
       tags: [restic, init, local]
 
 - name: Create Restic backup script
