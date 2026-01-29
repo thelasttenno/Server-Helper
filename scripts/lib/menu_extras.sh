@@ -95,6 +95,22 @@ extras_add_server() {
     # Custom hostname
     custom_hostname=$(prompt_input "Custom hostname (leave empty to use '$server_name')")
 
+    # Select group
+    echo
+    echo "Select server group:"
+    echo "  1) targets - Target servers (monitoring agents)"
+    echo "  2) control - Control node (central services)"
+    echo
+    local group_choice
+    group_choice=$(prompt_input "Group [1]")
+    group_choice="${group_choice:-1}"
+
+    local server_group
+    case "$group_choice" in
+        2) server_group="control" ;;
+        *) server_group="targets" ;;
+    esac
+
     # Summary
     echo
     print_section "Summary"
@@ -102,6 +118,7 @@ extras_add_server() {
     echo "  Host:        $ansible_host"
     echo "  User:        $ansible_user"
     echo "  Port:        $ansible_port"
+    echo "  Group:       $server_group"
     [[ -n "$custom_hostname" ]] && echo "  Hostname:    $custom_hostname"
     echo
 
@@ -139,9 +156,13 @@ EOF
         cat >> "$inventory_file" <<EOF
 
   children:
+    control:
+      hosts:
+$( [[ "$server_group" == "control" ]] && echo "        ${server_name}:" )
+
     targets:
       hosts:
-        ${server_name}:
+$( [[ "$server_group" == "targets" ]] && echo "        ${server_name}:" )
 
   vars:
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
@@ -157,12 +178,23 @@ EOF
 
         # Use inventory library function if available
         if declare -F inventory_add_host &>/dev/null; then
-            inventory_add_host "$server_name" "$ansible_host" "targets" "$inventory_file" "$ansible_user" "$ansible_port"
+            inventory_add_host "$server_name" "$ansible_host" "$server_group" "$inventory_file" "$ansible_user" "$ansible_port"
             print_success "Server added to inventory using library"
         else
             print_warning "Inventory library not loaded. Manual edit required."
             print_info "Add the server manually to: $inventory_file"
             return 1
+        fi
+    fi
+
+    # If adding to control group, update control_node_ip in config
+    if [[ "$server_group" == "control" ]]; then
+        print_info "Updating control_node_ip in configuration..."
+        if declare -F config_set_control_ip &>/dev/null; then
+            config_set_control_ip "$ansible_host"
+            print_success "control_node_ip set to $ansible_host"
+        else
+            print_warning "config_mgr.sh not loaded - please set control_node_ip manually in group_vars/all.yml"
         fi
     fi
 

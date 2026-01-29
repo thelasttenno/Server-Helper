@@ -442,6 +442,17 @@ inventory_add_host_interactive() {
 
     if prompt_confirm "Add this server?"; then
         inventory_add_host "$hostname" "$ip_address" "$group" "$inventory" "$ssh_user" "$ssh_port"
+
+        # If adding to control group, update control_node_ip in config
+        if [[ "$group" == "control" ]]; then
+            print_info "Updating control_node_ip in configuration..."
+            if type -t config_set_control_ip &>/dev/null; then
+                config_set_control_ip "$ip_address"
+                print_success "control_node_ip set to $ip_address"
+            else
+                print_warning "config_mgr.sh not loaded - please set control_node_ip manually in group_vars/all.yml"
+            fi
+        fi
     else
         print_info "Cancelled"
         return 0
