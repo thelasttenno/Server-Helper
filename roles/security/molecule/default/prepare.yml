@@ -1,0 +1,12 @@
+---
+# Prepare for security role test
+- name: Prepare
+  hosts: all
+  become: true
+  tasks:
+    - name: Install openssh-server
+      ansible.builtin.apt:
+        name: openssh-server
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian"

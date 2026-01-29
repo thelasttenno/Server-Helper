@@ -17,6 +17,6 @@
 
     - name: Check init script exists
       ansible.builtin.stat:
-        path: /opt/stacks/step-ca/scripts/init-ca.sh
+        path: /opt/stacks/step-ca/init-ca.sh
       register: init_script
       failed_when: not init_script.stat.exists

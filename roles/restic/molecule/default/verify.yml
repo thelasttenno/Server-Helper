@@ -11,7 +11,7 @@
 
     - name: Check backup script exists
       ansible.builtin.stat:
-        path: /usr/local/bin/restic-backup.sh
+        path: /opt/restic/backup.sh
       register: backup_script
       failed_when: not backup_script.stat.exists
 
