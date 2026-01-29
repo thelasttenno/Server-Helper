@@ -6,6 +6,7 @@
     netdata_mode: "child"
     control_node_ip: "192.168.1.1"
     vault_netdata_stream_api_key: "test-api-key-12345"
+    netdata_skip_deploy: true  # Skip docker compose in molecule test
     target_netdata:
       enabled: true
       version: "stable"

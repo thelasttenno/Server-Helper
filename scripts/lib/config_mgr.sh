@@ -502,15 +502,24 @@ config_disable_feature() {
 config_setup_domain() {
     print_section "Domain Configuration"
 
-    local current_domain
+    local current_domain detected_domain
     current_domain=$(config_get_domain)
+    detected_domain=$(config_detect_domain)
 
-    if [[ -n "$current_domain" ]]; then
+    if [[ -n "$current_domain" ]] && [[ "$current_domain" != "example.com" ]]; then
         print_info "Current domain: $current_domain"
     fi
 
+    # Use auto-detection or remembered value
+    local auto_value=""
+    if [[ -n "$current_domain" ]] && [[ "$current_domain" != "example.com" ]]; then
+        auto_value="$current_domain"
+    elif [[ -n "$detected_domain" ]] && [[ "$detected_domain" != "local" ]]; then
+        auto_value="$detected_domain"
+    fi
+
     local domain
-    domain=$(prompt_input "Enter your domain" "${current_domain:-example.com}")
+    domain=$(prompt_input_auto "Enter your domain" "$auto_value" "domain" "example.com")
 
     if [[ -n "$domain" ]]; then
         config_set_domain "$domain"
@@ -521,15 +530,24 @@ config_setup_domain() {
 config_setup_control() {
     print_section "Control Node Configuration"
 
-    local current_ip
+    local current_ip detected_ip
     current_ip=$(config_get_control_ip)
+    detected_ip=$(config_detect_ip)
 
-    if [[ -n "$current_ip" ]]; then
+    if [[ -n "$current_ip" ]] && [[ "$current_ip" != "192.168.1.10" ]]; then
         print_info "Current control node IP: $current_ip"
     fi
 
+    # Auto-fill from current config or detection
+    local auto_value=""
+    if [[ -n "$current_ip" ]] && [[ "$current_ip" != "192.168.1.10" ]]; then
+        auto_value="$current_ip"
+    elif [[ -n "$detected_ip" ]]; then
+        auto_value="$detected_ip"
+    fi
+
     local ip
-    ip=$(prompt_input "Enter control node IP address" "${current_ip:-192.168.1.10}")
+    ip=$(prompt_input_auto "Enter control node IP address" "$auto_value" "" "192.168.1.10")
 
     if [[ -n "$ip" ]]; then
         config_set_control_ip "$ip"
@@ -540,8 +558,9 @@ config_setup_control() {
 config_setup_timezone() {
     print_section "Timezone Configuration"
 
-    local current_tz
+    local current_tz detected_tz
     current_tz=$(config_get_timezone)
+    detected_tz=$(config_detect_timezone)
 
     if [[ -n "$current_tz" ]]; then
         print_info "Current timezone: $current_tz"
@@ -551,8 +570,16 @@ config_setup_timezone() {
     echo "                  Europe/London, Europe/Paris, Asia/Tokyo, UTC"
     echo ""
 
+    # Auto-fill from current config or detection
+    local auto_value=""
+    if [[ -n "$current_tz" ]]; then
+        auto_value="$current_tz"
+    elif [[ -n "$detected_tz" ]]; then
+        auto_value="$detected_tz"
+    fi
+
     local tz
-    tz=$(prompt_input "Enter timezone" "${current_tz:-America/New_York}")
+    tz=$(prompt_input_auto "Enter timezone" "$auto_value" "" "America/New_York")
 
     if [[ -n "$tz" ]]; then
         config_set_timezone "$tz"
@@ -563,8 +590,9 @@ config_setup_timezone() {
 config_setup_ansible_user() {
     print_section "Ansible User Configuration"
 
-    local current_user
+    local current_user detected_user
     current_user=$(config_get_ansible_user)
+    detected_user=$(config_detect_user)
 
     if [[ -n "$current_user" ]]; then
         print_info "Current ansible user: $current_user"
@@ -573,8 +601,16 @@ config_setup_ansible_user() {
     echo "This user must exist on all target nodes and have sudo access."
     echo ""
 
+    # Auto-fill from current config or detection
+    local auto_value=""
+    if [[ -n "$current_user" ]]; then
+        auto_value="$current_user"
+    elif [[ -n "$detected_user" ]]; then
+        auto_value="$detected_user"
+    fi
+
     local user
-    user=$(prompt_input "Enter SSH/Ansible username" "${current_user:-ansible}")
+    user=$(prompt_input_auto "Enter SSH/Ansible username" "$auto_value" "ssh_user" "ansible")
 
     if [[ -n "$user" ]]; then
         config_set_ansible_user "$user"
@@ -631,9 +667,9 @@ config_setup_dns() {
 config_setup_notification_email() {
     print_section "Notification Email Configuration"
 
-    local current_email
+    local current_email remembered_email current_domain
     current_email=$(config_get_notification_email)
-    local current_domain
+    remembered_email=$(prefs_get "email")
     current_domain=$(config_get_domain)
 
     if [[ -n "$current_email" ]]; then
@@ -643,13 +679,257 @@ config_setup_notification_email() {
     echo "This email receives security alerts from fail2ban and other services."
     echo ""
 
-    local default_email="admin@${current_domain:-example.com}"
+    # Determine auto-fill value (prioritize: current > remembered > derived)
+    local auto_value=""
+    if [[ -n "$current_email" ]]; then
+        auto_value="$current_email"
+    elif [[ -n "$remembered_email" ]]; then
+        auto_value="$remembered_email"
+    fi
+
+    local fallback_email="admin@${current_domain:-example.com}"
     local email
-    email=$(prompt_input "Enter notification email" "${current_email:-$default_email}")
+    email=$(prompt_input_auto "Enter notification email" "$auto_value" "email" "$fallback_email")
 
     if [[ -n "$email" ]]; then
         config_set_notification_email "$email"
     fi
+}
+
+# =============================================================================
+# Service Presets (reduces form fatigue)
+# =============================================================================
+
+# Apply a service preset
+# Usage: config_apply_preset "preset_name"
+config_apply_preset() {
+    local preset="$1"
+
+    # First disable all optional services
+    config_disable_feature "control_traefik.enabled"
+    config_disable_feature "control_authentik.enabled"
+    config_disable_feature "control_grafana.enabled"
+    config_disable_feature "control_loki.enabled"
+    config_disable_feature "control_netdata.enabled"
+    config_disable_feature "control_step_ca.enabled"
+    config_disable_feature "control_dns.enabled"
+    config_disable_feature "control_uptime_kuma.enabled"
+    config_disable_feature "target_netdata.enabled"
+    config_disable_feature "target_dockge.enabled"
+    config_disable_feature "target_promtail.enabled"
+
+    case "$preset" in
+        full)
+            # Everything enabled
+            config_enable_feature "control_traefik.enabled"
+            config_enable_feature "control_authentik.enabled"
+            config_enable_feature "control_grafana.enabled"
+            config_enable_feature "control_loki.enabled"
+            config_enable_feature "control_netdata.enabled"
+            config_enable_feature "control_step_ca.enabled"
+            config_enable_feature "control_dns.enabled"
+            config_enable_feature "control_uptime_kuma.enabled"
+            config_enable_feature "target_netdata.enabled"
+            config_enable_feature "target_dockge.enabled"
+            config_enable_feature "target_promtail.enabled"
+            ;;
+        homelab)
+            # Balanced for typical home server
+            config_enable_feature "control_traefik.enabled"
+            config_enable_feature "control_grafana.enabled"
+            config_enable_feature "control_netdata.enabled"
+            config_enable_feature "control_uptime_kuma.enabled"
+            config_enable_feature "target_netdata.enabled"
+            config_enable_feature "target_dockge.enabled"
+            ;;
+        monitoring)
+            # Observability focus, no public exposure
+            config_enable_feature "control_grafana.enabled"
+            config_enable_feature "control_loki.enabled"
+            config_enable_feature "control_netdata.enabled"
+            config_enable_feature "target_netdata.enabled"
+            config_enable_feature "target_promtail.enabled"
+            config_enable_feature "target_dockge.enabled"
+            ;;
+        minimal)
+            # Just container management basics
+            config_enable_feature "target_dockge.enabled"
+            ;;
+        production)
+            # Full stack for business/VPS (no Pi-hole)
+            config_enable_feature "control_traefik.enabled"
+            config_enable_feature "control_authentik.enabled"
+            config_enable_feature "control_grafana.enabled"
+            config_enable_feature "control_loki.enabled"
+            config_enable_feature "control_netdata.enabled"
+            config_enable_feature "control_step_ca.enabled"
+            config_enable_feature "control_uptime_kuma.enabled"
+            config_enable_feature "target_netdata.enabled"
+            config_enable_feature "target_dockge.enabled"
+            config_enable_feature "target_promtail.enabled"
+            ;;
+    esac
+}
+
+# Interactive service preset selection
+config_setup_services_preset() {
+    print_section "Service Configuration"
+
+    echo "Choose a service preset or customize individually:"
+    echo ""
+    print_menu_item "1" "Full" "All services (Traefik, Authentik, Grafana, Netdata, Pi-hole, etc.)"
+    print_menu_item "2" "Homelab" "Traefik + Monitoring + Uptime Kuma + Dockge (Recommended)"
+    print_menu_item "3" "Monitoring" "Grafana + Netdata + Loki (no reverse proxy)"
+    print_menu_item "4" "Minimal" "Docker + Security + Dockge only"
+    print_menu_item "5" "Production" "Full stack without Pi-hole (for VPS/cloud)"
+    print_menu_item "6" "Custom" "Choose each service individually"
+    echo ""
+
+    local choice
+    choice=$(prompt_input "Choose preset [1-6]" "2")
+
+    case "$choice" in
+        1)
+            print_info "Applying Full preset..."
+            config_apply_preset "full"
+            _show_preset_summary "full"
+            ;;
+        2)
+            print_info "Applying Homelab preset..."
+            config_apply_preset "homelab"
+            _show_preset_summary "homelab"
+            ;;
+        3)
+            print_info "Applying Monitoring preset..."
+            config_apply_preset "monitoring"
+            _show_preset_summary "monitoring"
+            ;;
+        4)
+            print_info "Applying Minimal preset..."
+            config_apply_preset "minimal"
+            _show_preset_summary "minimal"
+            ;;
+        5)
+            print_info "Applying Production preset..."
+            config_apply_preset "production"
+            _show_preset_summary "production"
+            ;;
+        6)
+            _config_setup_services_custom
+            ;;
+        *)
+            print_info "Defaulting to Homelab preset..."
+            config_apply_preset "homelab"
+            _show_preset_summary "homelab"
+            ;;
+    esac
+}
+
+# Show summary of what a preset enables
+_show_preset_summary() {
+    local preset="$1"
+    echo ""
+    print_section "Enabled Services"
+
+    case "$preset" in
+        full)
+            echo "  ${GREEN}✓${NC} Traefik (reverse proxy + SSL)"
+            echo "  ${GREEN}✓${NC} Authentik (SSO/identity)"
+            echo "  ${GREEN}✓${NC} Step-CA (internal certificates)"
+            echo "  ${GREEN}✓${NC} Pi-hole (DNS + ad blocking)"
+            echo "  ${GREEN}✓${NC} Netdata (real-time monitoring)"
+            echo "  ${GREEN}✓${NC} Grafana + Loki (dashboards + logs)"
+            echo "  ${GREEN}✓${NC} Uptime Kuma (status page)"
+            echo "  ${GREEN}✓${NC} Dockge (container management)"
+            echo "  ${GREEN}✓${NC} Promtail (log shipping)"
+            ;;
+        homelab)
+            echo "  ${GREEN}✓${NC} Traefik (reverse proxy + SSL)"
+            echo "  ${GREEN}✓${NC} Netdata (real-time monitoring)"
+            echo "  ${GREEN}✓${NC} Grafana (dashboards)"
+            echo "  ${GREEN}✓${NC} Uptime Kuma (status page)"
+            echo "  ${GREEN}✓${NC} Dockge (container management)"
+            echo "  ${DIM}○ Authentik (add later with Full preset)${NC}"
+            echo "  ${DIM}○ Pi-hole (add later with Full preset)${NC}"
+            ;;
+        monitoring)
+            echo "  ${GREEN}✓${NC} Netdata (real-time monitoring)"
+            echo "  ${GREEN}✓${NC} Grafana (dashboards)"
+            echo "  ${GREEN}✓${NC} Loki (log aggregation)"
+            echo "  ${GREEN}✓${NC} Promtail (log shipping)"
+            echo "  ${GREEN}✓${NC} Dockge (container management)"
+            echo "  ${DIM}○ No reverse proxy (internal only)${NC}"
+            ;;
+        minimal)
+            echo "  ${GREEN}✓${NC} Docker + Security hardening"
+            echo "  ${GREEN}✓${NC} Watchtower (auto-updates)"
+            echo "  ${GREEN}✓${NC} Dockge (container management)"
+            echo "  ${DIM}○ No monitoring services${NC}"
+            echo "  ${DIM}○ No reverse proxy${NC}"
+            ;;
+        production)
+            echo "  ${GREEN}✓${NC} Traefik (reverse proxy + SSL)"
+            echo "  ${GREEN}✓${NC} Authentik (SSO/identity)"
+            echo "  ${GREEN}✓${NC} Step-CA (internal certificates)"
+            echo "  ${GREEN}✓${NC} Netdata (real-time monitoring)"
+            echo "  ${GREEN}✓${NC} Grafana + Loki (dashboards + logs)"
+            echo "  ${GREEN}✓${NC} Uptime Kuma (status page)"
+            echo "  ${GREEN}✓${NC} Dockge (container management)"
+            echo "  ${DIM}○ No Pi-hole (use external DNS)${NC}"
+            ;;
+    esac
+    echo ""
+}
+
+# Custom service selection (original behavior)
+_config_setup_services_custom() {
+    print_section "Custom Service Selection"
+    echo "Enable or disable each service individually:"
+    echo ""
+
+    # Core services
+    if prompt_confirm "Enable Traefik (reverse proxy + automatic SSL)?"; then
+        config_enable_feature "control_traefik.enabled"
+    fi
+
+    if prompt_confirm "Enable Authentik (SSO/identity provider)?"; then
+        config_enable_feature "control_authentik.enabled"
+    fi
+
+    if prompt_confirm "Enable Step-CA (internal certificate authority)?"; then
+        config_enable_feature "control_step_ca.enabled"
+    fi
+
+    # DNS
+    if prompt_confirm "Enable Pi-hole (DNS + ad blocking)?"; then
+        config_enable_feature "control_dns.enabled"
+    fi
+
+    # Monitoring
+    if prompt_confirm "Enable Netdata (real-time monitoring)?"; then
+        config_enable_feature "control_netdata.enabled"
+        config_enable_feature "target_netdata.enabled"
+    fi
+
+    if prompt_confirm "Enable Grafana (dashboards)?"; then
+        config_enable_feature "control_grafana.enabled"
+    fi
+
+    if prompt_confirm "Enable Loki + Promtail (log aggregation)?"; then
+        config_enable_feature "control_loki.enabled"
+        config_enable_feature "target_promtail.enabled"
+    fi
+
+    # Utilities
+    if prompt_confirm "Enable Uptime Kuma (status page)?"; then
+        config_enable_feature "control_uptime_kuma.enabled"
+    fi
+
+    if prompt_confirm "Enable Dockge (container management UI)?"; then
+        config_enable_feature "target_dockge.enabled"
+    fi
+
+    print_success "Custom service configuration complete"
 }
 
 # Interactive backup destination setup
@@ -763,31 +1043,8 @@ config_wizard() {
         print_info "Using default local backup path"
     fi
 
-    # Service configuration
-    print_section "Service Configuration"
-
-    echo "Which services would you like to enable?"
-    echo ""
-
-    # Traefik
-    if prompt_confirm "Enable Traefik (reverse proxy)?"; then
-        config_enable_feature "control_traefik.enabled"
-    fi
-
-    # Authentik
-    if prompt_confirm "Enable Authentik (SSO)?"; then
-        config_enable_feature "control_authentik.enabled"
-    fi
-
-    # Netdata
-    if prompt_confirm "Enable Netdata (monitoring)?"; then
-        config_enable_feature "target_netdata.enabled"
-    fi
-
-    # Grafana
-    if prompt_confirm "Enable Grafana (dashboards)?"; then
-        config_enable_feature "control_grafana.enabled"
-    fi
+    # Service configuration (using presets to reduce form fatigue)
+    config_setup_services_preset
 
     # Vault reminder
     echo ""
@@ -846,27 +1103,49 @@ config_quick_setup() {
     # Apply all settings
     print_section "Applying Configuration"
 
+    # Check for remembered email, otherwise derive from domain
+    local notification_email
+    notification_email=$(prefs_get "email")
+    if [[ -z "$notification_email" ]]; then
+        notification_email="admin@${domain}"
+    fi
+
     config_set_domain "$domain"
     config_set_control_ip "$detected_ip"
     config_set_timezone "$detected_tz"
     config_set_ansible_user "$detected_user"
     config_set_dns_servers "[1.1.1.1, 1.0.0.1]"
-    config_set_notification_email "admin@${domain}"
+    config_set_notification_email "$notification_email"
     config_set_backup_local_path "/opt/server-helper/backups/restic"
 
-    # Enable all recommended services
-    print_section "Enabling Services"
-    config_enable_feature "control_traefik.enabled"
-    config_enable_feature "control_grafana.enabled"
-    config_enable_feature "control_loki.enabled"
-    config_enable_feature "control_netdata.enabled"
-    config_enable_feature "control_step_ca.enabled"
-    config_enable_feature "control_dns.enabled"
-    config_enable_feature "control_uptime_kuma.enabled"
-    config_enable_feature "target_netdata.enabled"
-    config_enable_feature "target_dockge.enabled"
+    # Remember these values for future runs
+    prefs_set "domain" "$domain"
+    prefs_set "email" "$notification_email"
 
-    print_success "All services enabled"
+    # Service preset selection (quick but allows customization)
+    print_section "Service Preset"
+    echo "Quick setup uses the Homelab preset by default."
+    echo "Presets: Full, Homelab, Monitoring, Minimal, Production"
+    echo ""
+
+    local preset_choice
+    preset_choice=$(prompt_input_auto "Preset" "" "service_preset" "homelab")
+    preset_choice=$(echo "$preset_choice" | tr '[:upper:]' '[:lower:]')
+
+    # Validate preset choice
+    case "$preset_choice" in
+        full|homelab|monitoring|minimal|production)
+            config_apply_preset "$preset_choice"
+            prefs_set "service_preset" "$preset_choice"
+            ;;
+        *)
+            print_warning "Unknown preset '$preset_choice', using homelab"
+            preset_choice="homelab"
+            config_apply_preset "homelab"
+            ;;
+    esac
+
+    _show_preset_summary "$preset_choice"
 
     # Auto-generate secrets
     if prompt_confirm "Auto-generate all service passwords?"; then

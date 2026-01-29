@@ -168,21 +168,133 @@ log_exec_silent() {
 }
 
 # =============================================================================
+# Session Preferences (reduces form fatigue by remembering values)
+# =============================================================================
+readonly PREFS_FILE="${SCRIPT_DIR:-.}/.server-helper-prefs"
+
+# Load preferences file into associative array
+declare -gA _PREFS
+prefs_load() {
+    _PREFS=()
+    if [[ -f "$PREFS_FILE" ]]; then
+        while IFS='=' read -r key value; do
+            [[ -z "$key" || "$key" == \#* ]] && continue
+            _PREFS["$key"]="$value"
+        done < "$PREFS_FILE"
+    fi
+}
+
+# Save preferences to file
+prefs_save() {
+    {
+        echo "# Server Helper Preferences (auto-generated)"
+        echo "# These values are remembered to reduce repeated input"
+        for key in "${!_PREFS[@]}"; do
+            echo "${key}=${_PREFS[$key]}"
+        done
+    } > "$PREFS_FILE"
+    chmod 600 "$PREFS_FILE" 2>/dev/null
+}
+
+# Get a preference value
+prefs_get() {
+    local key="$1"
+    echo "${_PREFS[$key]:-}"
+}
+
+# Set a preference value and save
+prefs_set() {
+    local key="$1"
+    local value="$2"
+    _PREFS["$key"]="$value"
+    prefs_save
+}
+
+# Initialize preferences on load
+prefs_load
+
+# =============================================================================
 # User Input Functions
 # =============================================================================
 
+# Standard prompt with static default (dim brackets)
 prompt_input() {
     local prompt="$1"
     local default="${2:-}"
     local result
 
     if [[ -n "$default" ]]; then
-        read -rp "$(echo -e "${BLUE}?${NC} ${prompt} [${default}]: ")" result
+        read -rp "$(echo -e "${BLUE}?${NC} ${prompt} ${DIM}[${default}]${NC}: ")" result
         echo "${result:-$default}"
     else
         read -rp "$(echo -e "${BLUE}?${NC} ${prompt}: ")" result
         echo "$result"
     fi
+}
+
+# Smart prompt with auto-fill distinction
+# Usage: prompt_input_auto "Prompt" "auto_value" "pref_key" [fallback_default]
+#   - auto_value: detected/remembered value (cyan brackets)
+#   - pref_key: preference key to check for remembered value
+#   - fallback_default: static default if no auto value (dim brackets)
+prompt_input_auto() {
+    local prompt="$1"
+    local auto_value="${2:-}"
+    local pref_key="${3:-}"
+    local fallback="${4:-}"
+    local result
+
+    # Check preferences for remembered value
+    local remembered=""
+    if [[ -n "$pref_key" ]]; then
+        remembered=$(prefs_get "$pref_key")
+    fi
+
+    # Determine which value to show and how
+    local display_value=""
+    local is_auto=false
+
+    if [[ -n "$auto_value" ]]; then
+        display_value="$auto_value"
+        is_auto=true
+    elif [[ -n "$remembered" ]]; then
+        display_value="$remembered"
+        is_auto=true
+    elif [[ -n "$fallback" ]]; then
+        display_value="$fallback"
+        is_auto=false
+    fi
+
+    # Display with appropriate styling
+    if [[ -n "$display_value" ]]; then
+        if [[ "$is_auto" == true ]]; then
+            # Auto-fill: cyan brackets with "auto:" prefix
+            read -rp "$(echo -e "${BLUE}?${NC} ${prompt} ${CYAN}[auto: ${display_value}]${NC}: ")" result
+        else
+            # Static default: dim brackets
+            read -rp "$(echo -e "${BLUE}?${NC} ${prompt} ${DIM}[${display_value}]${NC}: ")" result
+        fi
+        result="${result:-$display_value}"
+    else
+        read -rp "$(echo -e "${BLUE}?${NC} ${prompt}: ")" result
+    fi
+
+    # Save to preferences if key provided and value entered
+    if [[ -n "$pref_key" ]] && [[ -n "$result" ]]; then
+        prefs_set "$pref_key" "$result"
+    fi
+
+    echo "$result"
+}
+
+# Prompt that only uses remembered value (no auto-detection)
+# Usage: prompt_input_remember "Prompt" "pref_key" [static_default]
+prompt_input_remember() {
+    local prompt="$1"
+    local pref_key="$2"
+    local default="${3:-}"
+
+    prompt_input_auto "$prompt" "" "$pref_key" "$default"
 }
 
 prompt_password() {

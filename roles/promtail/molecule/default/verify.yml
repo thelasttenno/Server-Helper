@@ -17,6 +17,6 @@
 
     - name: Check promtail config exists
       ansible.builtin.stat:
-        path: /opt/stacks/promtail/config/promtail-config.yml
+        path: /opt/stacks/promtail/promtail-config.yml
       register: promtail_conf
       failed_when: not promtail_conf.stat.exists

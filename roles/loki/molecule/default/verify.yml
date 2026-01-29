@@ -17,6 +17,6 @@
 
     - name: Check loki config exists
       ansible.builtin.stat:
-        path: /opt/stacks/loki/config/loki-config.yml
+        path: /opt/stacks/loki/loki-config.yml
       register: loki_conf
       failed_when: not loki_conf.stat.exists

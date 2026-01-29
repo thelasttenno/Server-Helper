@@ -17,6 +17,6 @@
 
     - name: Check grafana.ini exists
       ansible.builtin.stat:
-        path: /opt/stacks/grafana/config/grafana.ini
+        path: /opt/stacks/grafana/grafana.ini
       register: grafana_ini
       failed_when: not grafana_ini.stat.exists

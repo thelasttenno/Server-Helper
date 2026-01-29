@@ -3,6 +3,7 @@
   hosts: all
   become: true
   vars:
+    control_node_ip: "127.0.0.1"
     target_docker_proxy:
       enabled: true
       port: 2375

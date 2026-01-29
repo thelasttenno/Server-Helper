@@ -371,6 +371,43 @@ EOF
 }
 
 # =============================================================================
+# Subnet/IP Helper Functions
+# =============================================================================
+
+# Extract subnet from IP (e.g., 192.168.1.50 -> 192.168.1)
+_extract_subnet() {
+    local ip="$1"
+    echo "${ip%.*}"
+}
+
+# Extract last octet from IP (e.g., 192.168.1.50 -> 50)
+_extract_last_octet() {
+    local ip="$1"
+    echo "${ip##*.}"
+}
+
+# Suggest next IP in sequence based on last IP used
+_suggest_next_ip() {
+    local last_ip
+    last_ip=$(prefs_get "last_ip")
+
+    if [[ -z "$last_ip" ]]; then
+        echo ""
+        return
+    fi
+
+    local subnet last_octet next_octet
+    subnet=$(_extract_subnet "$last_ip")
+    last_octet=$(_extract_last_octet "$last_ip")
+    next_octet=$((last_octet + 1))
+
+    # Don't suggest if would overflow
+    if [[ $next_octet -le 254 ]]; then
+        echo "${subnet}.${next_octet}"
+    fi
+}
+
+# =============================================================================
 # Interactive Host Addition
 # =============================================================================
 
@@ -395,14 +432,18 @@ inventory_add_host_interactive() {
         return 1
     fi
 
-    # Get IP address
-    local ip_address
-    ip_address=$(prompt_input "IP address")
+    # Get IP address with subnet inference
+    local ip_address suggested_ip
+    suggested_ip=$(_suggest_next_ip)
+    ip_address=$(prompt_input_auto "IP address" "$suggested_ip" "last_ip" "")
 
     if [[ -z "$ip_address" ]]; then
         print_error "IP address is required"
         return 1
     fi
+
+    # Remember this IP for next suggestion
+    prefs_set "last_ip" "$ip_address"
 
     # Select group
     echo ""
@@ -412,7 +453,7 @@ inventory_add_host_interactive() {
     echo ""
 
     local group_choice
-    read -rp "$(echo -e "${BLUE}?${NC} Group [1]: ")" group_choice
+    read -rp "$(echo -e "${BLUE}?${NC} Group ${DIM}[1]${NC}: ")" group_choice
     group_choice="${group_choice:-1}"
 
     local group
@@ -422,13 +463,13 @@ inventory_add_host_interactive() {
         *) group="targets" ;;
     esac
 
-    # Get SSH user
+    # Get SSH user with memory (remembers last used)
     local ssh_user
-    ssh_user=$(prompt_input "SSH user" "ubuntu")
+    ssh_user=$(prompt_input_auto "SSH user" "" "ssh_user" "ubuntu")
 
-    # Get SSH port
+    # Get SSH port with memory (remembers last used)
     local ssh_port
-    ssh_port=$(prompt_input "SSH port" "22")
+    ssh_port=$(prompt_input_auto "SSH port" "" "ssh_port" "22")
 
     # Confirm
     echo ""
@@ -453,10 +494,174 @@ inventory_add_host_interactive() {
                 print_warning "config_mgr.sh not loaded - please set control_node_ip manually in group_vars/all.yml"
             fi
         fi
+
+        # Offer to add another server
+        echo ""
+        if prompt_confirm "Add another server?"; then
+            inventory_add_host_interactive "$inventory"
+        fi
     else
         print_info "Cancelled"
         return 0
     fi
+}
+
+# =============================================================================
+# Batch Host Addition
+# =============================================================================
+
+# Add multiple servers at once
+# Usage: inventory_add_hosts_batch [inventory_file]
+# Input format: hostname:ip or hostname:ip:user:port (comma or newline separated)
+inventory_add_hosts_batch() {
+    local inventory="${1:-$INVENTORY_FILE}"
+
+    print_header "Batch Add Servers"
+
+    echo "Enter servers in format: hostname:ip or hostname:ip:user:port"
+    echo "Separate multiple servers with commas or newlines."
+    echo "Example: server-01:192.168.1.11, server-02:192.168.1.12"
+    echo ""
+    echo "Or use range syntax: server-{01-05}:192.168.1.{11-15}"
+    echo ""
+    echo "Enter servers (press Enter twice when done):"
+    echo ""
+
+    local input=""
+    local line=""
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && break
+        input+="$line "
+    done
+
+    if [[ -z "$input" ]]; then
+        print_warning "No servers entered"
+        return 0
+    fi
+
+    # Check for range syntax and expand
+    if [[ "$input" =~ \{[0-9]+-[0-9]+\} ]]; then
+        input=$(_expand_server_range "$input")
+    fi
+
+    # Get default SSH user and port from preferences
+    local default_user default_port
+    default_user=$(prefs_get "ssh_user")
+    default_user="${default_user:-ubuntu}"
+    default_port=$(prefs_get "ssh_port")
+    default_port="${default_port:-22}"
+
+    # Ask for group
+    echo ""
+    echo "Select server group for all servers:"
+    print_menu_item "1" "targets" "Target servers (monitoring agents)"
+    print_menu_item "2" "control" "Control node (central services)"
+    echo ""
+
+    local group_choice
+    read -rp "$(echo -e "${BLUE}?${NC} Group ${DIM}[1]${NC}: ")" group_choice
+    group_choice="${group_choice:-1}"
+
+    local group
+    case "$group_choice" in
+        1) group="targets" ;;
+        2) group="control" ;;
+        *) group="targets" ;;
+    esac
+
+    # Parse and add each server
+    local servers=()
+    local IFS=', '
+    read -ra servers <<< "$input"
+
+    local added=0
+    local failed=0
+
+    print_section "Adding Servers"
+
+    for entry in "${servers[@]}"; do
+        # Skip empty entries
+        [[ -z "${entry// }" ]] && continue
+
+        # Parse entry: hostname:ip[:user[:port]]
+        local hostname ip_addr user port
+        IFS=':' read -r hostname ip_addr user port <<< "$entry"
+
+        # Trim whitespace
+        hostname="${hostname// }"
+        ip_addr="${ip_addr// }"
+        user="${user:-$default_user}"
+        port="${port:-$default_port}"
+
+        if [[ -z "$hostname" ]] || [[ -z "$ip_addr" ]]; then
+            print_warning "Skipping invalid entry: $entry"
+            ((failed++))
+            continue
+        fi
+
+        if inventory_add_host "$hostname" "$ip_addr" "$group" "$inventory" "$user" "$port"; then
+            ((added++))
+        else
+            ((failed++))
+        fi
+    done
+
+    echo ""
+    print_section "Summary"
+    echo "  Added:  $added"
+    echo "  Failed: $failed"
+
+    if [[ $added -gt 0 ]]; then
+        # Remember SSH settings
+        prefs_set "ssh_user" "$default_user"
+        prefs_set "ssh_port" "$default_port"
+        print_success "Batch add complete"
+    fi
+}
+
+# Expand range syntax: server-{01-05}:192.168.1.{11-15}
+_expand_server_range() {
+    local input="$1"
+    local result=""
+
+    # Extract hostname pattern and IP pattern
+    local hostname_pattern ip_pattern
+    IFS=':' read -r hostname_pattern ip_pattern <<< "$input"
+
+    # Check if both have ranges
+    if [[ "$hostname_pattern" =~ \{([0-9]+)-([0-9]+)\} ]] && [[ "$ip_pattern" =~ \{([0-9]+)-([0-9]+)\} ]]; then
+        local h_start h_end i_start i_end
+        [[ "$hostname_pattern" =~ \{([0-9]+)-([0-9]+)\} ]]
+        h_start="${BASH_REMATCH[1]}"
+        h_end="${BASH_REMATCH[2]}"
+
+        [[ "$ip_pattern" =~ \{([0-9]+)-([0-9]+)\} ]]
+        i_start="${BASH_REMATCH[1]}"
+        i_end="${BASH_REMATCH[2]}"
+
+        local h_prefix="${hostname_pattern%%\{*}"
+        local h_suffix="${hostname_pattern##*\}}"
+        local i_prefix="${ip_pattern%%\{*}"
+        local i_suffix="${ip_pattern##*\}}"
+
+        local h_num i_num
+        h_num=$((10#$h_start))
+        i_num=$((10#$i_start))
+
+        while [[ $h_num -le $((10#$h_end)) ]] && [[ $i_num -le $((10#$i_end)) ]]; do
+            # Pad hostname number to match original width
+            local h_padded
+            printf -v h_padded "%0${#h_start}d" "$h_num"
+
+            result+="${h_prefix}${h_padded}${h_suffix}:${i_prefix}${i_num}${i_suffix}, "
+            ((h_num++))
+            ((i_num++))
+        done
+    else
+        result="$input"
+    fi
+
+    echo "$result"
 }
 
 # =============================================================================

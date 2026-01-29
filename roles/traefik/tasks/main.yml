@@ -58,7 +58,14 @@
         mode: "0644"
       become: true
 
-    # Create acme.json with proper permissions
+    # Check if acme.json exists
+    - name: Check if ACME storage file exists
+      ansible.builtin.stat:
+        path: "{{ traefik_stack_dir }}/letsencrypt/acme.json"
+      register: acme_file
+      when: traefik_acme_enabled | bool
+
+    # Create acme.json with proper permissions (only if it doesn't exist)
     - name: Create ACME storage file
       ansible.builtin.file:
         path: "{{ traefik_stack_dir }}/letsencrypt/acme.json"
@@ -66,8 +73,12 @@
         owner: root
         group: root
         mode: "0600"
+        modification_time: preserve
+        access_time: preserve
       become: true
-      when: traefik_acme_enabled | bool
+      when:
+        - traefik_acme_enabled | bool
+        - not acme_file.stat.exists | default(true)
 
     # Deploy docker-compose file
     - name: Deploy Traefik docker-compose

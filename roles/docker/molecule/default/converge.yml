@@ -2,5 +2,9 @@
 - name: Converge
   hosts: all
   become: true
+  vars:
+    ansible_user: root
+    docker_users:
+      - root
   roles:
     - role: ../../../docker
