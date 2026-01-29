@@ -5,4 +5,4 @@
   vars:
     qemu_agent_skip: true  # Skip in container - no QEMU
   roles:
-    - role: qemu_agent
+    - role: ../../../qemu_agent

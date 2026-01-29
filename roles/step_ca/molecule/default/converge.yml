@@ -11,4 +11,4 @@
       ca_name: "Test CA"
     vault_step_ca_password: "test-ca-password"
   roles:
-    - role: step_ca
+    - role: ../../../step_ca

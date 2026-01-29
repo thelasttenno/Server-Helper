@@ -7,4 +7,4 @@
     common_microcode_enabled: false
     common_set_hostname: false
   roles:
-    - role: common
+    - role: ../../../common

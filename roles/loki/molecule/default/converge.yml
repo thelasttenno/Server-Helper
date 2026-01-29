@@ -9,4 +9,4 @@
       port: 3100
       retention_period: "744h"
   roles:
-    - role: loki
+    - role: ../../../loki

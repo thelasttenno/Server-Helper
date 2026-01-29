@@ -8,4 +8,4 @@
       promtail:
         enabled: true
   roles:
-    - role: promtail
+    - role: ../../../promtail

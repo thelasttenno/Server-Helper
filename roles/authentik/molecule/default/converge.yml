@@ -13,4 +13,4 @@
       secret_key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       postgres_password: "test-postgres-password"
   roles:
-    - role: authentik
+    - role: ../../../authentik

@@ -5,4 +5,4 @@
   vars:
     lvm_skip: true  # Skip in container - no LVM available
   roles:
-    - role: lvm_config
+    - role: ../../../lvm_config

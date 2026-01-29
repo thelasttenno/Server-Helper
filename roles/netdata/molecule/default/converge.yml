@@ -10,4 +10,4 @@
       enabled: true
       version: "stable"
   roles:
-    - role: netdata
+    - role: ../../../netdata

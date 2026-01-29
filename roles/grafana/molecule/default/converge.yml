@@ -12,4 +12,4 @@
       oidc_enabled: false
     vault_control_grafana_password: "test-password"
   roles:
-    - role: grafana
+    - role: ../../../grafana

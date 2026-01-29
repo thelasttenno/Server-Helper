@@ -6,4 +6,4 @@
     swap_skip: false
     swap_size_gb: 1
   roles:
-    - role: swap
+    - role: ../../../swap

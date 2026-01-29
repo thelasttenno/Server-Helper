@@ -23,4 +23,4 @@
       local: "test-password"
       nas: "test-password"
   roles:
-    - role: restic
+    - role: ../../../restic

@@ -14,4 +14,4 @@
       username: "admin"
       password: "test-password"
   roles:
-    - role: traefik
+    - role: ../../../traefik

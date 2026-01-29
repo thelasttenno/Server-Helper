@@ -7,4 +7,4 @@
     security_fail2ban_enabled: true
     security_lynis_enabled: false
   roles:
-    - role: security
+    - role: ../../../security

@@ -5,4 +5,4 @@
   vars:
     watchtower_skip_deploy: true
   roles:
-    - role: watchtower
+    - role: ../../../watchtower

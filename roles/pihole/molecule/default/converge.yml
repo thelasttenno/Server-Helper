@@ -10,4 +10,4 @@
       dns_port: 5353
     vault_pihole_password: "test-password"
   roles:
-    - role: pihole
+    - role: ../../../pihole
