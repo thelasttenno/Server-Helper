@@ -4,6 +4,29 @@
 - name: Restic backup setup
   when: restic_enabled | bool
   block:
+    # Validate backup destination is configured
+    - name: Validate restic repository is configured
+      ansible.builtin.assert:
+        that:
+          - restic_repository is defined
+          - restic_repository | length > 0
+        fail_msg: |
+          restic_repository must be configured for backups.
+          Enable at least one destination in target_restic.destinations (NAS or local).
+          Current config: NAS={{ restic_nas_enabled }}, Local={{ restic_local_enabled }}
+        success_msg: "Restic repository configured: {{ restic_repository }}"
+
+    - name: Validate restic password is configured
+      ansible.builtin.assert:
+        that:
+          - restic_password is defined
+          - restic_password | length > 0
+        fail_msg: |
+          restic_password must be set for the backup repository.
+          Set vault_restic_passwords.local or vault_restic_passwords.nas in group_vars/vault.yml
+        success_msg: "Restic password is configured"
+      no_log: true
+
     # Install restic
     - name: Install restic from package manager
       ansible.builtin.apt:

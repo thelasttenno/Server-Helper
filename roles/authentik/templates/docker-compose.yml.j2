@@ -24,6 +24,11 @@ services:
       resources:
         limits:
           memory: {{ authentik_postgres_memory_limit }}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 {% endif %}
@@ -46,6 +51,11 @@ services:
       resources:
         limits:
           memory: {{ authentik_redis_memory_limit }}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 {% endif %}
@@ -94,6 +104,11 @@ services:
       resources:
         limits:
           memory: {{ authentik_server_memory_limit }}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
       - "traefik.enable=true"
@@ -137,6 +152,11 @@ services:
       resources:
         limits:
           memory: {{ authentik_worker_memory_limit }}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 

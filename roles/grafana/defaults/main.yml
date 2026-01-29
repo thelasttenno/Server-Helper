@@ -27,7 +27,7 @@ grafana_anonymous_enabled: false
 grafana_anonymous_org_role: "Viewer"
 
 # Grafana server settings
-grafana_root_url: "https://grafana.{{ target_domain | default('local') }}"
+grafana_root_url: "https://grafana.{{ target_domain | default('example.local') }}"
 grafana_serve_from_sub_path: false
 
 # Disable signup
@@ -58,9 +58,9 @@ grafana_oauth_auto_login: false  # Set true to skip Grafana login page
 grafana_oauth_client_id: "{{ vault_grafana_oidc.client_id | default('') }}"
 grafana_oauth_client_secret: "{{ vault_grafana_oidc.client_secret | default('') }}"
 grafana_oauth_scopes: "openid profile email"
-grafana_oauth_auth_url: "https://auth.{{ target_domain | default('local') }}/application/o/authorize/"
-grafana_oauth_token_url: "https://auth.{{ target_domain | default('local') }}/application/o/token/"
-grafana_oauth_api_url: "https://auth.{{ target_domain | default('local') }}/application/o/userinfo/"
+grafana_oauth_auth_url: "https://auth.{{ target_domain | default('example.local') }}/application/o/authorize/"
+grafana_oauth_token_url: "https://auth.{{ target_domain | default('example.local') }}/application/o/token/"
+grafana_oauth_api_url: "https://auth.{{ target_domain | default('example.local') }}/application/o/userinfo/"
 # Role mapping from Authentik groups
 grafana_oauth_role_attribute_path: "contains(groups[*], 'Grafana Admins') && 'Admin' || contains(groups[*], 'Grafana Editors') && 'Editor' || 'Viewer'"
 

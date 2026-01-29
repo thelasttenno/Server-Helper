@@ -492,6 +492,339 @@ config_wizard() {
 }
 
 # =============================================================================
+# Secrets Configuration (Vault Prompts)
+# =============================================================================
+
+# Generate a random password
+_generate_password() {
+    local length="${1:-32}"
+    openssl rand -base64 "$length" 2>/dev/null | tr -dc 'a-zA-Z0-9' | head -c "$length"
+}
+
+# Get a vault value (decrypted)
+_vault_get() {
+    local key="$1"
+    local password_file="${VAULT_PASSWORD_FILE:-.vault_password}"
+
+    if [[ ! -f "$password_file" ]]; then
+        return 1
+    fi
+
+    if [[ ! -f "$CONFIG_VAULT_YML" ]]; then
+        return 1
+    fi
+
+    # Check if encrypted
+    if head -1 "$CONFIG_VAULT_YML" 2>/dev/null | grep -q '^\$ANSIBLE_VAULT'; then
+        ansible-vault view "$CONFIG_VAULT_YML" --vault-password-file="$password_file" 2>/dev/null | \
+            python3 -c "
+import yaml
+import sys
+data = yaml.safe_load(sys.stdin)
+keys = '$key'.split('.')
+value = data
+for k in keys:
+    if isinstance(value, dict) and k in value:
+        value = value[k]
+    else:
+        sys.exit(1)
+print(value if value is not None else '')
+" 2>/dev/null
+    else
+        config_get "$CONFIG_VAULT_YML" "$key"
+    fi
+}
+
+# Check if a vault value is still a placeholder
+_vault_is_placeholder() {
+    local value="$1"
+    [[ "$value" == CHANGE_ME* ]] || [[ -z "$value" ]]
+}
+
+# Prompt for a secret value with option to auto-generate
+config_prompt_secret() {
+    local name="$1"
+    local description="$2"
+    local current_value="$3"
+    local can_generate="${4:-true}"
+
+    echo ""
+    print_info "$description"
+
+    if [[ -n "$current_value" ]] && ! _vault_is_placeholder "$current_value"; then
+        print_success "  Currently set (not showing for security)"
+        if ! prompt_confirm "  Change this value?"; then
+            return 1
+        fi
+    fi
+
+    local value=""
+    if [[ "$can_generate" == "true" ]]; then
+        echo "  1) Enter manually"
+        echo "  2) Auto-generate secure password"
+        echo "  3) Skip"
+        local choice
+        choice=$(prompt_input "  Choose [1-3]")
+
+        case "$choice" in
+            1)
+                value=$(prompt_password "  Enter $name")
+                ;;
+            2)
+                value=$(_generate_password 24)
+                print_success "  Generated: $value"
+                print_warning "  Save this password securely!"
+                ;;
+            3)
+                return 1
+                ;;
+        esac
+    else
+        value=$(prompt_input "  Enter $name")
+    fi
+
+    if [[ -n "$value" ]]; then
+        echo "$value"
+        return 0
+    fi
+    return 1
+}
+
+# Interactive vault secrets setup
+config_setup_secrets() {
+    print_header "Secrets Configuration"
+
+    local password_file="${VAULT_PASSWORD_FILE:-.vault_password}"
+
+    # Check if vault password file exists
+    if [[ ! -f "$password_file" ]]; then
+        print_warning "Vault password file not found."
+        print_info "Run 'Initialize Vault' from the Vault menu first."
+        return 1
+    fi
+
+    # Check if vault.yml exists
+    if [[ ! -f "$CONFIG_VAULT_YML" ]]; then
+        print_warning "Vault file not found: $CONFIG_VAULT_YML"
+        return 1
+    fi
+
+    print_info "This wizard helps you configure service passwords."
+    print_info "Passwords with CHANGE_ME placeholders need to be set."
+    echo ""
+
+    # Track changes
+    local changes_made=false
+    local temp_values=""
+
+    # Netdata Stream API Key
+    print_section "Netdata Streaming"
+    local netdata_key
+    netdata_key=$(_vault_get "vault_netdata_stream_api_key")
+    if _vault_is_placeholder "$netdata_key"; then
+        print_warning "Netdata stream key needs configuration"
+        if new_value=$(config_prompt_secret "Netdata API Key" "Used for parent-child streaming" "" "true"); then
+            temp_values+="netdata_key=$new_value\n"
+            changes_made=true
+        fi
+    else
+        print_success "Netdata stream key: configured"
+    fi
+
+    # Grafana Password
+    print_section "Grafana"
+    local grafana_pass
+    grafana_pass=$(_vault_get "vault_control_grafana_password")
+    if _vault_is_placeholder "$grafana_pass"; then
+        print_warning "Grafana admin password needs configuration"
+        if new_value=$(config_prompt_secret "Grafana Password" "Admin password for Grafana" "" "true"); then
+            temp_values+="grafana_pass=$new_value\n"
+            changes_made=true
+        fi
+    else
+        print_success "Grafana password: configured"
+    fi
+
+    # Pi-hole Password
+    print_section "Pi-hole"
+    local pihole_pass
+    pihole_pass=$(_vault_get "vault_pihole_password")
+    if _vault_is_placeholder "$pihole_pass"; then
+        print_warning "Pi-hole web password needs configuration"
+        if new_value=$(config_prompt_secret "Pi-hole Password" "Web interface password" "" "true"); then
+            temp_values+="pihole_pass=$new_value\n"
+            changes_made=true
+        fi
+    else
+        print_success "Pi-hole password: configured"
+    fi
+
+    # Traefik Dashboard
+    print_section "Traefik Dashboard"
+    local traefik_pass
+    traefik_pass=$(_vault_get "vault_traefik_dashboard.password")
+    if _vault_is_placeholder "$traefik_pass"; then
+        print_warning "Traefik dashboard password needs configuration"
+        if new_value=$(config_prompt_secret "Traefik Password" "Dashboard authentication" "" "true"); then
+            temp_values+="traefik_pass=$new_value\n"
+            changes_made=true
+        fi
+    else
+        print_success "Traefik password: configured"
+    fi
+
+    # Dockge Credentials
+    print_section "Dockge"
+    local dockge_pass
+    dockge_pass=$(_vault_get "vault_dockge_credentials.password")
+    if _vault_is_placeholder "$dockge_pass"; then
+        print_warning "Dockge password needs configuration"
+        if new_value=$(config_prompt_secret "Dockge Password" "Container manager password" "" "true"); then
+            temp_values+="dockge_pass=$new_value\n"
+            changes_made=true
+        fi
+    else
+        print_success "Dockge password: configured"
+    fi
+
+    # Uptime Kuma
+    print_section "Uptime Kuma"
+    local uk_pass
+    uk_pass=$(_vault_get "vault_uptime_kuma_credentials.password")
+    if _vault_is_placeholder "$uk_pass"; then
+        print_warning "Uptime Kuma password needs configuration"
+        if new_value=$(config_prompt_secret "Uptime Kuma Password" "Monitoring dashboard password" "" "true"); then
+            temp_values+="uptime_kuma_pass=$new_value\n"
+            changes_made=true
+        fi
+    else
+        print_success "Uptime Kuma password: configured"
+    fi
+
+    # Restic Backup Password
+    print_section "Restic Backups"
+    local restic_pass
+    restic_pass=$(_vault_get "vault_restic_passwords.local")
+    if _vault_is_placeholder "$restic_pass"; then
+        print_warning "Restic backup password needs configuration"
+        if new_value=$(config_prompt_secret "Restic Password" "Encryption password for backups" "" "true"); then
+            temp_values+="restic_pass=$new_value\n"
+            changes_made=true
+        fi
+    else
+        print_success "Restic password: configured"
+    fi
+
+    # Step-CA Password
+    print_section "Step-CA (Certificate Authority)"
+    local stepca_pass
+    stepca_pass=$(_vault_get "vault_step_ca_password")
+    if _vault_is_placeholder "$stepca_pass"; then
+        print_warning "Step-CA password needs configuration"
+        if new_value=$(config_prompt_secret "Step-CA Password" "CA provisioner password" "" "true"); then
+            temp_values+="stepca_pass=$new_value\n"
+            changes_made=true
+        fi
+    else
+        print_success "Step-CA password: configured"
+    fi
+
+    # Authentik
+    print_section "Authentik (SSO)"
+    local auth_pass
+    auth_pass=$(_vault_get "vault_authentik_credentials.admin_password")
+    if _vault_is_placeholder "$auth_pass"; then
+        print_warning "Authentik passwords need configuration"
+        if new_value=$(config_prompt_secret "Authentik Admin Password" "SSO admin password" "" "true"); then
+            temp_values+="authentik_admin=$new_value\n"
+            changes_made=true
+        fi
+        # Also generate secret key and postgres password
+        local secret_key
+        local pg_pass
+        secret_key=$(_generate_password 64)
+        pg_pass=$(_generate_password 24)
+        temp_values+="authentik_secret=$secret_key\n"
+        temp_values+="authentik_pg=$pg_pass\n"
+        print_success "Generated Authentik secret key and database password"
+    else
+        print_success "Authentik passwords: configured"
+    fi
+
+    echo ""
+
+    if [[ "$changes_made" == "true" ]]; then
+        print_section "Applying Changes"
+        print_warning "To apply these changes, edit vault.yml with the new values."
+        print_info "Run: ./scripts/vault.sh edit"
+        echo ""
+        print_info "New values to set (copy these):"
+        echo "─────────────────────────────────────────"
+
+        # Display the values that need to be set
+        echo -e "$temp_values" | while IFS='=' read -r key value; do
+            if [[ -n "$key" ]]; then
+                case "$key" in
+                    netdata_key) echo "vault_netdata_stream_api_key: \"$value\"" ;;
+                    grafana_pass) echo "vault_control_grafana_password: \"$value\"" ;;
+                    pihole_pass) echo "vault_pihole_password: \"$value\"" ;;
+                    traefik_pass) echo "vault_traefik_dashboard.password: \"$value\"" ;;
+                    dockge_pass) echo "vault_dockge_credentials.password: \"$value\"" ;;
+                    uptime_kuma_pass) echo "vault_uptime_kuma_credentials.password: \"$value\"" ;;
+                    restic_pass) echo "vault_restic_passwords.local: \"$value\"" ;;
+                    stepca_pass) echo "vault_step_ca_password: \"$value\"" ;;
+                    authentik_admin) echo "vault_authentik_credentials.admin_password: \"$value\"" ;;
+                    authentik_secret) echo "vault_authentik_credentials.secret_key: \"$value\"" ;;
+                    authentik_pg) echo "vault_authentik_credentials.postgres_password: \"$value\"" ;;
+                esac
+            fi
+        done
+        echo "─────────────────────────────────────────"
+
+        if prompt_confirm "Open vault file in editor now?"; then
+            export EDITOR="${EDITOR:-nano}"
+            ansible-vault edit "$CONFIG_VAULT_YML" --vault-password-file="$password_file"
+        fi
+    else
+        print_success "All secrets are already configured!"
+    fi
+}
+
+# Quick setup for essential secrets only
+config_setup_essential_secrets() {
+    print_section "Essential Secrets Setup"
+
+    local password_file="${VAULT_PASSWORD_FILE:-.vault_password}"
+
+    if [[ ! -f "$password_file" ]]; then
+        print_warning "Vault password file not found."
+        return 1
+    fi
+
+    print_info "Setting up minimum required secrets..."
+    echo ""
+
+    # Generate all essential secrets automatically
+    local netdata_key
+    local grafana_pass
+    local restic_pass
+    netdata_key=$(_generate_password 32)
+    grafana_pass=$(_generate_password 16)
+    restic_pass=$(_generate_password 32)
+
+    print_success "Generated secrets:"
+    echo "─────────────────────────────────────────"
+    echo "vault_netdata_stream_api_key: \"$netdata_key\""
+    echo "vault_control_grafana_password: \"$grafana_pass\""
+    echo "vault_restic_passwords:"
+    echo "  local: \"$restic_pass\""
+    echo "─────────────────────────────────────────"
+    echo ""
+    print_warning "Copy these to your vault.yml file!"
+    print_info "Run: ./scripts/vault.sh edit"
+}
+
+# =============================================================================
 # Configuration Validation
 # =============================================================================
 

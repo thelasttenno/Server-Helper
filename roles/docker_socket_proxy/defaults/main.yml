@@ -20,7 +20,7 @@ docker_socket_proxy_stack_dir: "/opt/stacks/docker-socket-proxy"
 docker_socket_proxy_port: 2375
 
 # Control node IP (only this IP can access the proxy)
-docker_socket_proxy_allowed_ip: "{{ control_node_ip }}"
+docker_socket_proxy_allowed_ip: "{{ control_node_ip | default('localhost') }}"
 
 # API permissions (read-only by default for security)
 # Set to 1 to enable, 0 to disable

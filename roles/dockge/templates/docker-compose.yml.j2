@@ -20,6 +20,11 @@ services:
         limits:
           memory: {{ dockge_memory_limit }}
           cpus: "{{ dockge_cpu_limit }}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
       - "traefik.enable=true"

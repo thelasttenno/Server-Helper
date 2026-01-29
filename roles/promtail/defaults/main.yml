@@ -21,8 +21,8 @@ promtail_loki_url: "http://{{ control_node_ip | default('localhost') }}:3100/lok
 # HTTP server port (for metrics/health)
 promtail_http_port: 9080
 
-# Positions file
-promtail_positions_path: "/var/log/positions.yaml"
+# Positions file (stored in separate volume to avoid /var/log conflict)
+promtail_positions_path: "/tmp/positions/positions.yaml"
 
 # Log paths to scrape
 promtail_log_paths:

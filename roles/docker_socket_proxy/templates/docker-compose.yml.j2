@@ -9,7 +9,6 @@ services:
     image: {{ docker_socket_proxy_image }}:{{ docker_socket_proxy_image_tag }}
     container_name: {{ docker_socket_proxy_container_name }}
     restart: unless-stopped
-    privileged: true
     ports:
       - "{{ docker_socket_proxy_port }}:2375"
     volumes:
@@ -51,5 +50,10 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"

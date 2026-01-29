@@ -19,13 +19,12 @@ pihole_stack_dir: "/opt/stacks/pihole"
 pihole_dns_port: "{{ control_dns.dns_port | default(53) }}"
 pihole_web_port: "{{ control_dns.pihole_port | default(8053) }}"
 
-# Web interface password
+# Web interface password (set in vault.yml)
 pihole_web_password: "{{ vault_pihole_password | default('admin') }}"
 
 # Upstream DNS (when not using Unbound)
-pihole_upstream_dns:
-  - "1.1.1.1"
-  - "1.0.0.1"
+# Configure in group_vars/all.yml via target_dns.upstream_servers
+pihole_upstream_dns: "{{ target_dns.upstream_servers | default(['1.1.1.1', '1.0.0.1']) }}"
 
 # Unbound recursive resolver
 pihole_unbound_enabled: true
@@ -54,13 +53,17 @@ pihole_query_logging: true
 pihole_admin_email: ""
 
 # Custom DNS records (local DNS)
-pihole_custom_dns_records: []
-# Example:
+# Default includes control node for service discovery
+# Override in group_vars/all.yml to add more records
+pihole_custom_dns_records:
+  - hostname: "control.{{ target_domain | default('local') }}"
+    ip: "{{ control_node_ip | default('localhost') }}"
+# Add more records in group_vars/all.yml:
 # pihole_custom_dns_records:
-#   - hostname: "server.local"
-#     ip: "192.168.1.10"
-#   - hostname: "nas.local"
-#     ip: "192.168.1.20"
+#   - hostname: "control.{{ target_domain }}"
+#     ip: "{{ control_node_ip }}"
+#   - hostname: "nas.{{ target_domain }}"
+#     ip: "192.168.1.5"
 
 # Custom CNAME records
 pihole_custom_cname_records: []

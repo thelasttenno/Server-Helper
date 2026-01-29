@@ -43,6 +43,11 @@ services:
     ports:
       - "{{ netdata_web_port }}:19999"
 {% endif %}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 {% if netdata_mode == "parent" %}

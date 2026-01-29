@@ -25,7 +25,7 @@ uptime_kuma_data_dir: "{{ uptime_kuma_stack_dir }}/data"
 uptime_kuma_memory_limit: "512m"
 uptime_kuma_cpu_limit: "1.0"
 
-# Initial setup (first run only)
+# Initial setup (first run only - configure in vault.yml)
 # Note: These are only used during initial setup
 uptime_kuma_admin_username: "{{ vault_uptime_kuma_credentials.username | default('admin') }}"
 uptime_kuma_admin_password: "{{ vault_uptime_kuma_credentials.password | default('admin') }}"

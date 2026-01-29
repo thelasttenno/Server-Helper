@@ -1,8 +1,8 @@
 ---
 # Common role defaults
 
-# System settings
-common_timezone: "{{ target_timezone | default('America/Vancouver') }}"
+# System settings (target_timezone should be set in group_vars/all.yml)
+common_timezone: "{{ target_timezone | default('UTC') }}"
 common_locale: "en_US.UTF-8"
 
 # Base packages to install on all nodes

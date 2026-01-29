@@ -29,7 +29,8 @@ docker_default_address_pools:
     size: 24
 
 # Stacks directory (Dockge compatible)
-docker_stacks_dir: "/opt/stacks"
+# Uses target_dockge_stacks_dir from group_vars/all.yml for consistency
+docker_stacks_dir: "{{ target_dockge_stacks_dir | default('/opt/stacks') }}"
 
 # Create stacks directory
 docker_create_stacks_dir: true

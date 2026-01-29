@@ -33,7 +33,7 @@ authentik_redis_enabled: true
 authentik_redis_image: "redis:7-alpine"
 
 # Initial admin account
-authentik_bootstrap_email: "admin@{{ target_domain | default('example.com') }}"
+authentik_bootstrap_email: "admin@{{ target_domain | default('example.local') }}"
 authentik_bootstrap_password: "{{ vault_authentik_credentials.admin_password | default('') }}"
 authentik_bootstrap_token: ""
 
@@ -45,13 +45,13 @@ authentik_email_username: ""
 authentik_email_password: ""
 authentik_email_use_tls: true
 authentik_email_use_ssl: false
-authentik_email_from: "authentik@example.com"
+authentik_email_from: "authentik@{{ target_domain | default('example.local') }}"
 
 # Error reporting
 authentik_error_reporting_enabled: false
 
 # Domain and branding
-authentik_domain: "auth.{{ target_domain | default('local') }}"
+authentik_domain: "auth.{{ target_domain | default('example.local') }}"
 
 # Outpost settings for embedded outpost
 authentik_outpost_enabled: true

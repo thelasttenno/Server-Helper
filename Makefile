@@ -37,6 +37,7 @@ help:
 	@echo "Testing & Quality:"
 	@echo "  make test                       - Run all Molecule tests"
 	@echo "  make test-role ROLE=...         - Test specific role"
+	@echo "  make test-logs                  - List recent test logs"
 	@echo "  make lint                       - Run linting"
 	@echo "  make syntax-check               - Check playbook syntax"
 	@echo ""
@@ -94,6 +95,17 @@ ifndef ROLE
 endif
 	@bash scripts/lib/testing.sh test-role $(ROLE) $(CMD)
 
+test-logs:
+	@echo "Recent test logs (logs/molecule/):"
+	@echo ""
+	@if [ -d "logs/molecule" ]; then \
+		ls -lt logs/molecule/*.log 2>/dev/null | head -10 || echo "  No logs found"; \
+	else \
+		echo "  No logs directory yet. Run 'make test' to generate logs."; \
+	fi
+	@echo ""
+	@echo "View a log with: cat logs/molecule/<filename>.log"
+
 lint:
 	@echo "Running ansible-lint..."
 	ansible-lint playbooks/ roles/
@@ -118,6 +130,21 @@ clean:
 	find roles -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 	find . -name "*.pyc" -delete 2>/dev/null || true
 	@echo "Cleanup complete!"
+	@echo "Note: Test logs preserved in logs/molecule/. Use 'make clean-test-logs' to remove."
+
+clean-test-logs:
+	@echo "Cleaning test logs older than 7 days..."
+	@if [ -d "logs/molecule" ]; then \
+		find logs/molecule -name "*.log" -mtime +7 -delete 2>/dev/null || true; \
+		echo "Old logs cleaned."; \
+	else \
+		echo "No logs directory found."; \
+	fi
+
+clean-all-logs:
+	@echo "Removing all test logs..."
+	@rm -rf logs/molecule
+	@echo "All test logs removed."
 
 ##@ Setup & Bootstrap
 

@@ -26,6 +26,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    networks:
+      - {{ traefik_docker_network | default('traefik-public') }}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
       - "traefik.enable=true"
@@ -33,3 +40,7 @@ services:
       - "traefik.http.routers.loki.entrypoints=websecure"
       - "traefik.http.routers.loki.tls=true"
       - "traefik.http.services.loki.loadbalancer.server.port=3100"
+
+networks:
+  {{ traefik_docker_network | default('traefik-public') }}:
+    external: true

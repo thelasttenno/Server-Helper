@@ -25,6 +25,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    networks:
+      - {{ traefik_docker_network | default('traefik-public') }}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
       - "traefik.enable=true"
@@ -32,3 +39,7 @@ services:
       - "traefik.http.routers.uptime-kuma.entrypoints=websecure"
       - "traefik.http.routers.uptime-kuma.tls=true"
       - "traefik.http.services.uptime-kuma.loadbalancer.server.port=3001"
+
+networks:
+  {{ traefik_docker_network | default('traefik-public') }}:
+    external: true

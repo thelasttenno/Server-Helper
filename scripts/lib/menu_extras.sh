@@ -731,17 +731,18 @@ extras_show_menu() {
         echo
 
         echo "  1) Vault Management     - Manage Ansible Vault (encrypt/decrypt/edit)"
-        echo "  2) Upgrade Services     - Upgrade Docker images and restart services"
-        echo "  3) Add Server           - Add new server to inventory"
-        echo "  4) Open Service UIs     - Open web dashboards in browser"
-        echo "  5) Validate Fleet       - Check connectivity and service health"
-        echo "  6) Test All Roles       - Run Molecule tests for all roles"
-        echo "  7) Test Single Role     - Run Molecule test for one role"
-        echo "  8) Back to Main Menu"
+        echo "  2) Configure Secrets    - Set up service passwords (interactive)"
+        echo "  3) Upgrade Services     - Upgrade Docker images and restart services"
+        echo "  4) Add Server           - Add new server to inventory"
+        echo "  5) Open Service UIs     - Open web dashboards in browser"
+        echo "  6) Validate Fleet       - Check connectivity and service health"
+        echo "  7) Test All Roles       - Run Molecule tests for all roles"
+        echo "  8) Test Single Role     - Run Molecule test for one role"
+        echo "  9) Back to Main Menu"
         echo
 
         local choice
-        choice=$(prompt_input "Choose an option [1-8]")
+        choice=$(prompt_input "Choose an option [1-9]")
 
         case "$choice" in
             1)
@@ -756,30 +757,40 @@ extras_show_menu() {
                 fi
                 ;;
             2)
-                extras_upgrade_services
+                # Configure Secrets - from config_mgr.sh
+                if declare -F config_setup_secrets &>/dev/null; then
+                    config_setup_secrets
+                else
+                    print_warning "Secrets configuration not available"
+                    print_info "Source scripts/lib/config_mgr.sh first"
+                fi
                 read -p "Press Enter to continue..."
                 ;;
             3)
-                extras_add_server
+                extras_upgrade_services
                 read -p "Press Enter to continue..."
                 ;;
             4)
-                extras_open_ui
+                extras_add_server
                 read -p "Press Enter to continue..."
                 ;;
             5)
-                extras_validate_fleet_menu
+                extras_open_ui
                 read -p "Press Enter to continue..."
                 ;;
             6)
-                extras_test_all_roles
+                extras_validate_fleet_menu
                 read -p "Press Enter to continue..."
                 ;;
             7)
-                extras_test_single_role
+                extras_test_all_roles
                 read -p "Press Enter to continue..."
                 ;;
             8)
+                extras_test_single_role
+                read -p "Press Enter to continue..."
+                ;;
+            9)
                 if [[ -n "$return_callback" ]] && declare -F "$return_callback" &>/dev/null; then
                     "$return_callback"
                 fi

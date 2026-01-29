@@ -37,5 +37,10 @@ services:
     ports:
       - "8080:8080"
 {% endif %}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"

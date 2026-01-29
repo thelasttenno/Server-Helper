@@ -105,7 +105,7 @@ vault_uptime_kuma_push_urls:
 # =============================================================================
 
 vault_smtp_credentials:
-  host: "smtp.gmail.com"
+  host: ""              # e.g., smtp.gmail.com, smtp.sendgrid.net
   port: 587
   username: ""
   password: ""

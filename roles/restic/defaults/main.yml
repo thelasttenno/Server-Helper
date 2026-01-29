@@ -9,9 +9,13 @@ restic_version: "0.16.4"
 restic_install_method: "package"  # package or binary
 
 # Repository configuration (REQUIRED - set in host_vars or targets.yml)
-# Uses local path by default, NAS path if NAS is enabled
+# Priority: NAS > Local (defaults to local if nothing explicitly enabled)
+# If neither destination is enabled, local backup is used as fallback
 restic_repository: "{{ restic_nas_path if restic_nas_enabled else restic_local_path }}"
 restic_password: "{{ restic_nas_password if restic_nas_enabled else restic_local_password }}"
+
+# At least one destination must be enabled (local is the default fallback)
+restic_has_valid_destination: "{{ restic_nas_enabled or restic_local_enabled }}"
 
 # AWS/S3/B2 credentials (optional - for cloud backends)
 restic_aws_access_key_id: "{{ vault_aws_credentials.access_key | default('') }}"
@@ -24,13 +28,12 @@ restic_local_password: "{{ vault_restic_passwords.local | default('') }}"
 # Backup destinations (configured via target_restic in targets.yml)
 restic_nas_enabled: "{{ target_restic.destinations.nas.enabled | default(false) }}"
 restic_nas_path: "{{ target_restic.destinations.nas.path | default('') }}"
-restic_local_enabled: "{{ target_restic.destinations.local.enabled | default(false) }}"
-restic_local_path: "{{ target_restic.destinations.local.path | default('/opt/backups/restic') }}"
+# Local backup is enabled by default if no destination is explicitly configured
+restic_local_enabled: "{{ target_restic.destinations.local.enabled | default(true) }}"
+restic_local_path: "{{ target_restic.destinations.local.path | default(target_base_dir | default('/opt/server-helper') + '/backups/restic') }}"
 
-# Backup paths
-restic_backup_paths:
-  - "/opt/stacks"
-  - "/etc"
+# Backup paths (uses target_dockge_stacks_dir for consistency)
+restic_backup_paths: "{{ target_restic.include_paths | default([target_dockge_stacks_dir | default('/opt/stacks'), '/etc']) }}"
 
 # Exclude patterns
 restic_exclude_patterns:
@@ -62,9 +65,9 @@ restic_prune_enabled: true
 restic_check_enabled: true
 restic_check_schedule: "0 3 * * 0"  # Sunday 3 AM
 
-# Backup script location
-restic_script_dir: "/opt/restic"
-restic_log_dir: "/var/log/restic"
+# Backup script location (configurable via target_restic)
+restic_script_dir: "{{ target_restic.script_dir | default('/opt/restic') }}"
+restic_log_dir: "{{ target_restic.log_dir | default('/var/log/restic') }}"
 
 # Notification on failure (optional)
 restic_notify_on_failure: false

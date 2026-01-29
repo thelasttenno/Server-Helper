@@ -27,7 +27,7 @@ step_ca_dns_names:
 
 step_ca_address: ":9000"
 
-# Provisioner settings
+# Provisioner settings (configure password in vault.yml)
 step_ca_provisioner_name: "admin"
 step_ca_provisioner_password: "{{ vault_step_ca_password | default('admin') }}"
 

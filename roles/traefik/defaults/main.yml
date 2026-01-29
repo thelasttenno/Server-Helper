@@ -43,7 +43,7 @@ traefik_file_provider_enabled: true
 
 # ACME/Let's Encrypt settings
 traefik_acme_enabled: true
-traefik_acme_email: "admin@{{ target_domain | default('example.com') }}"
+traefik_acme_email: "admin@{{ target_domain | default('example.local') }}"
 traefik_acme_storage: "/letsencrypt/acme.json"
 traefik_acme_ca_server: "https://acme-v02.api.letsencrypt.org/directory"
 # Use staging for testing: https://acme-staging-v02.api.letsencrypt.org/directory
@@ -83,7 +83,7 @@ traefik_entrypoints:
 # Middlewares
 traefik_default_middlewares: []
 
-# Basic auth for dashboard (optional)
+# Basic auth for dashboard (configure in vault.yml)
 traefik_dashboard_auth_enabled: true
 traefik_dashboard_username: "{{ vault_traefik_dashboard.username | default('admin') }}"
 traefik_dashboard_password: "{{ vault_traefik_dashboard.password | default('admin') }}"

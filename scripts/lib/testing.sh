@@ -31,11 +31,81 @@ fi
 # Get project directory (caller should set SCRIPT_DIR)
 _TESTING_PROJECT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 _TESTING_ROLES_DIR="${_TESTING_PROJECT_DIR}/roles"
+_TESTING_LOG_DIR="${_TESTING_PROJECT_DIR}/logs/molecule"
 
 # Track test results
 declare -a _TESTING_PASSED=()
 declare -a _TESTING_FAILED=()
 declare -a _TESTING_SKIPPED=()
+
+# =============================================================================
+# Logging Functions
+# =============================================================================
+
+# Initialize logging directory and return log file path
+# Args: $1 = role name (optional, for combined log use "all")
+_testing_init_log() {
+    local role="${1:-all}"
+    local timestamp
+    timestamp=$(date +"%Y%m%d_%H%M%S")
+
+    # Create log directory
+    mkdir -p "${_TESTING_LOG_DIR}"
+
+    # Generate log file path
+    local log_file="${_TESTING_LOG_DIR}/${timestamp}_${role}.log"
+
+    # Initialize log file with header
+    {
+        echo "═══════════════════════════════════════════════════════════════"
+        echo "  Server Helper - Molecule Test Log"
+        echo "  Role: ${role}"
+        echo "  Started: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "  Working Directory: ${_TESTING_PROJECT_DIR}"
+        echo "═══════════════════════════════════════════════════════════════"
+        echo
+    } > "$log_file"
+
+    echo "$log_file"
+}
+
+# Append to log file
+# Args: $1 = log file, $2 = message
+_testing_log() {
+    local log_file="$1"
+    local message="$2"
+    echo "$message" >> "$log_file"
+}
+
+# Append summary to log file
+# Args: $1 = log file
+_testing_log_summary() {
+    local log_file="$1"
+    {
+        echo
+        echo "═══════════════════════════════════════════════════════════════"
+        echo "  Test Summary"
+        echo "  Completed: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "═══════════════════════════════════════════════════════════════"
+        echo "  Total:   $(( ${#_TESTING_PASSED[@]} + ${#_TESTING_FAILED[@]} + ${#_TESTING_SKIPPED[@]} ))"
+        echo "  Passed:  ${#_TESTING_PASSED[@]}"
+        echo "  Failed:  ${#_TESTING_FAILED[@]}"
+        echo "  Skipped: ${#_TESTING_SKIPPED[@]}"
+        echo
+        if [[ ${#_TESTING_PASSED[@]} -gt 0 ]]; then
+            echo "Passed roles:"
+            for role in "${_TESTING_PASSED[@]}"; do
+                echo "  - $role"
+            done
+        fi
+        if [[ ${#_TESTING_FAILED[@]} -gt 0 ]]; then
+            echo "Failed roles:"
+            for role in "${_TESTING_FAILED[@]}"; do
+                echo "  - $role"
+            done
+        fi
+    } >> "$log_file"
+}
 
 # =============================================================================
 # Dependency Checks & Auto-Install
@@ -201,10 +271,11 @@ testing_list_roles() {
 # =============================================================================
 
 # Run molecule test for a single role
-# Args: $1 = role name, $2 = molecule command (default: test)
+# Args: $1 = role name, $2 = molecule command (default: test), $3 = log file (optional)
 testing_run_role() {
     local role="$1"
     local molecule_cmd="${2:-test}"
+    local external_log="${3:-}"
     local roles_dir="${_TESTING_ROLES_DIR}"
     local role_dir="${roles_dir}/${role}"
 
@@ -235,25 +306,56 @@ testing_run_role() {
             ;;
     esac
 
+    # Initialize log file (use external log if provided, otherwise create one)
+    local log_file
+    if [[ -n "$external_log" ]]; then
+        log_file="$external_log"
+    else
+        log_file=$(_testing_init_log "$role")
+    fi
+
     print_section "Testing role: $role"
     print_info "Command: molecule $molecule_cmd"
+    print_info "Log file: $log_file"
     echo
 
     local original_dir
     original_dir=$(pwd)
     cd "$role_dir" || return 1
 
+    # Log the start of this role's test
+    {
+        echo
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Testing role: $role"
+        echo "Command: molecule $molecule_cmd"
+        echo "Started: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo
+    } >> "$log_file"
+
     local exit_code=0
-    if molecule "$molecule_cmd"; then
+    # Run molecule and tee output to both console and log file
+    if molecule "$molecule_cmd" 2>&1 | tee -a "$log_file"; then
         print_success "PASSED: $role"
+        echo "RESULT: PASSED" >> "$log_file"
         _TESTING_PASSED+=("$role")
     else
         print_error "FAILED: $role"
+        echo "RESULT: FAILED" >> "$log_file"
         _TESTING_FAILED+=("$role")
         exit_code=1
     fi
 
     cd "$original_dir" || return 1
+
+    # If this was a standalone test (not part of test-all), add summary
+    if [[ -z "$external_log" ]]; then
+        _testing_log_summary "$log_file"
+        echo
+        print_info "Full log saved to: $log_file"
+    fi
+
     return $exit_code
 }
 
@@ -341,6 +443,12 @@ testing_run_all() {
 
     testing_reset_results
 
+    # Initialize combined log file
+    local log_file
+    log_file=$(_testing_init_log "all")
+    print_info "Log file: $log_file"
+    echo
+
     # Find testable roles
     print_info "Finding roles with Molecule tests..."
     local -a roles
@@ -358,6 +466,15 @@ testing_run_all() {
     done
     echo
 
+    # Log the roles to test
+    {
+        echo "Roles to test:"
+        for role in "${roles[@]}"; do
+            echo "  - $role"
+        done
+        echo
+    } >> "$log_file"
+
     # Run tests
     local exit_code=0
     local original_dir
@@ -370,22 +487,22 @@ testing_run_all() {
         echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo
 
-        cd "${roles_dir}/${role}" || continue
-
-        if molecule test; then
-            print_success "PASSED: ${role}"
-            _TESTING_PASSED+=("$role")
-        else
-            print_error "FAILED: ${role}"
-            _TESTING_FAILED+=("$role")
+        # Use testing_run_role with the shared log file
+        if ! testing_run_role "$role" "test" "$log_file"; then
             exit_code=1
         fi
     done
 
     cd "$original_dir" || true
 
-    # Print summary
+    # Write summary to log
+    _testing_log_summary "$log_file"
+
+    # Print summary to console
     testing_print_summary
+
+    echo
+    print_info "Full log saved to: $log_file"
 
     return $exit_code
 }
