@@ -32,11 +32,13 @@ fi
 _TESTING_PROJECT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 _TESTING_ROLES_DIR="${_TESTING_PROJECT_DIR}/roles"
 _TESTING_LOG_DIR="${_TESTING_PROJECT_DIR}/logs/molecule"
+_TESTING_CACHE_FILE="${_TESTING_PROJECT_DIR}/.molecule-results"
 
 # Track test results
 declare -a _TESTING_PASSED=()
 declare -a _TESTING_FAILED=()
 declare -a _TESTING_SKIPPED=()
+declare -a _TESTING_CACHED=()
 
 # =============================================================================
 # Logging Functions
@@ -87,10 +89,11 @@ _testing_log_summary() {
         echo "  Test Summary"
         echo "  Completed: $(date '+%Y-%m-%d %H:%M:%S')"
         echo "═══════════════════════════════════════════════════════════════"
-        echo "  Total:   $(( ${#_TESTING_PASSED[@]} + ${#_TESTING_FAILED[@]} + ${#_TESTING_SKIPPED[@]} ))"
+        echo "  Total:   $(( ${#_TESTING_PASSED[@]} + ${#_TESTING_FAILED[@]} + ${#_TESTING_SKIPPED[@]} + ${#_TESTING_CACHED[@]} ))"
         echo "  Passed:  ${#_TESTING_PASSED[@]}"
         echo "  Failed:  ${#_TESTING_FAILED[@]}"
         echo "  Skipped: ${#_TESTING_SKIPPED[@]}"
+        echo "  Cached:  ${#_TESTING_CACHED[@]}"
         echo
         if [[ ${#_TESTING_PASSED[@]} -gt 0 ]]; then
             echo "Passed roles:"
@@ -105,6 +108,67 @@ _testing_log_summary() {
             done
         fi
     } >> "$log_file"
+}
+
+# =============================================================================
+# Test Result Cache
+# =============================================================================
+
+# Cache file format: one line per role, "role_name=PASSED|FAILED timestamp"
+
+# Check if a role has a cached PASSED result
+# Args: $1 = role name
+# Returns: 0 if cached pass exists, 1 otherwise
+_testing_cache_is_passed() {
+    local role="$1"
+    [[ -f "$_TESTING_CACHE_FILE" ]] || return 1
+    grep -q "^${role}=PASSED " "$_TESTING_CACHE_FILE" 2>/dev/null
+}
+
+# Save a test result to the cache
+# Args: $1 = role name, $2 = PASSED|FAILED
+_testing_cache_save() {
+    local role="$1"
+    local result="$2"
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+
+    # Remove old entry for this role if it exists
+    if [[ -f "$_TESTING_CACHE_FILE" ]]; then
+        local tmp="${_TESTING_CACHE_FILE}.tmp"
+        grep -v "^${role}=" "$_TESTING_CACHE_FILE" > "$tmp" 2>/dev/null || true
+        mv "$tmp" "$_TESTING_CACHE_FILE"
+    fi
+
+    # Append new result
+    echo "${role}=${result} ${timestamp}" >> "$_TESTING_CACHE_FILE"
+}
+
+# Clear the entire test result cache
+_testing_cache_clear() {
+    rm -f "$_TESTING_CACHE_FILE"
+    print_success "Test result cache cleared"
+}
+
+# Show cached results
+_testing_cache_show() {
+    if [[ ! -f "$_TESTING_CACHE_FILE" ]] || [[ ! -s "$_TESTING_CACHE_FILE" ]]; then
+        print_info "No cached test results"
+        return 0
+    fi
+
+    print_section "Cached Test Results"
+    while IFS='=' read -r role rest; do
+        [[ -z "$role" ]] && continue
+        local result="${rest%% *}"
+        local timestamp="${rest#* }"
+        if [[ "$result" == "PASSED" ]]; then
+            echo -e "  ${GREEN}PASSED${NC}  $role  ${DIM}($timestamp)${NC}"
+        else
+            echo -e "  ${RED}FAILED${NC}  $role  ${DIM}($timestamp)${NC}"
+        fi
+    done < "$_TESTING_CACHE_FILE"
+    echo
 }
 
 # =============================================================================
@@ -340,11 +404,19 @@ testing_run_role() {
         print_success "PASSED: $role"
         echo "RESULT: PASSED" >> "$log_file"
         _TESTING_PASSED+=("$role")
+        # Cache result for full test runs
+        if [[ "$molecule_cmd" == "test" ]]; then
+            _testing_cache_save "$role" "PASSED"
+        fi
     else
         print_error "FAILED: $role"
         echo "RESULT: FAILED" >> "$log_file"
         _TESTING_FAILED+=("$role")
         exit_code=1
+        # Cache failure so it re-runs next time
+        if [[ "$molecule_cmd" == "test" ]]; then
+            _testing_cache_save "$role" "FAILED"
+        fi
     fi
 
     cd "$original_dir" || return 1
@@ -429,11 +501,15 @@ testing_reset_results() {
     _TESTING_PASSED=()
     _TESTING_FAILED=()
     _TESTING_SKIPPED=()
+    _TESTING_CACHED=()
 }
 
 # Run molecule tests for all roles
+# Args: $1 = "force" to ignore cache and re-run all tests
 testing_run_all() {
+    local force="${1:-}"
     local roles_dir="${_TESTING_ROLES_DIR}"
+    local use_cache=0
 
     print_header "Test All Roles"
 
@@ -442,12 +518,6 @@ testing_run_all() {
     fi
 
     testing_reset_results
-
-    # Initialize combined log file
-    local log_file
-    log_file=$(_testing_init_log "all")
-    print_info "Log file: $log_file"
-    echo
 
     # Find testable roles
     print_info "Finding roles with Molecule tests..."
@@ -460,9 +530,54 @@ testing_run_all() {
         return 0
     fi
 
+    # Check if we have cached results and offer to skip passed tests
+    if [[ "$force" != "force" ]] && [[ -f "$_TESTING_CACHE_FILE" ]]; then
+        local cached_pass=0
+        for role in "${roles[@]}"; do
+            if _testing_cache_is_passed "$role"; then
+                ((cached_pass++))
+            fi
+        done
+
+        if [[ $cached_pass -gt 0 ]]; then
+            echo
+            print_info "${cached_pass} of ${#roles[@]} role(s) previously passed:"
+            for role in "${roles[@]}"; do
+                if _testing_cache_is_passed "$role"; then
+                    echo -e "  ${GREEN}PASSED${NC}  $role"
+                else
+                    echo -e "  ${YELLOW}PENDING${NC} $role"
+                fi
+            done
+            echo
+            echo "  1) Skip passed tests (run only failed/untested)"
+            echo "  2) Re-run all tests (ignore cache)"
+            echo "  3) Clear cache and re-run all"
+            echo
+            local cache_choice
+            cache_choice=$(prompt_input "Choose an option" "1")
+            case "$cache_choice" in
+                1) use_cache=1 ;;
+                2) use_cache=0 ;;
+                3) _testing_cache_clear; use_cache=0 ;;
+                *) use_cache=1 ;;
+            esac
+        fi
+    fi
+
+    # Initialize combined log file
+    local log_file
+    log_file=$(_testing_init_log "all")
+    print_info "Log file: $log_file"
+    echo
+
     print_success "Found ${#roles[@]} testable role(s):"
     for role in "${roles[@]}"; do
-        echo "  - $role"
+        if [[ $use_cache -eq 1 ]] && _testing_cache_is_passed "$role"; then
+            echo -e "  ${DIM}- $role (cached pass, skipping)${NC}"
+        else
+            echo "  - $role"
+        fi
     done
     echo
 
@@ -481,6 +596,17 @@ testing_run_all() {
     original_dir=$(pwd)
 
     for role in "${roles[@]}"; do
+        # Skip cached passes if user chose to
+        if [[ $use_cache -eq 1 ]] && _testing_cache_is_passed "$role"; then
+            echo
+            echo -e "${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${DIM}Skipping role: ${role} (previously passed)${NC}"
+            echo -e "${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            _TESTING_CACHED+=("$role")
+            echo "CACHED SKIP: $role (previously passed)" >> "$log_file"
+            continue
+        fi
+
         echo
         echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo -e "${BOLD}Testing role: ${role}${NC}"
@@ -509,7 +635,7 @@ testing_run_all() {
 
 # Print test summary
 testing_print_summary() {
-    local total=$(( ${#_TESTING_PASSED[@]} + ${#_TESTING_FAILED[@]} + ${#_TESTING_SKIPPED[@]} ))
+    local total=$(( ${#_TESTING_PASSED[@]} + ${#_TESTING_FAILED[@]} + ${#_TESTING_SKIPPED[@]} + ${#_TESTING_CACHED[@]} ))
 
     echo
     print_section "Test Summary"
@@ -517,12 +643,23 @@ testing_print_summary() {
     echo -e "  ${GREEN}Passed:${NC}       ${#_TESTING_PASSED[@]}"
     echo -e "  ${RED}Failed:${NC}       ${#_TESTING_FAILED[@]}"
     echo -e "  ${YELLOW}Skipped:${NC}      ${#_TESTING_SKIPPED[@]}"
+    if [[ ${#_TESTING_CACHED[@]} -gt 0 ]]; then
+        echo -e "  ${CYAN}Cached:${NC}       ${#_TESTING_CACHED[@]} (previously passed, not re-run)"
+    fi
     echo
 
     if [[ ${#_TESTING_PASSED[@]} -gt 0 ]]; then
         echo -e "${GREEN}Passed roles:${NC}"
         for role in "${_TESTING_PASSED[@]}"; do
             echo "  - $role"
+        done
+        echo
+    fi
+
+    if [[ ${#_TESTING_CACHED[@]} -gt 0 ]]; then
+        echo -e "${CYAN}Cached roles (skipped):${NC}"
+        for role in "${_TESTING_CACHED[@]}"; do
+            echo -e "  ${DIM}- $role${NC}"
         done
         echo
     fi
@@ -556,38 +693,53 @@ testing_show_menu() {
         echo
 
         echo "  1) Test All Roles       - Run Molecule tests for all roles"
-        echo "  2) Test Single Role     - Run Molecule test for one role"
-        echo "  3) List Testable Roles  - Show roles with Molecule tests"
-        echo "  4) Check Dependencies   - Verify testing tools installed"
-        echo "  5) Back"
+        echo "  2) Test All (force)     - Re-run all tests, ignore cache"
+        echo "  3) Test Single Role     - Run Molecule test for one role"
+        echo "  4) List Testable Roles  - Show roles with Molecule tests"
+        echo "  5) View Cached Results  - Show previously passed/failed tests"
+        echo "  6) Clear Test Cache     - Reset cached results"
+        echo "  7) Check Dependencies   - Verify testing tools installed"
+        echo "  8) Back"
         echo
 
         local choice
-        choice=$(prompt_input "Choose an option [1-5]")
+        choice=$(prompt_input "Choose an option [1-8]")
 
         case "$choice" in
             1)
                 testing_run_all
-                read -p "Press Enter to continue..."
+                read -rp "Press Enter to continue..."
                 ;;
             2)
-                testing_test_single_interactive
-                read -p "Press Enter to continue..."
+                testing_run_all "force"
+                read -rp "Press Enter to continue..."
                 ;;
             3)
-                testing_list_roles
-                read -p "Press Enter to continue..."
+                testing_test_single_interactive
+                read -rp "Press Enter to continue..."
                 ;;
             4)
-                testing_check_dependencies
-                read -p "Press Enter to continue..."
+                testing_list_roles
+                read -rp "Press Enter to continue..."
                 ;;
             5)
+                _testing_cache_show
+                read -rp "Press Enter to continue..."
+                ;;
+            6)
+                _testing_cache_clear
+                read -rp "Press Enter to continue..."
+                ;;
+            7)
+                testing_check_dependencies
+                read -rp "Press Enter to continue..."
+                ;;
+            8)
                 return 0
                 ;;
             *)
                 print_warning "Invalid option"
-                read -p "Press Enter to continue..."
+                read -rp "Press Enter to continue..."
                 ;;
         esac
     done
@@ -601,14 +753,18 @@ _testing_cli_usage() {
     echo "Usage: $0 <command> [args]"
     echo
     echo "Commands:"
-    echo "  test-all              Run Molecule tests for all roles"
+    echo "  test-all              Run Molecule tests for all roles (skips cached passes)"
+    echo "  test-all --force      Re-run all tests, ignore cache"
     echo "  test-role <role>      Run Molecule test for specific role"
     echo "  list                  List all testable roles"
+    echo "  cache-show            Show cached test results"
+    echo "  cache-clear           Clear cached test results"
     echo "  install-deps          Install test dependencies"
     echo "  help                  Show this help"
     echo
     echo "Examples:"
     echo "  $0 test-all"
+    echo "  $0 test-all --force"
     echo "  $0 test-role common"
     echo "  $0 test-role common converge"
     echo
@@ -620,7 +776,18 @@ _testing_cli_main() {
 
     case "$cmd" in
         test-all|all)
-            testing_run_all
+            local force_flag="${1:-}"
+            if [[ "$force_flag" == "--force" || "$force_flag" == "-f" ]]; then
+                testing_run_all "force"
+            else
+                testing_run_all
+            fi
+            ;;
+        cache-show|cache)
+            _testing_cache_show
+            ;;
+        cache-clear)
+            _testing_cache_clear
             ;;
         test-role|role|test)
             local role="${1:-}"
