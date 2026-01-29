@@ -74,7 +74,9 @@ install-test-deps:
 	@sudo apt-get install -y -qq pipx python3-pytest python3-docker yamllint ansible-lint || true
 	@echo "Installing molecule via pipx (PEP 668 compliant)..."
 	pipx install molecule || pipx upgrade molecule
-	pipx inject molecule molecule-plugins[docker] pytest-testinfra
+	pipx inject molecule molecule-plugins[docker] pytest-testinfra ansible
+	@echo "Installing required Ansible collections..."
+	ansible-galaxy collection install ansible.posix community.general community.docker --force
 	@echo "Done! Run 'pipx ensurepath' if molecule command is not found."
 
 test:
