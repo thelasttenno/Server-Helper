@@ -1,0 +1,117 @@
+---
+# Server Helper - Target Nodes Configuration
+# ==========================================
+# Variables specific to target (worker) nodes.
+# These override values from all.yml for target nodes.
+# Individual hosts can further override in host_vars/{hostname}.yml
+
+# -----------------------------------------------------------------------------
+# TARGET NODE SERVICES
+# -----------------------------------------------------------------------------
+
+# Netdata (System Monitoring - Child Mode)
+target_netdata:
+  enabled: true
+  port: 19999
+  version: "latest"
+  mode: "child"  # Streams to control node parent
+  claim_token: ""
+  claim_rooms: ""
+  alarms:
+    enabled: true
+    cpu_warning: 80
+    cpu_critical: 95
+    ram_warning: 80
+    ram_critical: 95
+    disk_warning: 80
+    disk_critical: 90
+    check_interval_minutes: 5
+  uptime_kuma_push_urls:
+    cpu: ""
+    ram: ""
+    disk: ""
+    system: ""
+
+# Promtail (Log Shipping to Loki)
+target_logging:
+  promtail:
+    enabled: true
+    additional_jobs: []
+
+# Restic (Encrypted Backups)
+target_restic:
+  enabled: true
+  schedule: "0 2 * * *"
+  retention:
+    keep_daily: 7
+    keep_weekly: 4
+    keep_monthly: 6
+    keep_yearly: 2
+  destinations:
+    nas:
+      enabled: false
+      path: "/mnt/nas/backup/restic"
+    local:
+      enabled: true
+      path: "/opt/backups/restic"
+    s3:
+      enabled: false
+      bucket: ""
+      endpoint: "s3.amazonaws.com"
+      region: "us-east-1"
+    b2:
+      enabled: false
+      bucket: ""
+  include_paths:
+    - "{{ target_dockge_stacks_dir }}"
+    - "/etc"
+    - "/root"
+    - "/home"
+  exclude_patterns:
+    - "*.tmp"
+    - "*.log"
+    - "cache"
+    - "*.cache"
+
+# Watchtower (Container Auto-Updates)
+target_watchtower:
+  enabled: true
+  schedule: "0 4 * * *"
+  cleanup: true
+
+# Dockge (Container Management UI)
+target_dockge:
+  enabled: true
+  port: 5001
+  version: "1"
+
+# Docker Socket Proxy
+target_docker_socket_proxy:
+  enabled: true
+
+# -----------------------------------------------------------------------------
+# TARGET SYSTEM CONFIGURATION
+# -----------------------------------------------------------------------------
+
+# LVM Configuration
+target_lvm_config:
+  enabled: true
+  auto_extend_ubuntu: true
+  custom_lvs: []
+  create_lvs: []
+
+# Virtualization
+target_virtualization:
+  qemu_guest_agent: true
+
+# System Maintenance
+target_maintenance:
+  auto_cleanup:
+    enabled: true
+    disk_threshold: 80
+    schedule: "0 5 * * 0"
+  auto_updates:
+    enabled: false
+    schedule: "0 6 * * 0"
+    auto_reboot: false
+    reboot_time: "03:00"

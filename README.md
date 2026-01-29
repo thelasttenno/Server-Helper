@@ -2,9 +2,12 @@
 
 [![Ansible](https://img.shields.io/badge/Ansible-2.14+-red.svg)](https://www.ansible.com/)
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-24.04_LTS-orange.svg)](https://ubuntu.com/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-Compose_v2-blue.svg)](https://docs.docker.com/compose/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 **Server Helper** is a comprehensive infrastructure automation framework that combines Bash bootstrap scripts with Ansible playbooks to deploy and manage a complete homelab or small business server environment.
+
+> **21 roles | 7 playbooks | 3-tier architecture | Zero-touch deployment**
 
 ## Features
 
@@ -121,6 +124,7 @@ ansible-playbook playbooks/site.yml
 | `netdata` (child) | Real-time metrics streaming to parent |
 | `promtail` | Log shipping to Loki |
 | `docker_socket_proxy` | Secure Docker API proxy |
+| `dockge` | Docker Compose stack manager UI |
 
 ### Tier 3: Control Stacks
 | Role | Description |
@@ -201,6 +205,39 @@ ansible-playbook playbooks/site.yml
 
 MIT License - See [LICENSE](LICENSE) for details.
 
+## Project Structure
+
+```text
+server-helper/
+├── playbooks/              # Orchestration playbooks
+│   ├── site.yml            # Full deployment (all tiers)
+│   ├── bootstrap.yml       # Day 0 target preparation
+│   ├── target.yml          # Target node agents
+│   ├── control.yml         # Control node stacks
+│   └── ...
+├── roles/                  # 21 Ansible roles
+│   ├── common/             # Base system config
+│   ├── security/           # SSH, UFW, fail2ban, Lynis
+│   ├── docker/             # Docker CE installation
+│   ├── netdata/            # Parent/child streaming
+│   ├── traefik/            # Reverse proxy
+│   ├── authentik/          # SSO/OIDC
+│   └── ...
+├── group_vars/             # Configuration variables
+│   ├── all.yml             # Global settings
+│   ├── control.yml         # Control node settings
+│   ├── targets.yml         # Target node settings
+│   └── vault.yml           # Encrypted secrets
+├── inventory/              # Host definitions
+├── scripts/                # Utility scripts
+│   ├── validate-fleet.sh   # Health validation
+│   ├── vault.sh            # Vault management
+│   └── ...
+├── docs/wiki/              # Documentation
+├── setup.sh                # Interactive setup wizard
+└── bootstrap-target.sh     # Day 0 script for targets
+```
+
 ## Acknowledgments
 
 - [Ansible](https://www.ansible.com/) - Automation platform
@@ -209,3 +246,7 @@ MIT License - See [LICENSE](LICENSE) for details.
 - [Traefik](https://traefik.io/) - Cloud-native proxy
 - [Authentik](https://goauthentik.io/) - Identity provider
 - [Smallstep](https://smallstep.com/) - Certificate authority
+- [Loki](https://grafana.com/oss/loki/) - Log aggregation
+- [Pi-hole](https://pi-hole.net/) - DNS and ad-blocking
+- [Uptime Kuma](https://uptime.kuma.pet/) - Status monitoring
+- [Dockge](https://dockge.kuma.pet/) - Stack management

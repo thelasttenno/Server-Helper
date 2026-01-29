@@ -4,8 +4,8 @@
 # Enable/disable LVM expansion
 lvm_enabled: "{{ target_lvm_config.enabled | default(true) }}"
 
-# Skip LVM operations (set to true for LXC containers)
-lvm_skip: "{{ lvm_skip | default(false) }}"
+# Skip LVM operations (set to true for LXC containers via host_vars/inventory)
+lvm_skip: false
 
 # Automatically extend Ubuntu's root LV to use all free space
 lvm_auto_extend_ubuntu: "{{ target_lvm_config.auto_extend_ubuntu | default(true) }}"

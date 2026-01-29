@@ -5,10 +5,23 @@
 # This script prepares a fresh Ubuntu server to be managed by Ansible.
 # Run this ONCE on each new target node before adding it to your inventory.
 #
-# Usage:
-#   curl -fsSL https://raw.githubusercontent.com/yourusername/Server-Helper/main/bootstrap-target.sh | sudo bash
-#   OR
+# RECOMMENDED USAGE (Download-Verify-Execute):
+#   1. Download the script:
+#      curl -fsSL https://raw.githubusercontent.com/yourusername/Server-Helper/main/bootstrap-target.sh -o bootstrap-target.sh
+#
+#   2. Verify the script contents (IMPORTANT - always review before running):
+#      cat bootstrap-target.sh
+#      # or: less bootstrap-target.sh
+#
+#   3. Execute after verification:
+#      chmod +x bootstrap-target.sh
+#      sudo ./bootstrap-target.sh
+#
+# ALTERNATIVE (if you have the repo cloned):
 #   sudo ./bootstrap-target.sh
+#
+# NOTE: This script is standalone and does NOT require the library modules.
+#       This allows it to be used independently via download on fresh servers.
 #
 # What this does:
 #   1. Detects virtualization type (VM vs LXC container)
@@ -294,7 +307,7 @@ expand_lvm() {
     # Check for free space in VG
     free_space=$(vgs --noheadings -o vg_free --units g "$root_vg" 2>/dev/null | tr -d ' ' | sed 's/g$//')
 
-    if [[ -z "$free_space" ]] || (( $(echo "$free_space < 0.1" | bc -l 2>/dev/null || echo "1") )); then
+    if [[ -z "$free_space" ]] || ! command -v bc &>/dev/null || (( $(echo "$free_space < 0.1" | bc -l 2>/dev/null || echo "1") )); then
         print_info "No free space in volume group $root_vg, skipping expansion"
         return 0
     fi

@@ -1,19 +1,19 @@
 ---
 # Uptime Kuma role defaults (Control Node only)
 
-# Master toggle
-uptime_kuma_enabled: true
+# Master toggle (from control_uptime_kuma config)
+uptime_kuma_enabled: "{{ control_uptime_kuma.enabled | default(true) }}"
 
 # Container settings
 uptime_kuma_container_name: "uptime-kuma"
 uptime_kuma_image: "louislam/uptime-kuma"
-uptime_kuma_image_tag: "1"
+uptime_kuma_image_tag: "{{ control_uptime_kuma.version | default('1') }}"
 
 # Stack directory (Dockge compatible)
 uptime_kuma_stack_dir: "/opt/stacks/uptime-kuma"
 
-# Network port
-uptime_kuma_port: 3001
+# Network port (from control_uptime_kuma config)
+uptime_kuma_port: "{{ control_uptime_kuma.port | default(3001) }}"
 
 # Data volume
 uptime_kuma_data_dir: "{{ uptime_kuma_stack_dir }}/data"
@@ -24,8 +24,8 @@ uptime_kuma_cpu_limit: "1.0"
 
 # Initial setup (first run only)
 # Note: These are only used during initial setup
-uptime_kuma_admin_username: "{{ vault_uptime_kuma_admin_username | default('admin') }}"
-uptime_kuma_admin_password: "{{ vault_uptime_kuma_admin_password | default('') }}"
+uptime_kuma_admin_username: "{{ vault_uptime_kuma_credentials.username | default('admin') }}"
+uptime_kuma_admin_password: "{{ vault_uptime_kuma_credentials.password | default('admin') }}"
 
 # Push monitors for health checks
 # These can be used by other services to report their status

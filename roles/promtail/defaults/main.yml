@@ -1,8 +1,8 @@
 ---
 # Promtail role defaults (Target Nodes)
 
-# Master toggle
-promtail_enabled: true
+# Master toggle (from target_logging.promtail config)
+promtail_enabled: "{{ target_logging.promtail.enabled | default(true) }}"
 
 # Container settings
 promtail_container_name: "promtail"

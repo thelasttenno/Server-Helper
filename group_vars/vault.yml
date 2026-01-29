@@ -9,60 +9,121 @@
 #   Decrypt: ansible-vault decrypt group_vars/vault.yml
 
 # =============================================================================
-# RESTIC BACKUP
+# NAS CREDENTIALS
 # =============================================================================
 
-vault_restic_password: "CHANGE_ME_restic_repository_password"
-vault_restic_aws_access_key: "CHANGE_ME_minio_access_key"
-vault_restic_aws_secret_key: "CHANGE_ME_minio_secret_key"
+vault_nas_credentials:
+  - username: "backup_user"
+    password: "CHANGE_ME_nas_password"
 
 # =============================================================================
-# NETDATA STREAMING
+# BACKUP PASSWORDS (Restic)
 # =============================================================================
 
+vault_restic_passwords:
+  nas: "CHANGE_ME_restic_nas_password"
+  local: "CHANGE_ME_restic_local_password"
+  s3: "CHANGE_ME_restic_s3_password"
+  b2: "CHANGE_ME_restic_b2_password"
+
+# =============================================================================
+# CLOUD PROVIDER CREDENTIALS
+# =============================================================================
+
+vault_aws_credentials:
+  access_key: "CHANGE_ME_aws_access_key"
+  secret_key: "CHANGE_ME_aws_secret_key"
+
+vault_b2_credentials:
+  account_id: ""
+  account_key: ""
+
+# =============================================================================
+# TARGET NODE SERVICE CREDENTIALS
+# =============================================================================
+
+vault_dockge_credentials:
+  username: "admin"
+  password: "CHANGE_ME_dockge_password"
+
+# =============================================================================
+# CONTROL NODE SERVICE CREDENTIALS
+# =============================================================================
+
+# Authentik (SSO/Identity Provider)
+vault_authentik_credentials:
+  admin_password: "CHANGE_ME_authentik_admin_password"
+  secret_key: "CHANGE_ME_authentik_secret_key_64_chars"
+  postgres_password: "CHANGE_ME_authentik_postgres_password"
+
+# Grafana OIDC (via Authentik)
+vault_grafana_oidc:
+  client_id: "grafana"
+  client_secret: "CHANGE_ME_grafana_oidc_secret"
+
+# Grafana Admin (if not using Authentik SSO)
+vault_control_grafana_password: "CHANGE_ME_grafana_admin_password"
+
+# Uptime Kuma
+vault_uptime_kuma_credentials:
+  username: "admin"
+  password: "CHANGE_ME_uptime_kuma_password"
+
+# Step-CA (Certificate Authority)
+vault_step_ca_password: "CHANGE_ME_step_ca_password"
+
+# Pi-hole
+vault_pihole_password: "CHANGE_ME_pihole_password"
+
+# Traefik Dashboard
+vault_traefik_dashboard:
+  username: "admin"
+  password: "CHANGE_ME_traefik_dashboard_password"
+
+# =============================================================================
+# MONITORING & OBSERVABILITY
+# =============================================================================
+
+# Netdata Cloud claim token (optional - get from app.netdata.cloud)
+vault_netdata_claim_token: ""
+
+# Netdata streaming API key (for parent-child communication)
 # Generate with: uuidgen or openssl rand -hex 16
 vault_netdata_stream_api_key: "CHANGE_ME_netdata_stream_key"
 
-# =============================================================================
-# GRAFANA
-# =============================================================================
-
-vault_grafana_admin_password: "CHANGE_ME_grafana_admin_password"
-
-# =============================================================================
-# PI-HOLE
-# =============================================================================
-
-vault_pihole_web_password: "CHANGE_ME_pihole_web_password"
+# Uptime Kuma push URLs (for health check callbacks)
+vault_uptime_kuma_push_urls:
+  nas: ""
+  dockge: ""
+  system: ""
+  backup: ""
+  security: ""
+  update: ""
 
 # =============================================================================
-# STEP-CA (Certificate Authority)
+# NOTIFICATION SERVICES
 # =============================================================================
 
-vault_step_ca_provisioner_password: "CHANGE_ME_step_ca_provisioner_password"
+vault_smtp_credentials:
+  host: "smtp.gmail.com"
+  port: 587
+  username: ""
+  password: ""
+  from_address: ""
+  to_addresses: []
+
+vault_discord_webhook: ""
+
+vault_telegram_credentials:
+  bot_token: ""
+  chat_id: ""
+
+vault_slack_webhook: ""
 
 # =============================================================================
-# AUTHENTIK (SSO/Identity Provider)
+# SYSTEM USERS
 # =============================================================================
 
-# Generate with: openssl rand -hex 32
-vault_authentik_secret_key: "CHANGE_ME_authentik_secret_key_64_chars"
-vault_authentik_postgres_password: "CHANGE_ME_authentik_postgres_password"
-vault_authentik_admin_email: "admin@example.com"
-vault_authentik_admin_password: "CHANGE_ME_authentik_admin_password"
-# Optional: bootstrap token for API access
-vault_authentik_bootstrap_token: ""
-
-# =============================================================================
-# UPTIME KUMA
-# =============================================================================
-
-vault_uptime_kuma_admin_username: "admin"
-vault_uptime_kuma_admin_password: "CHANGE_ME_uptime_kuma_password"
-
-# =============================================================================
-# NAS CREDENTIALS (Optional)
-# =============================================================================
-
-# vault_nas_username: "backup_user"
-# vault_nas_password: "CHANGE_ME_nas_password"
+vault_system_users:
+  admin_password: "CHANGE_ME_admin_password"
+  admin_ssh_key: ""  # ssh-rsa AAAA... user@host

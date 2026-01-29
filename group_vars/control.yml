@@ -1,0 +1,76 @@
+---
+# Server Helper - Control Node Configuration
+# ===========================================
+# Variables specific to the control node group.
+# These override values from all.yml for the control node.
+
+# -----------------------------------------------------------------------------
+# CONTROL NODE SERVICES
+# -----------------------------------------------------------------------------
+
+# Authentik (SSO/Identity Provider)
+control_authentik:
+  enabled: true
+  port: 9000
+  version: "latest"
+
+# Traefik (Reverse Proxy)
+control_traefik:
+  enabled: true
+  http_port: 80
+  https_port: 443
+  dashboard_port: 8080
+  version: "v3.0"
+
+# Step-CA (Internal Certificate Authority)
+# Note: port is the external host port; container listens internally on 9000
+control_step_ca:
+  enabled: true
+  port: 9443
+  ca_name: "Server-Helper CA"
+
+# Pi-hole + Unbound (DNS)
+control_dns:
+  enabled: true
+  pihole_port: 8053
+  dns_port: 53
+
+# Uptime Kuma (Availability Monitoring)
+control_uptime_kuma:
+  enabled: true
+  port: 3001
+  version: "1"
+
+# Grafana (Centralized Dashboards)
+control_grafana:
+  enabled: true
+  port: 3000
+  version: "latest"
+  admin_user: "admin"
+  oidc_enabled: true
+
+# Loki (Centralized Log Aggregation)
+control_loki:
+  enabled: true
+  port: 3100
+  version: "latest"
+  retention_period: "744h"
+
+# Netdata Parent (Centralized Metrics)
+control_netdata:
+  enabled: true
+  port: 19999
+  version: "latest"
+  mode: "parent"
+  stream_api_key: "{{ vault_netdata_stream_api_key }}"
+
+# Scanopy/Trivy (Container Security)
+control_scanopy:
+  enabled: false
+  port: 8080
+  trivy_version: "latest"
+
+# PruneMate (Docker Cleanup)
+control_prunemate:
+  enabled: false
+  schedule: "0 3 * * 0"

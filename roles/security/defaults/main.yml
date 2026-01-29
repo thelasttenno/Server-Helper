@@ -9,7 +9,7 @@ security_enabled: true
 # =============================================================================
 
 security_ssh_enabled: "{{ target_security.ssh_hardening.enabled | default(true) }}"
-security_ssh_port: 22
+security_ssh_port: "{{ target_security.ssh_hardening.port | default(22) }}"
 security_ssh_permit_root_login: "{{ 'yes' if target_security.ssh_hardening.permit_root_login | default(false) else 'no' }}"
 security_ssh_password_auth: "{{ 'yes' if target_security.ssh_hardening.password_authentication | default(false) else 'no' }}"
 security_ssh_pubkey_auth: "{{ 'yes' if target_security.ssh_hardening.pubkey_authentication | default(true) else 'no' }}"

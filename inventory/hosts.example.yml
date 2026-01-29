@@ -3,72 +3,118 @@
 # Copy this file to hosts.yml and customize for your environment.
 # The setup.sh script will generate this file automatically.
 #
+# VARIABLE HIERARCHY (lowest to highest precedence):
+# ──────────────────────────────────────────────────
+#   1. group_vars/all.yml        ← Global defaults
+#   2. group_vars/control.yml    ← Control node group
+#   3. group_vars/targets.yml    ← Target nodes group
+#   4. host_vars/{hostname}.yml  ← Per-host file (recommended for complex overrides)
+#   5. inventory host_vars       ← Inline below (highest precedence, use sparingly)
+#
+# BEST PRACTICES:
+# ───────────────
+#   - Use inline vars below for: connection settings, skip flags
+#   - Use host_vars/{hostname}.yml for: service configs, thresholds, schedules
+#
 # Usage: cp inventory/hosts.example.yml inventory/hosts.yml
 
 ---
 all:
   hosts:
-    # Control Node (this machine - runs centralized services)
+    # =========================================================================
+    # CONTROL NODE
+    # =========================================================================
+    # Runs centralized services: Traefik, Grafana, Loki, Authentik, etc.
     control:
       ansible_host: 192.168.1.10
-      ansible_user: ansible
-      ansible_become: yes
-      ansible_python_interpreter: /usr/bin/python3
-      ansible_connection: local  # Use local connection for control node
+      ansible_connection: local  # Control node runs Ansible locally
 
-    # Target Nodes (managed servers)
+    # =========================================================================
+    # TARGET NODES
+    # =========================================================================
+    # Managed servers that run workloads and stream metrics/logs to control
+
+    # Example: Standard VM or bare-metal server
     server-01:
       ansible_host: 192.168.1.101
-      ansible_user: ansible
-      ansible_become: yes
-      ansible_python_interpreter: /usr/bin/python3
-      # Optional: custom hostname for dashboards
-      hostname: "web-server"
+      # Optional: custom display name for dashboards
+      # hostname: "web-server"
 
+    # Example: Server with non-standard SSH port
     server-02:
       ansible_host: 192.168.1.102
-      ansible_user: ansible
-      ansible_become: yes
-      ansible_python_interpreter: /usr/bin/python3
-      # Optional: non-standard SSH port
       ansible_port: 2222
 
-    # Example: LXC Container (skip LVM and swap)
+    # Example: Server in different timezone
+    # (Better to use host_vars/server-03.yml for this)
+    server-03:
+      ansible_host: 192.168.1.103
+      # target_timezone: "Europe/London"  # Override default timezone
+
+    # Example: LXC Container (MUST set skip flags)
     lxc-container:
       ansible_host: 192.168.1.150
-      ansible_user: ansible
-      ansible_become: yes
-      ansible_python_interpreter: /usr/bin/python3
-      # Skip operations not supported in LXC
+      # REQUIRED for LXC: Skip unsupported operations
       lvm_skip: true
       swap_skip: true
       qemu_agent_skip: true
 
+    # Example: Low-resource server with custom thresholds
+    # (Use host_vars/mini-server.yml for complex configs)
+    mini-server:
+      ansible_host: 192.168.1.160
+      # Simple overrides can go here, complex ones in host_vars/
+
+  # ===========================================================================
+  # HOST GROUPS
+  # ===========================================================================
   children:
-    # Group: Control Node (centralized services)
-    control_nodes:
+    # Control node group - applies group_vars/control.yml
+    control:
       hosts:
         control:
 
-    # Group: Target Nodes (managed servers)
+    # Target nodes group - applies group_vars/targets.yml
     targets:
       hosts:
         server-01:
         server-02:
+        server-03:
         lxc-container:
+        mini-server:
 
-    # Group: Physical/VM servers (full features)
+    # Optional: Sub-groups for different server types
+    # Useful for running playbooks against specific sets
+
+    # Full-featured servers (VMs / bare-metal)
     servers:
       hosts:
         server-01:
         server-02:
+        server-03:
+        mini-server:
 
-    # Group: LXC containers (limited features)
+    # LXC containers (limited features)
     containers:
       hosts:
         lxc-container:
 
+    # Example: Production vs staging groups
+    # production:
+    #   hosts:
+    #     server-01:
+    #     server-02:
+    # staging:
+    #   hosts:
+    #     server-03:
+
+  # ===========================================================================
+  # GLOBAL VARIABLES (Applied to all hosts)
+  # ===========================================================================
   vars:
-    # Global SSH settings
+    # SSH settings
+    ansible_user: ansible
+    ansible_become: yes
+    ansible_python_interpreter: /usr/bin/python3
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     ansible_ssh_private_key_file: ~/.ssh/id_rsa

@@ -1,138 +1,101 @@
-# Server Helper Configuration Example
-# ====================================
+# Server Helper - Global Configuration Example
+# =============================================
 # Copy this file to all.yml and customize for your environment.
 # The setup.sh script will generate this file automatically.
 #
-# Variables are organized with prefixes:
-#   - target_*:  Services deployed on managed servers
-#   - control_*: Centralized services on the control node
+# VARIABLE HIERARCHY (lowest to highest precedence):
+# ──────────────────────────────────────────────────
+#   1. group_vars/all.yml        ← Global defaults (this file)
+#   2. group_vars/control.yml    ← Control node group settings
+#   3. group_vars/targets.yml    ← Target nodes group settings
+#   4. host_vars/{hostname}.yml  ← Per-host overrides
+#   5. inventory host_vars       ← Inline vars in hosts.yml
 #
-# Usage: cp group_vars/all.example.yml group_vars/all.yml
+# FILE STRUCTURE:
+# ───────────────
+#   group_vars/
+#   ├── all.yml           ← Truly global settings (domain, IPs, security)
+#   ├── all.example.yml   ← This documentation file
+#   ├── control.yml       ← Control node services (Traefik, Grafana, etc.)
+#   ├── targets.yml       ← Target node services (Netdata child, Promtail)
+#   ├── vault.yml         ← Encrypted secrets
+#   └── vault.example.yml ← Secrets template
+#
+#   host_vars/
+#   ├── server1.yml       ← Per-host overrides for server1
+#   ├── server2.yml       ← Per-host overrides for server2
+#   └── *.example.yml     ← Example templates
+#
+# USAGE:
+# ──────
+#   cp group_vars/all.example.yml group_vars/all.yml
+#   # Edit all.yml with your settings
+#   # Optionally create host_vars/{hostname}.yml for per-host overrides
 
 ---
 # =============================================================================
-# TARGET NODE CONFIGURATION
+# INFRASTRUCTURE SETTINGS (Truly Global)
 # =============================================================================
-# These settings are applied to all managed target servers.
+# These apply to ALL hosts and define your infrastructure topology.
 
-# Target: System Settings
-target_hostname: "server"
+# Primary domain for all services (*.example.com)
+target_domain: "example.com"
+
+# Control node IP address
+# Targets use this to connect for monitoring/logging aggregation
+control_node_ip: "192.168.1.10"
+
+# SSH user for Ansible connections (must exist on all hosts)
+ansible_user: "ansible"
+
+# =============================================================================
+# SYSTEM DEFAULTS
+# =============================================================================
+# Default values that can be overridden per-host in host_vars/
+
+# Default timezone (override per-host: host_vars/server1.yml → target_timezone)
 target_timezone: "America/Vancouver"
+
+# Default locale
 target_locale: "en_US.UTF-8"
 
-# Target: Base Directories (Dockge-compatible structure)
+# =============================================================================
+# DIRECTORY STRUCTURE
+# =============================================================================
+# Base paths used across all nodes (Dockge-compatible)
+
 target_base_dir: "/opt/server-helper"
 target_dockge_base_dir: "/opt/stacks"
 target_dockge_stacks_dir: "{{ target_dockge_base_dir }}"
 target_dockge_data_dir: "{{ target_dockge_base_dir }}/dockge/data"
 
-# Target: NAS Mounts
-target_nas_mounts:
-  enabled: false
-  shares:
-    - name: "backup"
-      ip: "192.168.1.100"
-      share_name: "backup"
-      mount_point: "/mnt/nas/backup"
-      username: "{{ vault_nas_credentials[0].username }}"
-      password: "{{ vault_nas_credentials[0].password }}"
-      smb_version: "3.0"
-      options: "_netdev,nofail"
+# =============================================================================
+# DOCKER CONFIGURATION
+# =============================================================================
+# Applied to all nodes, can be overridden per-host
 
-# Target: LVM Configuration
-target_lvm_config:
-  enabled: true
-  auto_extend_ubuntu: true
-  custom_lvs: []
-  create_lvs: []
-
-# Target: System Users
-target_system_users:
-  create_admin_user: false
-  admin_user: "admin"
-  admin_password: "{{ vault_system_users.admin_password }}"
-  admin_groups:
-    - sudo
-    - docker
-  admin_passwordless_sudo: true
-  admin_ssh_key: "{{ vault_system_users.admin_ssh_key }}"
-  disable_root_password: true
-  additional_users: []
-
-# Target: Dockge (Container Management UI)
-target_dockge:
-  enabled: true
-  port: 5001
-  version: "1"
-
-# Target: Netdata (System Monitoring)
-target_netdata:
-  enabled: true
-  port: 19999
+target_docker:
   version: "latest"
-  mode: "child"  # Streams to control node parent
-  claim_token: ""
-  claim_rooms: ""
-  alarms:
-    enabled: true
-    cpu_warning: 80
-    cpu_critical: 95
-    ram_warning: 80
-    ram_critical: 95
-    disk_warning: 80
-    disk_critical: 90
-    check_interval_minutes: 5
-  uptime_kuma_push_urls:
-    cpu: ""
-    ram: ""
-    disk: ""
-    system: ""
+  compose_version: "v2"
+  storage_driver: "overlay2"
+  log_driver: "json-file"
+  log_max_size: "10m"
+  log_max_file: "3"
 
-# Target: Restic (Encrypted Backups)
-target_restic:
-  enabled: true
-  schedule: "0 2 * * *"
-  retention:
-    keep_daily: 7
-    keep_weekly: 4
-    keep_monthly: 6
-    keep_yearly: 2
-  destinations:
-    nas:
-      enabled: false
-      path: "/mnt/nas/backup/restic"
-    local:
-      enabled: true
-      path: "/opt/backups/restic"
-    s3:
-      enabled: false
-      bucket: ""
-      endpoint: "s3.amazonaws.com"
-      region: "us-east-1"
-    b2:
-      enabled: false
-      bucket: ""
-  include_paths:
-    - "{{ target_dockge_stacks_dir }}"
-    - "/etc"
-    - "/root"
-    - "/home"
-  exclude_patterns:
-    - "*.tmp"
-    - "*.log"
-    - "cache"
-    - "*.cache"
+# =============================================================================
+# SECURITY SETTINGS
+# =============================================================================
+# Applied uniformly to all nodes for consistent security posture
 
-# Target: Security
 target_security:
   basic_hardening: true
   lynis:
     enabled: true
-    schedule: "0 3 * * 0"
+    schedule: "0 3 * * 0"  # Weekly Sunday 3 AM
   fail2ban:
     enabled: true
     sshd_maxretry: 3
-    sshd_bantime: 86400
+    sshd_bantime: 86400    # 24 hours
   ufw:
     enabled: true
     default_incoming: deny
@@ -144,121 +107,10 @@ target_security:
     pubkey_authentication: true
     max_auth_tries: 3
 
-# Target: Logging (Promtail - streams to Loki)
-target_logging:
-  promtail:
-    enabled: true
-    additional_jobs: []
-
-# Target: Watchtower (Container Auto-Updates)
-target_watchtower:
-  enabled: true
-  schedule: "0 4 * * *"
-  cleanup: true
-
-# Target: Docker Configuration
-target_docker:
-  version: "latest"
-  compose_version: "v2"
-  storage_driver: "overlay2"
-  log_driver: "json-file"
-  log_max_size: "10m"
-  log_max_file: "3"
-
-# Target: System Maintenance
-target_maintenance:
-  auto_cleanup:
-    enabled: true
-    disk_threshold: 80
-    schedule: "0 5 * * 0"
-  auto_updates:
-    enabled: false
-    schedule: "0 6 * * 0"
-    auto_reboot: false
-    reboot_time: "03:00"
-
-# Target: Virtualization
-target_virtualization:
-  qemu_guest_agent: true
-
 # =============================================================================
-# CONTROL NODE CONFIGURATION
+# SERVICE DISCOVERY
 # =============================================================================
-# These settings configure centralized services on the control node.
-
-control_node_ip: "192.168.1.10"
-control_node_install_dir: "/opt/stacks"
-
-# Control: Authentik (SSO/Identity Provider)
-control_authentik:
-  enabled: true
-  port: 9000
-  version: "latest"
-
-# Control: Traefik (Reverse Proxy)
-control_traefik:
-  enabled: true
-  http_port: 80
-  https_port: 443
-  dashboard_port: 8080
-  version: "v3.0"
-
-# Control: Step-CA (Internal Certificate Authority)
-control_step_ca:
-  enabled: true
-  port: 9443
-  ca_name: "Server-Helper CA"
-
-# Control: Pi-hole + Unbound (DNS)
-control_dns:
-  enabled: true
-  pihole_port: 8053
-  dns_port: 53
-
-# Control: Uptime Kuma (Availability Monitoring)
-control_uptime_kuma:
-  enabled: true
-  port: 3001
-  version: "1"
-
-# Control: Grafana (Centralized Dashboards)
-control_grafana:
-  enabled: true
-  port: 3000
-  version: "latest"
-  admin_user: "admin"
-  oidc_enabled: true  # Use Authentik for SSO
-
-# Control: Loki (Centralized Log Aggregation)
-control_loki:
-  enabled: true
-  port: 3100
-  version: "latest"
-  retention_period: "744h"
-
-# Control: Netdata Parent (Centralized Metrics)
-control_netdata:
-  enabled: true
-  port: 19999
-  version: "latest"
-  mode: "parent"
-  stream_api_key: "{{ vault_netdata_stream_api_key }}"
-
-# Control: Scanopy/Trivy (Container Security)
-control_scanopy:
-  enabled: true
-  port: 8080
-  trivy_version: "latest"
-
-# Control: PruneMate (Docker Cleanup)
-control_prunemate:
-  enabled: true
-  schedule: "0 3 * * 0"
-
-# =============================================================================
-# SERVICE DISCOVERY & AUTO-REGISTRATION
-# =============================================================================
-# Target nodes use these settings to connect to control node services.
+# How target nodes find and connect to control node services
 
 service_discovery:
   enabled: true
@@ -271,23 +123,77 @@ service_discovery:
   log_aggregation:
     enabled: true
     loki_url: "http://{{ control_node_ip }}:3100/loki/api/v1/push"
-  uptime_monitoring:
-    enabled: true
-    monitored_services:
-      - name: "Dockge"
-        type: "http"
-        port: "{{ target_dockge.port }}"
-      - name: "Netdata"
-        type: "http"
-        port: "{{ target_netdata.port }}"
-      - name: "SSH"
-        type: "port"
-        port: 22
-  dns_registration:
-    enabled: false
-    domain: "local"
+
+# =============================================================================
+# NETWORK SETTINGS
+# =============================================================================
+
+# Traefik Docker network (control node services)
+traefik_docker_network: "traefik-public"
+
+# Let's Encrypt ACME email
+traefik_acme_email: "admin@{{ target_domain }}"
+
+# Pi-hole custom DNS records
+pihole_custom_dns_records:
+  - hostname: "control.{{ target_domain }}"
+    ip: "{{ control_node_ip }}"
+  # Add more:
+  # - hostname: "nas.{{ target_domain }}"
+  #   ip: "192.168.1.5"
+
+# =============================================================================
+# NAS MOUNTS (Optional)
+# =============================================================================
+
+target_nas_mounts:
+  enabled: false
+  shares: []
+  # Example:
+  # shares:
+  #   - name: "backup"
+  #     ip: "192.168.1.100"
+  #     share_name: "backup"
+  #     mount_point: "/mnt/nas/backup"
+  #     username: "{{ vault_nas_credentials[0].username }}"
+  #     password: "{{ vault_nas_credentials[0].password }}"
 
 # =============================================================================
 # DEBUG & FEATURE FLAGS
 # =============================================================================
+
 debug_mode: false
+
+# =============================================================================
+# GROUP-SPECIFIC SETTINGS (See separate files)
+# =============================================================================
+#
+# CONTROL NODE SERVICES → group_vars/control.yml
+# ──────────────────────────────────────────────
+#   control_authentik:     SSO/Identity Provider
+#   control_traefik:       Reverse Proxy
+#   control_step_ca:       Internal Certificate Authority
+#   control_dns:           Pi-hole + Unbound
+#   control_uptime_kuma:   Availability Monitoring
+#   control_grafana:       Dashboards
+#   control_loki:          Log Aggregation
+#   control_netdata:       Metrics (Parent Mode)
+#
+# TARGET NODE SERVICES → group_vars/targets.yml
+# ─────────────────────────────────────────────
+#   target_netdata:        System Monitoring (Child Mode)
+#   target_logging:        Promtail Log Shipping
+#   target_restic:         Encrypted Backups
+#   target_watchtower:     Container Auto-Updates
+#   target_dockge:         Container Management UI
+#   target_lvm_config:     LVM Expansion
+#   target_maintenance:    System Maintenance
+#
+# PER-HOST OVERRIDES → host_vars/{hostname}.yml
+# ─────────────────────────────────────────────
+#   target_timezone:       Different timezone per host
+#   target_restic:         Different backup config per host
+#   target_netdata:        Different thresholds per host
+#   lvm_skip/swap_skip:    LXC container flags
+#
+# See host_vars/server1.example.yml for examples

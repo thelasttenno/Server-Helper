@@ -1,22 +1,22 @@
 ---
 # Netdata role defaults
 
-# Master toggle
-netdata_enabled: true
+# Master toggle (from target_netdata config for targets, control_netdata for control)
+netdata_enabled: "{{ target_netdata.enabled | default(control_netdata.enabled | default(true)) }}"
 
 # Deployment mode: "parent" (control node) or "child" (target nodes)
-netdata_mode: "child"
+netdata_mode: "{{ control_netdata.mode | default('child') }}"
 
 # Container settings
 netdata_container_name: "netdata"
 netdata_image: "netdata/netdata"
-netdata_image_tag: "stable"
+netdata_image_tag: "{{ target_netdata.version | default(control_netdata.version | default('stable')) }}"
 
 # Stack directory (Dockge compatible)
 netdata_stack_dir: "/opt/stacks/netdata"
 
 # Web interface port (parent only)
-netdata_web_port: 19999
+netdata_web_port: "{{ target_netdata.port | default(19999) }}"
 
 # Streaming configuration
 netdata_streaming_enabled: true
@@ -40,8 +40,8 @@ netdata_dbengine_multihost_disk_space: 2048  # MB
 netdata_dbengine_page_cache_size: 64  # MB
 
 # Claim token for Netdata Cloud (optional)
-netdata_claim_token: ""
-netdata_claim_rooms: ""
+netdata_claim_token: "{{ vault_netdata_claim_token | default(target_netdata.claim_token | default('')) }}"
+netdata_claim_rooms: "{{ target_netdata.claim_rooms | default('') }}"
 netdata_claim_url: "https://app.netdata.cloud"
 
 # Health notifications
@@ -49,10 +49,10 @@ netdata_notifications_enabled: false
 netdata_discord_webhook: ""
 netdata_slack_webhook: ""
 
-# Alarm thresholds
-netdata_alarm_cpu_threshold: 85
-netdata_alarm_ram_threshold: 90
-netdata_alarm_disk_threshold: 90
+# Alarm thresholds (from target_netdata.alarms config)
+netdata_alarm_cpu_threshold: "{{ target_netdata.alarms.cpu_warning | default(85) }}"
+netdata_alarm_ram_threshold: "{{ target_netdata.alarms.ram_warning | default(90) }}"
+netdata_alarm_disk_threshold: "{{ target_netdata.alarms.disk_warning | default(90) }}"
 
 # Hostname override
 netdata_hostname: "{{ inventory_hostname }}"

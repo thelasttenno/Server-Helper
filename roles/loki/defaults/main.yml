@@ -1,23 +1,23 @@
 ---
 # Loki role defaults (Control Node only)
 
-# Master toggle
-loki_enabled: true
+# Master toggle (from control_loki config)
+loki_enabled: "{{ control_loki.enabled | default(true) }}"
 
 # Container settings
 loki_container_name: "loki"
 loki_image: "grafana/loki"
-loki_image_tag: "2.9.0"
+loki_image_tag: "{{ control_loki.version | default('2.9.0') }}"
 
 # Stack directory (Dockge compatible)
 loki_stack_dir: "/opt/stacks/loki"
 
-# Network ports
-loki_http_port: 3100
+# Network ports (from control_loki config)
+loki_http_port: "{{ control_loki.port | default(3100) }}"
 loki_grpc_port: 9096
 
-# Data retention
-loki_retention_period: "744h"  # 31 days
+# Data retention (from control_loki config or default 31 days)
+loki_retention_period: "{{ control_loki.retention_period | default('744h') }}"
 loki_retention_delete_enabled: true
 
 # Storage configuration

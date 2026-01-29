@@ -4,8 +4,8 @@
 # Enable/disable swap configuration
 swap_enabled: true
 
-# Skip swap operations (set to true for LXC containers)
-swap_skip: "{{ swap_skip | default(false) }}"
+# Skip swap operations (set to true for LXC containers via host_vars/inventory)
+swap_skip: false
 
 # Swap file path
 swap_file_path: "/swapfile"

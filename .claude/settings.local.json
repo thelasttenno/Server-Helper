@@ -20,7 +20,9 @@
       "Bash(bash:*)",
       "Bash(xargs:*)",
       "Bash(findstr:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(dir:*)",
+      "Bash(python:*)"
     ]
   }
 }

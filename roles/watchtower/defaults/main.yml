@@ -1,8 +1,8 @@
 ---
 # Watchtower role defaults
 
-# Master toggle
-watchtower_enabled: true
+# Master toggle (from target_watchtower config)
+watchtower_enabled: "{{ target_watchtower.enabled | default(false) }}"
 
 # Container name
 watchtower_container_name: "watchtower"
@@ -14,11 +14,11 @@ watchtower_image_tag: "latest"
 # Stacks directory (Dockge compatible)
 watchtower_stack_dir: "/opt/stacks/watchtower"
 
-# Schedule (cron format) - default: 4 AM daily
-watchtower_schedule: "0 0 4 * * *"
+# Schedule (cron format) - from target_watchtower config
+watchtower_schedule: "{{ target_watchtower.schedule | default('0 0 4 * * *') }}"
 
 # Cleanup old images after update
-watchtower_cleanup: true
+watchtower_cleanup: "{{ target_watchtower.cleanup | default(true) }}"
 
 # Include stopped containers
 watchtower_include_stopped: false

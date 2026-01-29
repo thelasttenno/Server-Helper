@@ -1,51 +1,99 @@
 #!/usr/bin/env bash
 #
-# vault.sh - Master Ansible Vault management script
-# Part of Server Helper v2.0.0
-#
-# All-in-one tool for vault operations
+# Server Helper - Vault Management Script
+# ========================================
+# All-in-one tool for Ansible Vault operations.
 #
 # Usage:
 #   ./scripts/vault.sh <command> [args]
 #
+# Security:
+#   - Uses library modules for secure operations
+#   - Cleanup trap clears sensitive variables on exit
+#
 
 set -euo pipefail
 
-# Script directory
+# =============================================================================
+# INITIALIZATION
+# =============================================================================
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+LIB_DIR="${SCRIPT_DIR}/lib"
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-NC='\033[0m' # No Color
+# =============================================================================
+# SOURCE LIBRARY MODULES
+# =============================================================================
 
-# Helper functions
+if [[ -f "${LIB_DIR}/ui_utils.sh" ]]; then
+    source "${LIB_DIR}/ui_utils.sh"
+else
+    # Fallback if library not found
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    CYAN='\033[0;36m'
+    NC='\033[0m'
+    BOLD='\033[1m'
+
+    print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+    print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+    print_warning() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+    print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+fi
+
+# Source vault manager if available
+if [[ -f "${LIB_DIR}/vault_mgr.sh" ]]; then
+    source "${LIB_DIR}/vault_mgr.sh"
+fi
+
+# =============================================================================
+# SECURITY: CLEANUP TRAP
+# =============================================================================
+
+_cleanup() {
+    # Unset sensitive variables
+    local var
+    for var in $(compgen -v | grep -iE 'password|secret|token|key' 2>/dev/null || true); do
+        unset "$var" 2>/dev/null || true
+    done
+}
+
+trap _cleanup EXIT SIGINT SIGTERM
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+VAULT_PASSWORD_FILE="${PROJECT_ROOT}/.vault_password"
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
 error() {
-    echo -e "${RED}ERROR: $1${NC}" >&2
+    print_error "$1"
     exit 1
 }
 
 success() {
-    echo -e "${GREEN}✓ $1${NC}"
+    print_success "$1"
 }
 
 warning() {
-    echo -e "${YELLOW}⚠ $1${NC}"
+    print_warning "$1"
 }
 
 info() {
-    echo -e "${BLUE}ℹ $1${NC}"
+    print_info "$1"
 }
 
 title() {
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "${CYAN}  $1${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN:-\033[0;36m}═══════════════════════════════════════════════════════════${NC:-\033[0m}"
+    echo -e "${CYAN:-\033[0;36m}  $1${NC:-\033[0m}"
+    echo -e "${CYAN:-\033[0;36m}═══════════════════════════════════════════════════════════${NC:-\033[0m}"
     echo
 }
 
@@ -56,28 +104,45 @@ check_dependencies() {
     fi
 }
 
-# Show usage
+# Validate vault password file permissions
+check_vault_permissions() {
+    if [[ -f "$VAULT_PASSWORD_FILE" ]]; then
+        local perms
+        perms=$(stat -c "%a" "$VAULT_PASSWORD_FILE" 2>/dev/null || stat -f "%Lp" "$VAULT_PASSWORD_FILE" 2>/dev/null || echo "unknown")
+
+        if [[ "$perms" != "600" ]] && [[ "$perms" != "unknown" ]]; then
+            warning "Vault password file has insecure permissions: $perms"
+            info "Fixing permissions to 600..."
+            chmod 600 "$VAULT_PASSWORD_FILE" 2>/dev/null || true
+        fi
+    fi
+}
+
+# =============================================================================
+# USAGE
+# =============================================================================
+
 usage() {
     title "Ansible Vault Management Tool"
 
     echo "Usage: $0 <command> [args]"
     echo
-    echo -e "${CYAN}Commands:${NC}"
+    echo -e "${CYAN:-\033[0;36m}Commands:${NC:-\033[0m}"
     echo
-    echo -e "  ${GREEN}create${NC} <file>           Create new encrypted vault file"
-    echo -e "  ${GREEN}edit${NC} <file>             Edit encrypted vault file (recommended)"
-    echo -e "  ${GREEN}view${NC} <file>             View encrypted vault file (read-only)"
-    echo -e "  ${GREEN}encrypt${NC} <file>          Encrypt a plain text file"
-    echo -e "  ${GREEN}decrypt${NC} <file>          Decrypt an encrypted file (dangerous!)"
-    echo -e "  ${GREEN}rekey${NC} <file|--all>      Change vault password"
-    echo -e "  ${GREEN}validate${NC} [file]         Validate vault file(s)"
-    echo -e "  ${GREEN}init${NC}                    Initialize vault setup"
-    echo -e "  ${GREEN}status${NC}                  Show vault status"
-    echo -e "  ${GREEN}diff${NC} <file>             Show diff of encrypted file"
-    echo -e "  ${GREEN}backup${NC} <file>           Create backup of vault file"
-    echo -e "  ${GREEN}restore${NC} <backup>        Restore from backup"
+    echo -e "  ${GREEN:-\033[0;32m}create${NC:-\033[0m} <file>           Create new encrypted vault file"
+    echo -e "  ${GREEN:-\033[0;32m}edit${NC:-\033[0m} <file>             Edit encrypted vault file (recommended)"
+    echo -e "  ${GREEN:-\033[0;32m}view${NC:-\033[0m} <file>             View encrypted vault file (read-only)"
+    echo -e "  ${GREEN:-\033[0;32m}encrypt${NC:-\033[0m} <file>          Encrypt a plain text file"
+    echo -e "  ${GREEN:-\033[0;32m}decrypt${NC:-\033[0m} <file>          Decrypt an encrypted file (dangerous!)"
+    echo -e "  ${GREEN:-\033[0;32m}rekey${NC:-\033[0m} <file|--all>      Change vault password"
+    echo -e "  ${GREEN:-\033[0;32m}validate${NC:-\033[0m} [file]         Validate vault file(s)"
+    echo -e "  ${GREEN:-\033[0;32m}init${NC:-\033[0m}                    Initialize vault setup"
+    echo -e "  ${GREEN:-\033[0;32m}status${NC:-\033[0m}                  Show vault status"
+    echo -e "  ${GREEN:-\033[0;32m}diff${NC:-\033[0m} <file>             Show diff of encrypted file"
+    echo -e "  ${GREEN:-\033[0;32m}backup${NC:-\033[0m} <file>           Create backup of vault file"
+    echo -e "  ${GREEN:-\033[0;32m}restore${NC:-\033[0m} <backup>        Restore from backup"
     echo
-    echo -e "${CYAN}Examples:${NC}"
+    echo -e "${CYAN:-\033[0;36m}Examples:${NC:-\033[0m}"
     echo
     echo "  $0 init"
     echo "  $0 create group_vars/vault.yml"
@@ -86,19 +151,14 @@ usage() {
     echo "  $0 validate"
     echo "  $0 status"
     echo
-    echo -e "${CYAN}Documentation:${NC}"
-    echo
-    echo "  docs/guides/vault.md               - Complete guide"
-    echo "  docs/reference/vault-commands.md   - Quick reference"
-    echo "  docs/workflows/vault-in-ci-cd.md   - CI/CD integration"
-    echo
 }
 
-# Initialize vault setup
+# =============================================================================
+# VAULT OPERATIONS
+# =============================================================================
+
 init_vault() {
     title "Initialize Ansible Vault"
-
-    VAULT_PASSWORD_FILE="$PROJECT_ROOT/.vault_password"
 
     if [[ -f "$VAULT_PASSWORD_FILE" ]]; then
         warning "Vault password file already exists: $VAULT_PASSWORD_FILE"
@@ -111,7 +171,7 @@ init_vault() {
         fi
 
         # Backup existing password
-        BACKUP="${VAULT_PASSWORD_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
+        local BACKUP="${VAULT_PASSWORD_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
         cp "$VAULT_PASSWORD_FILE" "$BACKUP"
         info "Backed up existing password to: $BACKUP"
     fi
@@ -133,7 +193,8 @@ init_vault() {
         echo
         if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             mkdir -p "$PROJECT_ROOT/group_vars"
-            "$SCRIPT_DIR/vault-edit.sh" "$PROJECT_ROOT/group_vars/vault.yml"
+            export EDITOR="${EDITOR:-nano}"
+            ansible-vault create "$PROJECT_ROOT/group_vars/vault.yml" --vault-password-file="$VAULT_PASSWORD_FILE"
         fi
     fi
 
@@ -147,32 +208,38 @@ init_vault() {
     echo "  4. Reference vault variables in group_vars/all.yml"
 }
 
-# Show vault status
 show_status() {
     title "Ansible Vault Status"
 
     cd "$PROJECT_ROOT"
 
     # Check vault password file
-    VAULT_PASSWORD_FILE=".vault_password"
     if [[ -f "$VAULT_PASSWORD_FILE" ]]; then
         success "Vault password file exists: $VAULT_PASSWORD_FILE"
-        info "  Permissions: $(stat -c %a "$VAULT_PASSWORD_FILE" 2>/dev/null || stat -f %Lp "$VAULT_PASSWORD_FILE")"
+        local perms
+        perms=$(stat -c %a "$VAULT_PASSWORD_FILE" 2>/dev/null || stat -f %Lp "$VAULT_PASSWORD_FILE" 2>/dev/null)
+        if [[ "$perms" == "600" ]]; then
+            success "  Permissions: $perms (secure)"
+        else
+            warning "  Permissions: $perms (should be 600)"
+        fi
     else
-        error "Vault password file NOT found: $VAULT_PASSWORD_FILE"
+        print_error "Vault password file NOT found: $VAULT_PASSWORD_FILE"
     fi
 
     echo
 
     # Find encrypted files
     info "Searching for encrypted vault files..."
+    local encrypted_files
     encrypted_files=$(find . -type f -name "*vault*.yml" -exec grep -l '^\$ANSIBLE_VAULT' {} \; 2>/dev/null || true)
 
     if [[ -n "$encrypted_files" ]]; then
         success "Found encrypted vault files:"
         echo "$encrypted_files" | while read -r file; do
+            local size
             size=$(du -h "$file" | cut -f1)
-            echo "  ✓ $file ($size)"
+            echo "  - $file ($size)"
         done
     else
         warning "No encrypted vault files found."
@@ -180,14 +247,15 @@ show_status() {
 
     echo
 
-    # Find plain text vault files (potential security issue)
+    # Find plain text vault files
     info "Checking for plain text vault files..."
+    local plaintext_files
     plaintext_files=$(find . -type f -name "*vault*.yml" ! -exec grep -l '^\$ANSIBLE_VAULT' {} \; 2>/dev/null || true)
 
     if [[ -n "$plaintext_files" ]]; then
         warning "Found PLAIN TEXT vault files (security risk!):"
         echo "$plaintext_files" | while read -r file; do
-            echo "  ⚠ $file"
+            echo "  - $file"
         done
         echo
         warning "Encrypt these files with: $0 encrypt <file>"
@@ -211,6 +279,7 @@ show_status() {
     # Check ansible.cfg
     info "Checking ansible.cfg..."
     if grep -q "vault_password_file" ansible.cfg 2>/dev/null; then
+        local vault_config
         vault_config=$(grep "vault_password_file" ansible.cfg | grep -v "^#" || true)
         if [[ -n "$vault_config" ]]; then
             success "Vault password file configured in ansible.cfg"
@@ -225,36 +294,31 @@ show_status() {
     echo
 }
 
-# Validate vault files
 validate_vault() {
     title "Validate Vault Files"
 
     cd "$PROJECT_ROOT"
 
-    VAULT_PASSWORD_FILE=".vault_password"
     if [[ ! -f "$VAULT_PASSWORD_FILE" ]]; then
         error "Vault password file not found: $VAULT_PASSWORD_FILE"
     fi
 
     if [[ $# -gt 0 ]]; then
         # Validate specific file
-        FILE="$1"
+        local FILE="$1"
         if [[ ! -f "$FILE" ]]; then
             error "File not found: $FILE"
         fi
 
         info "Validating: $FILE"
 
-        # Check if encrypted
         if ! head -1 "$FILE" 2>/dev/null | grep -q '^\$ANSIBLE_VAULT'; then
             error "File is NOT encrypted: $FILE"
         fi
 
-        # Try to decrypt
         if ansible-vault view "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE" > /dev/null 2>&1; then
             success "File is valid and can be decrypted: $FILE"
 
-            # Validate YAML syntax
             if ansible-vault view "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE" | python3 -c "import sys, yaml; yaml.safe_load(sys.stdin)" 2>/dev/null; then
                 success "YAML syntax is valid"
             else
@@ -266,6 +330,7 @@ validate_vault() {
     else
         # Validate all vault files
         info "Searching for encrypted vault files..."
+        local encrypted_files
         encrypted_files=$(find . -type f \( -name "vault.yml" -o -name "*vault*.yml" \) -exec grep -l '^\$ANSIBLE_VAULT' {} \; 2>/dev/null || true)
 
         if [[ -z "$encrypted_files" ]]; then
@@ -273,21 +338,21 @@ validate_vault() {
             exit 0
         fi
 
-        success_count=0
-        fail_count=0
+        local success_count=0
+        local fail_count=0
 
-        echo "$encrypted_files" | while read -r file; do
+        while read -r file; do
             echo
             info "Validating: $file"
 
             if ansible-vault view "$file" --vault-password-file="$VAULT_PASSWORD_FILE" > /dev/null 2>&1; then
-                success "✓ Valid: $file"
+                success "Valid: $file"
                 ((success_count++)) || true
             else
-                error "✗ Invalid: $file"
+                print_error "Invalid: $file"
                 ((fail_count++)) || true
             fi
-        done
+        done <<< "$encrypted_files"
 
         echo
         if [[ $fail_count -eq 0 ]]; then
@@ -298,28 +363,28 @@ validate_vault() {
     fi
 }
 
-# Backup vault file
 backup_vault() {
     if [[ $# -eq 0 ]]; then
         error "Usage: $0 backup <file>"
     fi
 
-    FILE="$1"
+    local FILE="$1"
     cd "$PROJECT_ROOT"
 
     if [[ ! -f "$FILE" ]]; then
         error "File not found: $FILE"
     fi
 
-    BACKUP_DIR="$PROJECT_ROOT/backups/vault"
+    local BACKUP_DIR="$PROJECT_ROOT/backups/vault"
     mkdir -p "$BACKUP_DIR"
 
-    BACKUP_FILE="$BACKUP_DIR/$(basename "$FILE").backup.$(date +%Y%m%d_%H%M%S)"
+    local BACKUP_FILE="$BACKUP_DIR/$(basename "$FILE").backup.$(date +%Y%m%d_%H%M%S)"
     cp "$FILE" "$BACKUP_FILE"
 
     success "Backup created: $BACKUP_FILE"
 
     # Keep only last 10 backups
+    local backup_count
     backup_count=$(ls -1 "$BACKUP_DIR" | wc -l)
     if [[ $backup_count -gt 10 ]]; then
         info "Cleaning old backups (keeping last 10)..."
@@ -327,7 +392,6 @@ backup_vault() {
     fi
 }
 
-# Restore from backup
 restore_vault() {
     if [[ $# -eq 0 ]]; then
         echo "Available backups:"
@@ -336,14 +400,14 @@ restore_vault() {
         error "Usage: $0 restore <backup-file>"
     fi
 
-    BACKUP_FILE="$1"
+    local BACKUP_FILE="$1"
 
     if [[ ! -f "$BACKUP_FILE" ]]; then
         error "Backup file not found: $BACKUP_FILE"
     fi
 
     # Determine original file path
-    ORIGINAL_FILE="group_vars/$(basename "$BACKUP_FILE" | sed 's/.backup.*//')"
+    local ORIGINAL_FILE="group_vars/$(basename "$BACKUP_FILE" | sed 's/.backup.*//')"
 
     warning "This will restore: $ORIGINAL_FILE"
     warning "From backup: $BACKUP_FILE"
@@ -365,16 +429,14 @@ restore_vault() {
     success "Restored: $ORIGINAL_FILE"
 }
 
-# Show diff
 show_diff() {
     if [[ $# -eq 0 ]]; then
         error "Usage: $0 diff <file>"
     fi
 
-    FILE="$1"
+    local FILE="$1"
     cd "$PROJECT_ROOT"
 
-    VAULT_PASSWORD_FILE=".vault_password"
     if [[ ! -f "$VAULT_PASSWORD_FILE" ]]; then
         error "Vault password file not found: $VAULT_PASSWORD_FILE"
     fi
@@ -390,9 +452,13 @@ show_diff() {
         error "Git diff failed. Is this a git repository?"
 }
 
-# Main
+# =============================================================================
+# MAIN
+# =============================================================================
+
 main() {
     check_dependencies
+    check_vault_permissions
 
     cd "$PROJECT_ROOT"
 
@@ -401,27 +467,117 @@ main() {
         exit 1
     fi
 
-    COMMAND="$1"
+    local COMMAND="$1"
     shift
 
     case "$COMMAND" in
-        create)
-            exec "$SCRIPT_DIR/vault-edit.sh" "$@"
-            ;;
-        edit)
-            exec "$SCRIPT_DIR/vault-edit.sh" "$@"
+        create|edit)
+            # Use library function if available, otherwise inline implementation
+            local file="${1:-group_vars/vault.yml}"
+            export EDITOR="${EDITOR:-nano}"
+            if [[ ! -f "$VAULT_PASSWORD_FILE" ]]; then
+                error "Vault password file not found: $VAULT_PASSWORD_FILE"
+            fi
+            if [[ ! -f "$file" ]]; then
+                info "Creating new encrypted vault file: $file"
+                mkdir -p "$(dirname "$file")"
+                ansible-vault create "$file" --vault-password-file="$VAULT_PASSWORD_FILE"
+            else
+                info "Editing encrypted file: $file"
+                ansible-vault edit "$file" --vault-password-file="$VAULT_PASSWORD_FILE"
+            fi
             ;;
         view)
-            exec "$SCRIPT_DIR/vault-view.sh" "$@"
+            local file="${1:-group_vars/vault.yml}"
+            if [[ ! -f "$file" ]]; then
+                error "File not found: $file"
+            fi
+            if [[ ! -f "$VAULT_PASSWORD_FILE" ]]; then
+                error "Vault password file not found: $VAULT_PASSWORD_FILE"
+            fi
+            info "Viewing encrypted file: $file"
+            ansible-vault view "$file" --vault-password-file="$VAULT_PASSWORD_FILE"
             ;;
         encrypt)
-            exec "$SCRIPT_DIR/vault-encrypt.sh" "$@"
+            local file="$1"
+            if [[ -z "$file" ]]; then
+                error "Usage: $0 encrypt <file>"
+            fi
+            if [[ ! -f "$file" ]]; then
+                error "File not found: $file"
+            fi
+            if [[ ! -f "$VAULT_PASSWORD_FILE" ]]; then
+                info "Creating vault password file..."
+                openssl rand -base64 32 > "$VAULT_PASSWORD_FILE"
+                chmod 600 "$VAULT_PASSWORD_FILE"
+                success "Created vault password file: $VAULT_PASSWORD_FILE"
+            fi
+            if head -1 "$file" 2>/dev/null | grep -q '^\$ANSIBLE_VAULT'; then
+                warning "File is already encrypted: $file"
+            else
+                local backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
+                cp "$file" "$backup"
+                info "Created backup: $backup"
+                ansible-vault encrypt "$file" --vault-password-file="$VAULT_PASSWORD_FILE"
+                success "File encrypted: $file"
+            fi
             ;;
         decrypt)
-            exec "$SCRIPT_DIR/vault-decrypt.sh" "$@"
+            local file="$1"
+            if [[ -z "$file" ]]; then
+                error "Usage: $0 decrypt <file>"
+            fi
+            if [[ ! -f "$file" ]]; then
+                error "File not found: $file"
+            fi
+            if [[ ! -f "$VAULT_PASSWORD_FILE" ]]; then
+                error "Vault password file not found: $VAULT_PASSWORD_FILE"
+            fi
+            warning "SECURITY WARNING: This will create a plain text file!"
+            warning "NEVER commit decrypted files to Git!"
+            read -p "Do you understand and want to proceed? (yes/NO): " -r
+            if [[ "$REPLY" != "yes" ]]; then
+                info "Aborted."
+                exit 0
+            fi
+            ansible-vault decrypt "$file" --vault-password-file="$VAULT_PASSWORD_FILE"
+            success "File decrypted: $file"
+            warning "Remember to re-encrypt this file when done!"
             ;;
         rekey)
-            exec "$SCRIPT_DIR/vault-rekey.sh" "$@"
+            local file="$1"
+            if [[ -z "$file" ]]; then
+                error "Usage: $0 rekey <file|--all>"
+            fi
+            if [[ ! -f "$VAULT_PASSWORD_FILE" ]]; then
+                error "Vault password file not found: $VAULT_PASSWORD_FILE"
+            fi
+            if [[ "$file" == "--all" ]]; then
+                # Rekey all vault files
+                local encrypted_files
+                encrypted_files=$(find . -type f \( -name "vault.yml" -o -name "*vault*.yml" \) -exec grep -l '^\$ANSIBLE_VAULT' {} \; 2>/dev/null || true)
+                if [[ -z "$encrypted_files" ]]; then
+                    warning "No encrypted vault files found."
+                    exit 0
+                fi
+                echo "Found encrypted files:"
+                echo "$encrypted_files"
+                read -p "Re-key all these files? (yes/NO): " -r
+                if [[ "$REPLY" != "yes" ]]; then
+                    info "Aborted."
+                    exit 0
+                fi
+                while read -r f; do
+                    info "Re-keying: $f"
+                    ansible-vault rekey "$f" --vault-password-file="$VAULT_PASSWORD_FILE" || warning "Failed: $f"
+                done <<< "$encrypted_files"
+            else
+                if [[ ! -f "$file" ]]; then
+                    error "File not found: $file"
+                fi
+                ansible-vault rekey "$file" --vault-password-file="$VAULT_PASSWORD_FILE"
+                success "File re-keyed: $file"
+            fi
             ;;
         init)
             init_vault
@@ -446,9 +602,6 @@ main() {
             ;;
         *)
             error "Unknown command: $COMMAND"
-            echo
-            usage
-            exit 1
             ;;
     esac
 }

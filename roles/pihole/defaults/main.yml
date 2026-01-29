@@ -1,8 +1,8 @@
 ---
 # Pi-hole role defaults (Control Node)
 
-# Master toggle
-pihole_enabled: true
+# Master toggle (from control_dns config)
+pihole_enabled: "{{ control_dns.enabled | default(true) }}"
 
 # Container settings
 pihole_container_name: "pihole"
@@ -12,12 +12,12 @@ pihole_image_tag: "latest"
 # Stack directory (Dockge compatible)
 pihole_stack_dir: "/opt/stacks/pihole"
 
-# Network configuration
-pihole_dns_port: 53
-pihole_web_port: 8053  # Non-standard to avoid conflicts
+# Network configuration (from control_dns config)
+pihole_dns_port: "{{ control_dns.dns_port | default(53) }}"
+pihole_web_port: "{{ control_dns.pihole_port | default(8053) }}"
 
 # Web interface password
-pihole_web_password: "{{ vault_pihole_web_password | default('') }}"
+pihole_web_password: "{{ vault_pihole_password | default('admin') }}"
 
 # Upstream DNS (when not using Unbound)
 pihole_upstream_dns:

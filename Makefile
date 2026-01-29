@@ -20,9 +20,10 @@ help:
 	@echo "  make bootstrap-host HOST=...    - Bootstrap specific host"
 	@echo ""
 	@echo "Deployment:"
-	@echo "  make deploy                     - Deploy to all target servers"
+	@echo "  make deploy                     - Deploy to all servers (site.yml)"
+	@echo "  make deploy-targets             - Deploy to target servers only"
 	@echo "  make deploy-host HOST=...       - Deploy to specific host"
-	@echo "  make deploy-control             - Deploy to control node"
+	@echo "  make deploy-control             - Deploy to control node only"
 	@echo "  make deploy-check               - Dry run deployment"
 	@echo ""
 	@echo "Operations:"
@@ -128,20 +129,24 @@ bootstrap-host:
 ##@ Deployment
 
 deploy:
-	@echo "Deploying to all target servers..."
-	@ansible-playbook $(PLAYBOOK_DIR)/setup-targets.yml $(ANSIBLE_OPTS)
+	@echo "Deploying to all servers..."
+	@ansible-playbook $(PLAYBOOK_DIR)/site.yml $(ANSIBLE_OPTS)
+
+deploy-targets:
+	@echo "Deploying to target servers..."
+	@ansible-playbook $(PLAYBOOK_DIR)/target.yml $(ANSIBLE_OPTS)
 
 deploy-host:
 	@echo "Deploying to host: $(HOST)..."
-	@ansible-playbook $(PLAYBOOK_DIR)/setup-targets.yml --limit $(HOST) $(ANSIBLE_OPTS)
+	@ansible-playbook $(PLAYBOOK_DIR)/site.yml --limit $(HOST) $(ANSIBLE_OPTS)
 
 deploy-control:
 	@echo "Deploying to control node..."
-	@ansible-playbook $(PLAYBOOK_DIR)/setup-control.yml $(ANSIBLE_OPTS)
+	@ansible-playbook $(PLAYBOOK_DIR)/control.yml $(ANSIBLE_OPTS)
 
 deploy-check:
 	@echo "Running deployment in check mode..."
-	@ansible-playbook $(PLAYBOOK_DIR)/setup-targets.yml --check --diff $(ANSIBLE_OPTS)
+	@ansible-playbook $(PLAYBOOK_DIR)/site.yml --check --diff $(ANSIBLE_OPTS)
 
 ##@ Operations
 
@@ -155,11 +160,11 @@ update-host:
 
 upgrade:
 	@echo "Upgrading Docker images..."
-	@bash upgrade.sh
+	@ansible-playbook $(PLAYBOOK_DIR)/upgrade.yml $(ANSIBLE_OPTS)
 
 upgrade-service:
 	@echo "Upgrading service: $(SERVICE)..."
-	@bash upgrade.sh --service $(SERVICE)
+	@ansible-playbook $(PLAYBOOK_DIR)/upgrade.yml -e "target_service=$(SERVICE)" $(ANSIBLE_OPTS)
 
 backup:
 	@echo "Running backups..."
@@ -170,18 +175,16 @@ backup-host:
 	@ansible-playbook $(PLAYBOOK_DIR)/backup.yml --limit $(HOST) $(ANSIBLE_OPTS)
 
 security:
-	@echo "Running security audit..."
-	@ansible-playbook $(PLAYBOOK_DIR)/security.yml $(ANSIBLE_OPTS)
+	@echo "Running security audit (Lynis scan)..."
+	@ansible all -m shell -a "sudo lynis audit system --quick" $(ANSIBLE_OPTS)
 
 security-host:
 	@echo "Running security audit on host: $(HOST)..."
-	@ansible-playbook $(PLAYBOOK_DIR)/security.yml --limit $(HOST) $(ANSIBLE_OPTS)
+	@ansible $(HOST) -m shell -a "sudo lynis audit system --quick" $(ANSIBLE_OPTS)
 
 restart-all:
 	@echo "Restarting all Docker services..."
-	@ansible all -m shell -a "cd /opt/dockge && docker compose restart" $(ANSIBLE_OPTS) || true
-	@ansible all -m shell -a "cd /opt/dockge/stacks/netdata && docker compose restart" $(ANSIBLE_OPTS) || true
-	@ansible all -m shell -a "cd /opt/dockge/stacks/uptime-kuma && docker compose restart" $(ANSIBLE_OPTS) || true
+	@ansible all -m shell -a "for d in /opt/stacks/*/; do cd \"\$$d\" && docker compose restart 2>/dev/null || true; done" $(ANSIBLE_OPTS)
 	@echo "All services restarted!"
 
 ##@ UI & Monitoring
@@ -255,7 +258,7 @@ disk-space:
 
 version:
 	@echo ""
-	@echo "Server Helper v1.0.0"
+	@echo "Server Helper v2.0.0"
 	@echo ""
 	@echo "Ansible: $$(ansible --version | head -1)"
 	@echo "Python: $$(python3 --version)"

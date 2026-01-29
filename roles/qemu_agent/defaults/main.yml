@@ -4,5 +4,5 @@
 # Enable/disable QEMU guest agent
 qemu_agent_enabled: "{{ target_virtualization.qemu_guest_agent | default(true) }}"
 
-# Skip for non-VM environments
-qemu_agent_skip: "{{ qemu_agent_skip | default(false) }}"
+# Skip for non-VM environments (set to true via host_vars/inventory)
+qemu_agent_skip: false

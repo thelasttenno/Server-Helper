@@ -1,8 +1,8 @@
 ---
 # Step-CA role defaults (Control Node)
 
-# Master toggle
-step_ca_enabled: true
+# Master toggle (from control_step_ca config)
+step_ca_enabled: "{{ control_step_ca.enabled | default(true) }}"
 
 # Container settings
 step_ca_container_name: "step-ca"
@@ -12,11 +12,11 @@ step_ca_image_tag: "latest"
 # Stack directory (Dockge compatible)
 step_ca_stack_dir: "/opt/stacks/step-ca"
 
-# Network port
-step_ca_port: 9000
+# Network port (from control_step_ca config)
+step_ca_port: "{{ control_step_ca.port | default(9000) }}"
 
-# CA configuration
-step_ca_name: "Server Helper CA"
+# CA configuration (from control_step_ca config)
+step_ca_name: "{{ control_step_ca.ca_name | default('Server Helper CA') }}"
 step_ca_dns_names:
   - "step-ca"
   - "step-ca.{{ target_domain | default('local') }}"
@@ -26,7 +26,7 @@ step_ca_address: ":9000"
 
 # Provisioner settings
 step_ca_provisioner_name: "admin"
-step_ca_provisioner_password: "{{ vault_step_ca_provisioner_password | default('') }}"
+step_ca_provisioner_password: "{{ vault_step_ca_password | default('admin') }}"
 
 # ACME provisioner for automatic cert issuance
 step_ca_acme_enabled: true

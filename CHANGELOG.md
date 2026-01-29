@@ -15,14 +15,35 @@ This release represents a complete rewrite of Server Helper with a focus on modu
 
 #### Bootstrap Scripts
 - **setup.sh**: Complete rewrite with interactive menu system
+  - **Pure Controller architecture**: setup.sh handles only sourcing and menu orchestration
+  - All functional logic extracted to library modules
+  - **Strict sourcing**: Scripts exit with FATAL error if required library missing (no fallbacks)
   - Main menu with Setup, Extras, and Exit options
-  - Vault management (encrypt, decrypt, edit, view, re-key)
+  - Vault management via menu (encrypt, edit, view, re-key)
   - Add server functionality
   - Service UI launcher
-  - Test runners for roles and remediation
+  - Test runners for roles
   - Ask-once logic: detects existing config and offers health check, add servers, re-run, or fresh start
+  - **Security hardening**: Cleanup trap clears sensitive variables on exit
+  - **Vault permission check**: Auto-validates/fixes .vault_password 600 permissions
+
+- **scripts/lib/**: Modular library structure for shared bash functions
+  - `security.sh`: **Core security module** (must be sourced FIRST)
+    - Cleanup trap clears sensitive variables on EXIT/SIGINT/SIGTERM
+    - Permission enforcement (auto-validates/fixes .vault_password 600 permissions)
+    - Secure temp directory selection (RAM disk preferred)
+    - Memory sanitization for PASSWORD/SECRET/TOKEN/KEY variables
+  - `ui_utils.sh`: Colors, headers, secure logging with command redaction
+  - `vault_mgr.sh`: Vault operations with interactive menu, RAM disk temp files
+  - `menu_extras.sh`: Extras menu functions (add server, open UI, validate, test, upgrade)
+  - `inventory_mgr.sh`: Inventory parsing with no temp file residue
+  - `health_check.sh`: SSH, Docker, disk, memory health checking
+  - `config_mgr.sh`: YAML configuration management with Python parsing
+  - `upgrade.sh`: Docker image upgrades and service restarts with tracking
 
 - **bootstrap-target.sh**: Day 0 target preparation script
+  - **Standalone design**: No library dependencies (can be downloaded and run directly)
+  - **Recommended usage**: Download → Verify contents → Execute (never pipe curl to bash)
   - Virtualization detection (LXC, VM, bare metal) using `systemd-detect-virt`
   - LVM expansion (auto-skipped on LXC containers)
   - 2GB swap file creation (auto-skipped on LXC containers)
@@ -155,12 +176,32 @@ This release represents a complete rewrite of Server Helper with a focus on modu
 - Docker Socket Proxy restricts API access
 - Step-CA for internal TLS certificates
 - Authentik SSO eliminates password sprawl
+- **Zero-Leak Shell Security**:
+  - `log_exec` redacts commands containing password/token/vault/secret keywords
+  - Cleanup trap unsets sensitive variables on EXIT/SIGINT/SIGTERM
+  - Temp files use RAM disk (/dev/shm) when available
+  - Vault password file auto-validated for 600 permissions at startup
+  - **Removed vault decrypt-to-plaintext** - only `edit` (keeps encrypted) and `view` (memory only) available
+
+### Documentation
+
+- **README.md**: Complete rewrite with architecture diagrams, role tables, service URLs
+- **docs/wiki/**: Six comprehensive guides:
+  - `01-installation.md` - Prerequisites, setup, deployment steps
+  - `02-architecture.md` - Tiered model, data flow diagrams, dependencies
+  - `03-configuration.md` - Variable reference, vault secrets, host overrides
+  - `04-roles.md` - Complete role documentation for all 21 roles
+  - `05-security.md` - SSH hardening, firewall, PKI, SSO configuration
+  - `06-troubleshooting.md` - Common issues, recovery procedures, validation
+- **Setup guides**: Auto-generated per-service at `/opt/stacks/{service}/SETUP-GUIDE.md`
+- **CHANGELOG.md**: Comprehensive version history following Keep a Changelog format
 
 ### Removed
 
 - Legacy monolithic deployment scripts
 - Hardcoded credentials
 - Manual service configuration
+- Deprecated roles: dns, logging, lynis (standalone), nas_mounts, proxy, semaphore, system_setup, system_users
 
 ### Migration from v1
 

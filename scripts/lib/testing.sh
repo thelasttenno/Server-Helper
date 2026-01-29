@@ -1,0 +1,395 @@
+#!/usr/bin/env bash
+#
+# Server Helper - Testing Library
+# =================================
+# Provides Molecule testing functions for Ansible roles.
+#
+# Usage:
+#   source scripts/lib/testing.sh
+#
+# Dependencies:
+#   - scripts/lib/ui_utils.sh (required)
+#   - molecule (pip install molecule molecule-docker)
+#   - Docker daemon running
+#
+
+# Prevent multiple sourcing
+[[ -n "${_TESTING_LOADED:-}" ]] && return 0
+readonly _TESTING_LOADED=1
+
+# Require ui_utils
+if [[ -z "${_UI_UTILS_LOADED:-}" ]]; then
+    echo "ERROR: testing.sh requires ui_utils.sh to be sourced first" >&2
+    return 1
+fi
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+# Get project directory (caller should set SCRIPT_DIR)
+_TESTING_PROJECT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+_TESTING_ROLES_DIR="${_TESTING_PROJECT_DIR}/roles"
+
+# Track test results
+declare -a _TESTING_PASSED=()
+declare -a _TESTING_FAILED=()
+declare -a _TESTING_SKIPPED=()
+
+# =============================================================================
+# Dependency Checks
+# =============================================================================
+
+# Check if all testing dependencies are available
+testing_check_dependencies() {
+    local missing=0
+
+    if ! command -v molecule &>/dev/null; then
+        print_error "Molecule is not installed"
+        echo "Install with: pip install molecule molecule-docker"
+        ((missing++))
+    fi
+
+    if ! command -v docker &>/dev/null; then
+        print_error "Docker is not installed"
+        ((missing++))
+    elif ! docker info &>/dev/null 2>&1; then
+        print_error "Docker daemon is not running"
+        ((missing++))
+    fi
+
+    if [[ $missing -gt 0 ]]; then
+        return 1
+    fi
+
+    print_success "All testing dependencies satisfied"
+    return 0
+}
+
+# =============================================================================
+# Role Discovery
+# =============================================================================
+
+# Find all roles with Molecule tests
+# Returns array of role names
+testing_find_testable_roles() {
+    local roles_dir="${1:-$_TESTING_ROLES_DIR}"
+    local -a roles=()
+
+    for role_dir in "$roles_dir"/*/; do
+        local role
+        role=$(basename "$role_dir")
+        if [[ -d "${role_dir}molecule/default" ]]; then
+            roles+=("$role")
+        fi
+    done
+
+    echo "${roles[@]}"
+}
+
+# List all roles with their test status
+testing_list_roles() {
+    local roles_dir="${1:-$_TESTING_ROLES_DIR}"
+
+    print_section "Available Roles"
+
+    local has_tests=0
+    local no_tests=0
+
+    for role_dir in "$roles_dir"/*/; do
+        local role
+        role=$(basename "$role_dir")
+
+        if [[ -d "${role_dir}molecule/default" ]]; then
+            echo -e "  ${GREEN}*${NC} $role (has tests)"
+            ((has_tests++))
+        else
+            echo -e "  ${DIM}-${NC} $role"
+            ((no_tests++))
+        fi
+    done
+
+    echo
+    echo "  Testable: $has_tests"
+    echo "  Without tests: $no_tests"
+}
+
+# =============================================================================
+# Single Role Testing
+# =============================================================================
+
+# Run molecule test for a single role
+# Args: $1 = role name, $2 = molecule command (default: test)
+testing_run_role() {
+    local role="$1"
+    local molecule_cmd="${2:-test}"
+    local roles_dir="${_TESTING_ROLES_DIR}"
+    local role_dir="${roles_dir}/${role}"
+
+    if [[ -z "$role" ]]; then
+        print_error "No role specified"
+        return 1
+    fi
+
+    if [[ ! -d "$role_dir" ]]; then
+        print_error "Role not found: $role"
+        return 1
+    fi
+
+    if [[ ! -d "${role_dir}/molecule/default" ]]; then
+        print_error "Role '$role' does not have Molecule tests"
+        echo "To add tests, create: roles/${role}/molecule/default/molecule.yml"
+        return 1
+    fi
+
+    # Validate molecule command
+    case "$molecule_cmd" in
+        test|converge|verify|destroy|lint|create|prepare|cleanup|side-effect|idempotence)
+            ;;
+        *)
+            print_error "Invalid molecule command: $molecule_cmd"
+            echo "Valid commands: test, converge, verify, destroy, lint, create, prepare, cleanup"
+            return 1
+            ;;
+    esac
+
+    print_section "Testing role: $role"
+    print_info "Command: molecule $molecule_cmd"
+    echo
+
+    local original_dir
+    original_dir=$(pwd)
+    cd "$role_dir" || return 1
+
+    local exit_code=0
+    if molecule "$molecule_cmd"; then
+        print_success "PASSED: $role"
+        _TESTING_PASSED+=("$role")
+    else
+        print_error "FAILED: $role"
+        _TESTING_FAILED+=("$role")
+        exit_code=1
+    fi
+
+    cd "$original_dir" || return 1
+    return $exit_code
+}
+
+# Interactive single role test
+testing_test_single_interactive() {
+    local roles_dir="${_TESTING_ROLES_DIR}"
+
+    print_section "Test Single Role"
+
+    if ! testing_check_dependencies; then
+        return 1
+    fi
+
+    # Get testable roles
+    local -a roles
+    read -ra roles <<< "$(testing_find_testable_roles)"
+
+    if [[ ${#roles[@]} -eq 0 ]]; then
+        print_warning "No roles with Molecule tests found"
+        echo "To add tests, create: roles/<role>/molecule/default/molecule.yml"
+        return 1
+    fi
+
+    echo "Available roles with tests:"
+    for i in "${!roles[@]}"; do
+        echo "  $((i+1))) ${roles[$i]}"
+    done
+    echo
+
+    local role_num
+    role_num=$(prompt_input "Select role number")
+
+    if [[ ! "$role_num" =~ ^[0-9]+$ ]] || [[ "$role_num" -lt 1 ]] || [[ "$role_num" -gt ${#roles[@]} ]]; then
+        print_error "Invalid selection"
+        return 1
+    fi
+
+    local role="${roles[$((role_num-1))]}"
+
+    echo
+    echo "Molecule commands:"
+    echo "  1) test       - Full test cycle (create, converge, verify, destroy)"
+    echo "  2) converge   - Create and converge only"
+    echo "  3) verify     - Run verifiers only"
+    echo "  4) destroy    - Destroy instances"
+    echo "  5) lint       - Run linters"
+    echo
+
+    local cmd_num
+    cmd_num=$(prompt_input "Select command" "1")
+
+    local molecule_cmd
+    case "$cmd_num" in
+        1) molecule_cmd="test" ;;
+        2) molecule_cmd="converge" ;;
+        3) molecule_cmd="verify" ;;
+        4) molecule_cmd="destroy" ;;
+        5) molecule_cmd="lint" ;;
+        *) molecule_cmd="test" ;;
+    esac
+
+    testing_run_role "$role" "$molecule_cmd"
+}
+
+# =============================================================================
+# All Roles Testing
+# =============================================================================
+
+# Reset test tracking
+testing_reset_results() {
+    _TESTING_PASSED=()
+    _TESTING_FAILED=()
+    _TESTING_SKIPPED=()
+}
+
+# Run molecule tests for all roles
+testing_run_all() {
+    local roles_dir="${_TESTING_ROLES_DIR}"
+
+    print_header "Test All Roles"
+
+    if ! testing_check_dependencies; then
+        return 1
+    fi
+
+    testing_reset_results
+
+    # Find testable roles
+    print_info "Finding roles with Molecule tests..."
+    local -a roles
+    read -ra roles <<< "$(testing_find_testable_roles)"
+
+    if [[ ${#roles[@]} -eq 0 ]]; then
+        print_warning "No roles with Molecule tests found"
+        echo "To add tests, create: roles/<role>/molecule/default/molecule.yml"
+        return 0
+    fi
+
+    print_success "Found ${#roles[@]} testable role(s):"
+    for role in "${roles[@]}"; do
+        echo "  - $role"
+    done
+    echo
+
+    # Run tests
+    local exit_code=0
+    local original_dir
+    original_dir=$(pwd)
+
+    for role in "${roles[@]}"; do
+        echo
+        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD}Testing role: ${role}${NC}"
+        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo
+
+        cd "${roles_dir}/${role}" || continue
+
+        if molecule test; then
+            print_success "PASSED: ${role}"
+            _TESTING_PASSED+=("$role")
+        else
+            print_error "FAILED: ${role}"
+            _TESTING_FAILED+=("$role")
+            exit_code=1
+        fi
+    done
+
+    cd "$original_dir" || true
+
+    # Print summary
+    testing_print_summary
+
+    return $exit_code
+}
+
+# Print test summary
+testing_print_summary() {
+    local total=$(( ${#_TESTING_PASSED[@]} + ${#_TESTING_FAILED[@]} + ${#_TESTING_SKIPPED[@]} ))
+
+    echo
+    print_section "Test Summary"
+    echo "  Total Roles:  $total"
+    echo -e "  ${GREEN}Passed:${NC}       ${#_TESTING_PASSED[@]}"
+    echo -e "  ${RED}Failed:${NC}       ${#_TESTING_FAILED[@]}"
+    echo -e "  ${YELLOW}Skipped:${NC}      ${#_TESTING_SKIPPED[@]}"
+    echo
+
+    if [[ ${#_TESTING_PASSED[@]} -gt 0 ]]; then
+        echo -e "${GREEN}Passed roles:${NC}"
+        for role in "${_TESTING_PASSED[@]}"; do
+            echo "  - $role"
+        done
+        echo
+    fi
+
+    if [[ ${#_TESTING_FAILED[@]} -gt 0 ]]; then
+        echo -e "${RED}Failed roles:${NC}"
+        for role in "${_TESTING_FAILED[@]}"; do
+            echo "  - $role"
+        done
+        echo
+    fi
+
+    if [[ ${#_TESTING_FAILED[@]} -eq 0 ]]; then
+        print_success "All tests passed!"
+        return 0
+    else
+        print_error "Some tests failed."
+        return 1
+    fi
+}
+
+# =============================================================================
+# Menu Integration
+# =============================================================================
+
+# Show testing menu
+testing_show_menu() {
+    while true; do
+        clear
+        print_header "Ansible Role Testing"
+        echo
+
+        echo "  1) Test All Roles       - Run Molecule tests for all roles"
+        echo "  2) Test Single Role     - Run Molecule test for one role"
+        echo "  3) List Testable Roles  - Show roles with Molecule tests"
+        echo "  4) Check Dependencies   - Verify testing tools installed"
+        echo "  5) Back"
+        echo
+
+        local choice
+        choice=$(prompt_input "Choose an option [1-5]")
+
+        case "$choice" in
+            1)
+                testing_run_all
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                testing_test_single_interactive
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                testing_list_roles
+                read -p "Press Enter to continue..."
+                ;;
+            4)
+                testing_check_dependencies
+                read -p "Press Enter to continue..."
+                ;;
+            5)
+                return 0
+                ;;
+            *)
+                print_warning "Invalid option"
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+    done
+}

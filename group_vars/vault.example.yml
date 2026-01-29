@@ -85,6 +85,11 @@ vault_step_ca_password: "CHANGE_ME_step_ca_password"
 # Pi-hole
 vault_pihole_password: "CHANGE_ME_pihole_password"
 
+# Traefik Dashboard
+vault_traefik_dashboard:
+  username: "admin"
+  password: "CHANGE_ME_traefik_dashboard_password"
+
 # =============================================================================
 # MONITORING & OBSERVABILITY
 # =============================================================================
