@@ -22,7 +22,9 @@
       "Bash(findstr:*)",
       "Bash(grep:*)",
       "Bash(dir:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: always check for Ansible collections in testing_check_dependencies\n\nThe collections check was only running inside testing_install_dependencies\\(\\),\nwhich was only called when molecule was missing. This meant if molecule was\nalready installed but collections weren''t, the tests would fail with\n\"ansible.posix collection not found\".\n\nNow testing_check_dependencies\\(\\) always checks for collections and\nauto-installs them if missing, regardless of molecule''s installation state.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }
