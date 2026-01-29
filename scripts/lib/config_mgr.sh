@@ -245,6 +245,59 @@ config_set_control_ip() {
 }
 
 # =============================================================================
+# Timezone Configuration
+# =============================================================================
+
+# Get current timezone
+config_get_timezone() {
+    config_get "$CONFIG_ALL_YML" "target_timezone"
+}
+
+# Set timezone
+config_set_timezone() {
+    local timezone="$1"
+
+    if [[ -z "$timezone" ]]; then
+        print_error "Timezone is required"
+        return 1
+    fi
+
+    # Basic validation - check format like "America/Vancouver"
+    if ! [[ "$timezone" =~ ^[A-Za-z_]+/[A-Za-z_]+$ ]] && [[ "$timezone" != "UTC" ]]; then
+        print_warning "Timezone format may be invalid. Use format: Region/City (e.g., America/New_York)"
+    fi
+
+    config_set "$CONFIG_ALL_YML" "target_timezone" "$timezone"
+}
+
+# =============================================================================
+# Ansible User Configuration
+# =============================================================================
+
+# Get ansible user
+config_get_ansible_user() {
+    config_get "$CONFIG_ALL_YML" "ansible_user"
+}
+
+# Set ansible user
+config_set_ansible_user() {
+    local user="$1"
+
+    if [[ -z "$user" ]]; then
+        print_error "User is required"
+        return 1
+    fi
+
+    # Basic validation - alphanumeric, underscore, hyphen
+    if ! [[ "$user" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+        print_error "Invalid username format. Use lowercase letters, numbers, underscores, hyphens."
+        return 1
+    fi
+
+    config_set "$CONFIG_ALL_YML" "ansible_user" "$user"
+}
+
+# =============================================================================
 # Feature Toggles
 # =============================================================================
 
@@ -317,6 +370,51 @@ config_setup_control() {
     fi
 }
 
+# Interactive timezone setup
+config_setup_timezone() {
+    print_section "Timezone Configuration"
+
+    local current_tz
+    current_tz=$(config_get_timezone)
+
+    if [[ -n "$current_tz" ]]; then
+        print_info "Current timezone: $current_tz"
+    fi
+
+    echo "Common timezones: America/New_York, America/Los_Angeles, America/Chicago,"
+    echo "                  Europe/London, Europe/Paris, Asia/Tokyo, UTC"
+    echo ""
+
+    local tz
+    tz=$(prompt_input "Enter timezone" "${current_tz:-America/New_York}")
+
+    if [[ -n "$tz" ]]; then
+        config_set_timezone "$tz"
+    fi
+}
+
+# Interactive ansible user setup
+config_setup_ansible_user() {
+    print_section "Ansible User Configuration"
+
+    local current_user
+    current_user=$(config_get_ansible_user)
+
+    if [[ -n "$current_user" ]]; then
+        print_info "Current ansible user: $current_user"
+    fi
+
+    echo "This user must exist on all target nodes and have sudo access."
+    echo ""
+
+    local user
+    user=$(prompt_input "Enter SSH/Ansible username" "${current_user:-ansible}")
+
+    if [[ -n "$user" ]]; then
+        config_set_ansible_user "$user"
+    fi
+}
+
 # Full interactive setup wizard
 config_wizard() {
     print_header "Configuration Wizard"
@@ -331,11 +429,25 @@ config_wizard() {
         fi
     fi
 
+    # Infrastructure settings
+    print_section "Infrastructure Settings"
+    echo "These settings are required for all deployments."
+    echo ""
+
     # Domain
     config_setup_domain
 
     # Control node
     config_setup_control
+
+    # System settings
+    print_section "System Settings"
+
+    # Timezone
+    config_setup_timezone
+
+    # Ansible user
+    config_setup_ansible_user
 
     # Service configuration
     print_section "Service Configuration"
@@ -363,6 +475,18 @@ config_wizard() {
         config_enable_feature "control_grafana.enabled"
     fi
 
+    # Vault reminder
+    echo ""
+    print_section "Vault Configuration"
+    print_warning "Vault secrets must be configured manually for security."
+    echo "Required secrets include:"
+    echo "  - vault_netdata_stream_api_key (for metrics streaming)"
+    echo "  - vault_step_ca_password (for certificate authority)"
+    echo "  - vault_control_grafana_password (for Grafana admin)"
+    echo "  - vault_authentik_credentials (for SSO)"
+    echo ""
+    print_info "Edit group_vars/vault.yml and run: ./scripts/vault.sh encrypt"
+
     print_success "Configuration complete!"
     print_info "Run 'make deploy' to apply the configuration"
 }
@@ -374,6 +498,7 @@ config_wizard() {
 # Validate configuration
 config_validate() {
     local errors=0
+    local warnings=0
 
     print_header "Configuration Validation"
 
@@ -387,7 +512,8 @@ config_validate() {
     local domain
     domain=$(config_get_domain)
     if [[ -z "$domain" ]] || [[ "$domain" == "example.com" ]]; then
-        print_warning "Domain not configured (using default)"
+        print_warning "Domain not configured (using default 'example.com')"
+        ((warnings++))
     else
         print_success "Domain: $domain"
     fi
@@ -395,10 +521,31 @@ config_validate() {
     # Check control IP is set
     local control_ip
     control_ip=$(config_get_control_ip)
-    if [[ -z "$control_ip" ]]; then
-        print_warning "Control node IP not configured"
+    if [[ -z "$control_ip" ]] || [[ "$control_ip" == "192.168.1.10" ]]; then
+        print_warning "Control node IP may need configuration (currently: ${control_ip:-not set})"
+        ((warnings++))
     else
         print_success "Control IP: $control_ip"
+    fi
+
+    # Check timezone
+    local timezone
+    timezone=$(config_get_timezone)
+    if [[ -z "$timezone" ]]; then
+        print_warning "Timezone not configured"
+        ((warnings++))
+    else
+        print_success "Timezone: $timezone"
+    fi
+
+    # Check ansible user
+    local ansible_user
+    ansible_user=$(config_get_ansible_user)
+    if [[ -z "$ansible_user" ]]; then
+        print_warning "Ansible user not configured"
+        ((warnings++))
+    else
+        print_success "Ansible user: $ansible_user"
     fi
 
     # Validate YAML syntax
@@ -416,11 +563,14 @@ config_validate() {
     done
 
     echo ""
-    if [[ $errors -eq 0 ]]; then
+    if [[ $errors -eq 0 ]] && [[ $warnings -eq 0 ]]; then
         print_success "Configuration validation passed"
         return 0
+    elif [[ $errors -eq 0 ]]; then
+        print_warning "Configuration has $warnings warning(s) - review before deployment"
+        return 0
     else
-        print_error "Configuration has $errors error(s)"
+        print_error "Configuration has $errors error(s) and $warnings warning(s)"
         return 1
     fi
 }

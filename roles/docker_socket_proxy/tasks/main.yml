@@ -4,6 +4,20 @@
 - name: Docker Socket Proxy deployment
   when: docker_socket_proxy_enabled | bool
   block:
+    # Validate required variables
+    - name: Validate control_node_ip is set
+      ansible.builtin.assert:
+        that:
+          - control_node_ip is defined
+          - control_node_ip | length > 0
+        fail_msg: |
+          control_node_ip must be set for Docker Socket Proxy firewall rules.
+          Only the control node should be able to access the Docker socket proxy.
+          Current value: '{{ control_node_ip | default("not defined") }}'
+
+          Set this in group_vars/all.yml or run: ./setup.sh -> Configure
+        success_msg: "control_node_ip is set to {{ control_node_ip }}"
+
     # Create stack directory
     - name: Create Docker Socket Proxy stack directory
       ansible.builtin.file:

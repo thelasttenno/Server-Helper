@@ -4,6 +4,20 @@
 - name: Promtail deployment
   when: promtail_enabled | bool
   block:
+    # Validate required variables
+    - name: Validate control_node_ip is set
+      ansible.builtin.assert:
+        that:
+          - control_node_ip is defined
+          - control_node_ip | length > 0
+          - control_node_ip != 'localhost'
+        fail_msg: |
+          control_node_ip must be set for Promtail to connect to Loki.
+          Current value: '{{ control_node_ip | default("not defined") }}'
+
+          Set this in group_vars/all.yml or run: ./setup.sh -> Configure
+        success_msg: "control_node_ip is set to {{ control_node_ip }}"
+
     # Create stack directory
     - name: Create Promtail stack directory
       ansible.builtin.file:

@@ -4,6 +4,32 @@
 - name: Netdata deployment
   when: netdata_enabled | bool
   block:
+    # Validate required variables for child mode
+    - name: Validate control_node_ip is set (child mode)
+      ansible.builtin.assert:
+        that:
+          - control_node_ip is defined
+          - control_node_ip | length > 0
+        fail_msg: |
+          control_node_ip must be set for Netdata child nodes to stream to parent.
+          Current value: '{{ control_node_ip | default("not defined") }}'
+
+          Set this in group_vars/all.yml or run: ./setup.sh -> Configure
+        success_msg: "control_node_ip is set to {{ control_node_ip }}"
+      when: netdata_mode == "child"
+
+    # Validate streaming API key is set
+    - name: Validate streaming API key is set
+      ansible.builtin.assert:
+        that:
+          - vault_netdata_stream_api_key is defined
+          - vault_netdata_stream_api_key | length > 0
+        fail_msg: |
+          vault_netdata_stream_api_key must be set for Netdata streaming.
+          Set this in group_vars/vault.yml and encrypt with ./scripts/vault.sh
+        success_msg: "Netdata stream API key is configured"
+      when: netdata_streaming_enabled | bool
+
     # Create stack directory
     - name: Create Netdata stack directory
       ansible.builtin.file:
