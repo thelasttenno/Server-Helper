@@ -106,8 +106,12 @@ vault_authentik_credentials:
   admin_email: "admin@example.com"
   admin_password: "change-me-on-first-login"
 
-  # Email password (if email is enabled)
+  # Email settings (if email is enabled for password resets, etc.)
+  email_host: "smtp.gmail.com"
+  email_port: 587
+  email_username: "your-email@gmail.com"
   email_password: "your-smtp-password-or-app-password"
+  email_from: "authentik@example.com"
 
 # =============================================================================
 # MONITORING & OBSERVABILITY
@@ -143,7 +147,15 @@ vault_grafana_admin_password: "change-me-on-first-login"
 # Used for centralized Grafana on the control node
 vault_control_grafana_password: "change-me-on-first-login"
 
-# Grafana SMTP Password (optional - for email alerts)
+# Grafana SMTP Settings (optional - for email alerts)
+vault_grafana_smtp:
+  host: "smtp.gmail.com"
+  port: 587
+  user: "your-email@gmail.com"
+  password: "your-app-password"
+  from_address: "grafana@example.com"
+
+# Legacy single password field (deprecated, use vault_grafana_smtp instead)
 vault_grafana_smtp_password: "your-smtp-password-or-app-password"
 
 # =============================================================================
@@ -251,19 +263,23 @@ vault_cloudflare_dns_api_token: "your-cloudflare-dns-api-token"
 # Uncomment and fill in for your DNS provider
 
 # AWS Route53
-vault_aws_access_key_id: ""
-vault_aws_secret_access_key: ""
+vault_aws_route53_credentials:
+  access_key: ""
+  secret_key: ""
+  region: "us-east-1"
 
 # DigitalOcean
 vault_digitalocean_api_token: ""
 
 # Namecheap
-vault_namecheap_api_user: ""
-vault_namecheap_api_key: ""
+vault_namecheap_credentials:
+  api_user: ""
+  api_key: ""
 
 # GoDaddy
-vault_godaddy_api_key: ""
-vault_godaddy_api_secret: ""
+vault_godaddy_credentials:
+  api_key: ""
+  api_secret: ""
 
 # -----------------------------------------
 # TRAEFIK DASHBOARD AUTHENTICATION
@@ -271,6 +287,9 @@ vault_godaddy_api_secret: ""
 # Generate htpasswd hash: htpasswd -nb admin your-password
 # Or use: echo $(htpasswd -nb admin your-password) | sed -e s/\\$/\\$\\$/g
 vault_traefik_dashboard_auth: "admin:$$apr1$$xyz123$$hashedpassword"
+
+# Plain text password (setup.sh auto-generates htpasswd from this)
+vault_traefik_dashboard_password: "change-me-traefik-password"
 
 # -----------------------------------------
 # LEGACY SSL (if not using ACME)

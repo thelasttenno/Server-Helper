@@ -1,0 +1,31 @@
+---
+# Restic Role Defaults
+restic:
+  destinations:
+    nas:
+      enabled: false
+      path: ""
+      password: ""
+    s3:
+      enabled: false
+      endpoint: ""
+      bucket: ""
+      password: ""
+      access_key: ""
+      secret_key: ""
+    b2:
+      enabled: false
+      bucket: ""
+      password: ""
+      account_id: ""
+      account_key: ""
+    local:
+      enabled: false
+      path: ""
+      password: ""
+  schedule: "0 2 * * *"
+  retention:
+    keep_daily: 7
+    keep_weekly: 4
+    keep_monthly: 6
+    keep_yearly: 1

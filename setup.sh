@@ -2376,6 +2376,22 @@ prompt_config() {
             read -sp "Backup encryption password for S3: " RESTIC_S3_PASS
             echo
         fi
+
+        echo
+        echo "  Backblaze B2 is an affordable cloud storage alternative to AWS S3."
+        read -p "Save backups to Backblaze B2 cloud storage? (y/N): " -r BACKUP_B2
+        echo
+        BACKUP_B2=${BACKUP_B2:-n}
+
+        if [[ $BACKUP_B2 =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            read -p "B2 bucket name: " B2_BUCKET
+            read -p "B2 Account ID (from Backblaze console): " B2_ACCOUNT_ID
+            read -sp "B2 Application Key: " B2_ACCOUNT_KEY
+            echo
+            echo "  Create a password to encrypt your B2 backups (remember this!):"
+            read -sp "Backup encryption password for B2: " RESTIC_B2_PASS
+            echo
+        fi
     fi
 
     # Monitoring configuration
@@ -2514,6 +2530,68 @@ prompt_config() {
         echo "  You can find your public key in ~/.ssh/id_rsa.pub on your computer."
         echo "  Format: ssh-rsa AAAA... user@host"
         read -p "Admin SSH public key (press Enter to skip): " ADMIN_SSH_KEY
+    fi
+
+    # Notification Services Section
+    echo
+    echo -e "${BOLD}Notification Services (Optional):${NC}"
+    echo "  Get alerts when backups complete, security issues are found, or services fail."
+    echo
+    read -p "Configure notification services? (y/N): " -r ENABLE_NOTIFICATIONS
+    echo
+    ENABLE_NOTIFICATIONS=${ENABLE_NOTIFICATIONS:-n}
+
+    if [[ $ENABLE_NOTIFICATIONS =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        # SMTP Email
+        echo -e "${BOLD}Email Notifications (SMTP):${NC}"
+        echo "  Send alerts via email (e.g., using Gmail, Office 365, or your mail server)."
+        read -p "Enable email notifications? (y/N): " -r ENABLE_SMTP
+        echo
+        ENABLE_SMTP=${ENABLE_SMTP:-n}
+
+        if [[ $ENABLE_SMTP =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            read -p "SMTP server hostname [smtp.gmail.com]: " SMTP_HOST
+            SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+
+            read -p "SMTP port [587]: " SMTP_PORT
+            SMTP_PORT=${SMTP_PORT:-587}
+
+            read -p "SMTP username (your email address): " SMTP_USERNAME
+            read -sp "SMTP password (or app password for Gmail): " SMTP_PASSWORD
+            echo
+
+            read -p "From address (sender email): " SMTP_FROM
+            SMTP_FROM=${SMTP_FROM:-$SMTP_USERNAME}
+
+            read -p "Send alerts to (recipient email): " SMTP_TO
+        fi
+
+        # Discord
+        echo
+        echo -e "${BOLD}Discord Notifications:${NC}"
+        echo "  Get alerts in a Discord channel via webhook."
+        echo "  Create at: Server Settings → Integrations → Webhooks"
+        read -p "Discord webhook URL (press Enter to skip): " DISCORD_WEBHOOK
+
+        # Telegram
+        echo
+        echo -e "${BOLD}Telegram Notifications:${NC}"
+        echo "  Get alerts via Telegram bot."
+        echo "  Get token from @BotFather, chat_id from @userinfobot"
+        read -p "Enable Telegram notifications? (y/N): " -r ENABLE_TELEGRAM
+        echo
+        ENABLE_TELEGRAM=${ENABLE_TELEGRAM:-n}
+
+        if [[ $ENABLE_TELEGRAM =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            read -p "Telegram bot token: " TELEGRAM_BOT_TOKEN
+            read -p "Telegram chat ID: " TELEGRAM_CHAT_ID
+        fi
+
+        # Slack
+        echo
+        echo -e "${BOLD}Slack Notifications:${NC}"
+        echo "  Get alerts in Slack via incoming webhook."
+        read -p "Slack webhook URL (press Enter to skip): " SLACK_WEBHOOK
     fi
 
     # LVM Configuration
@@ -2751,7 +2829,11 @@ $(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOS3
 EOS3
 fi)
     b2:
-      enabled: false
+      enabled: $(if [[ $BACKUP_B2 =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "true"; else echo "false"; fi)
+$(if [[ $BACKUP_B2 =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOB2
+      bucket: "${B2_BUCKET}"
+EOB2
+fi)
   include_paths:
     - "{{ target_dockge_stacks_dir }}"
     - "{{ target_dockge_data_dir }}"
@@ -2975,7 +3057,7 @@ vault_restic_passwords:
 $(if [[ $BACKUP_NAS =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  nas: \"${RESTIC_NAS_PASS}\""; else echo "  nas: \"\""; fi)
 $(if [[ $BACKUP_LOCAL =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  local: \"${RESTIC_LOCAL_PASS}\""; else echo "  local: \"\""; fi)
 $(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  s3: \"${RESTIC_S3_PASS}\""; else echo "  s3: \"\""; fi)
-  b2: ""
+$(if [[ $BACKUP_B2 =~ ^[Yy]([Ee][Ss])?$ ]]; then echo "  b2: \"${RESTIC_B2_PASS}\""; else echo "  b2: \"\""; fi)
 
 # Cloud Provider Credentials
 $(if [[ $BACKUP_S3 =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOS3
@@ -2991,9 +3073,18 @@ vault_aws_credentials:
 EOS3
 fi)
 
+$(if [[ $BACKUP_B2 =~ ^[Yy]([Ee][Ss])?$ ]]; then cat <<EOB2
+vault_b2_credentials:
+  account_id: "${B2_ACCOUNT_ID}"
+  account_key: "${B2_ACCOUNT_KEY}"
+EOB2
+else
+cat <<EOB2
 vault_b2_credentials:
   account_id: ""
   account_key: ""
+EOB2
+fi)
 
 # Service Admin Credentials
 vault_dockge_credentials:
@@ -3002,7 +3093,7 @@ vault_dockge_credentials:
 
 vault_uptime_kuma_credentials:
   username: "admin"
-  password: "changeme-on-first-login"
+  password: "${UPTIME_KUMA_PASSWORD:-changeme-on-first-login}"
 
 # Monitoring & Observability
 vault_netdata_claim_token: "${NETDATA_CLAIM_TOKEN}"
@@ -3020,21 +3111,35 @@ vault_uptime_kuma_push_urls:
   update: ""
 
 # Notification Services
+$(if [[ -n "${SMTP_TO:-}" ]]; then cat <<EOSMTP
 vault_smtp_credentials:
-  host: "smtp.gmail.com"
-  port: 587
-  username: ""
-  password: ""
-  from_address: ""
+  host: "${SMTP_HOST:-smtp.gmail.com}"
+  port: ${SMTP_PORT:-587}
+  username: "${SMTP_USERNAME:-}"
+  password: "${SMTP_PASSWORD:-}"
+  from_address: "${SMTP_FROM:-}"
+  to_addresses:
+    - "${SMTP_TO}"
+EOSMTP
+else
+cat <<EOSMTP
+vault_smtp_credentials:
+  host: "${SMTP_HOST:-smtp.gmail.com}"
+  port: ${SMTP_PORT:-587}
+  username: "${SMTP_USERNAME:-}"
+  password: "${SMTP_PASSWORD:-}"
+  from_address: "${SMTP_FROM:-}"
   to_addresses: []
+EOSMTP
+fi)
 
-vault_discord_webhook: ""
+vault_discord_webhook: "${DISCORD_WEBHOOK:-}"
 
 vault_telegram_credentials:
-  bot_token: ""
-  chat_id: ""
+  bot_token: "${TELEGRAM_BOT_TOKEN:-}"
+  chat_id: "${TELEGRAM_CHAT_ID:-}"
 
-vault_slack_webhook: ""
+vault_slack_webhook: "${SLACK_WEBHOOK:-}"
 
 # System Users
 vault_system_users:
@@ -3281,6 +3386,48 @@ offer_control_node_setup() {
             print_info "Generated central Grafana admin password (will be shown at end)"
         fi
 
+        echo
+        echo "  Grafana can send email alerts when metrics exceed thresholds."
+        read -p "Enable Grafana email alerts? (y/N): " -r ENABLE_GRAFANA_SMTP
+        ENABLE_GRAFANA_SMTP=${ENABLE_GRAFANA_SMTP:-n}
+
+        if [[ $ENABLE_GRAFANA_SMTP =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo "  Use existing SMTP settings or enter new ones for Grafana:"
+            if [[ -n "${SMTP_HOST:-}" ]]; then
+                read -p "Use same SMTP settings as notifications? (Y/n): " -r USE_SAME_SMTP
+                USE_SAME_SMTP=${USE_SAME_SMTP:-y}
+                if [[ $USE_SAME_SMTP =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                    GRAFANA_SMTP_HOST="$SMTP_HOST"
+                    GRAFANA_SMTP_PORT="$SMTP_PORT"
+                    GRAFANA_SMTP_USER="$SMTP_USERNAME"
+                    GRAFANA_SMTP_PASSWORD="$SMTP_PASSWORD"
+                    GRAFANA_SMTP_FROM="$SMTP_FROM"
+                fi
+            fi
+            if [[ -z "${GRAFANA_SMTP_HOST:-}" ]]; then
+                read -p "SMTP host [smtp.gmail.com]: " GRAFANA_SMTP_HOST
+                GRAFANA_SMTP_HOST=${GRAFANA_SMTP_HOST:-smtp.gmail.com}
+                read -p "SMTP port [587]: " GRAFANA_SMTP_PORT
+                GRAFANA_SMTP_PORT=${GRAFANA_SMTP_PORT:-587}
+                read -p "SMTP username: " GRAFANA_SMTP_USER
+                read -sp "SMTP password: " GRAFANA_SMTP_PASSWORD
+                echo
+                read -p "From address: " GRAFANA_SMTP_FROM
+            fi
+        fi
+
+        # Uptime Kuma admin password
+        echo
+        echo "  Uptime Kuma monitors your services and sends alerts when they go down."
+        echo "  Set a password for the admin account (username: admin)."
+        echo "  Press Enter to auto-generate a secure password."
+        read -sp "Uptime Kuma admin password [auto-generate]: " UPTIME_KUMA_PASSWORD
+        echo
+        if [[ -z "$UPTIME_KUMA_PASSWORD" ]]; then
+            UPTIME_KUMA_PASSWORD=$(openssl rand -base64 16)
+            print_info "Generated Uptime Kuma admin password (will be shown at end)"
+        fi
+
         # Centralized Services Section
         echo
         echo -e "${BOLD}Additional Centralized Services (Optional):${NC}"
@@ -3302,6 +3449,35 @@ offer_control_node_setup() {
             echo "  Set Authentik admin password:"
             read -sp "Admin password: " AUTHENTIK_ADMIN_PASSWORD
             echo
+
+            echo
+            echo "  Authentik can send email notifications (password resets, etc.)."
+            read -p "Enable Authentik email? (y/N): " -r ENABLE_AUTHENTIK_EMAIL
+            ENABLE_AUTHENTIK_EMAIL=${ENABLE_AUTHENTIK_EMAIL:-n}
+
+            if [[ $ENABLE_AUTHENTIK_EMAIL =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                if [[ -n "${SMTP_PASSWORD:-}" ]]; then
+                    read -p "Use same SMTP settings as global notifications? (Y/n): " -r USE_AUTH_SMTP
+                    USE_AUTH_SMTP=${USE_AUTH_SMTP:-y}
+                    if [[ $USE_AUTH_SMTP =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                        AUTHENTIK_EMAIL_PASSWORD="$SMTP_PASSWORD"
+                        AUTHENTIK_EMAIL_HOST="$SMTP_HOST"
+                        AUTHENTIK_EMAIL_PORT="$SMTP_PORT"
+                        AUTHENTIK_EMAIL_USER="$SMTP_USERNAME"
+                        AUTHENTIK_EMAIL_FROM="$SMTP_FROM"
+                    fi
+                fi
+                if [[ -z "${AUTHENTIK_EMAIL_PASSWORD:-}" ]]; then
+                    read -p "SMTP host [smtp.gmail.com]: " AUTHENTIK_EMAIL_HOST
+                    AUTHENTIK_EMAIL_HOST=${AUTHENTIK_EMAIL_HOST:-smtp.gmail.com}
+                    read -p "SMTP port [587]: " AUTHENTIK_EMAIL_PORT
+                    AUTHENTIK_EMAIL_PORT=${AUTHENTIK_EMAIL_PORT:-587}
+                    read -p "SMTP username: " AUTHENTIK_EMAIL_USER
+                    read -sp "SMTP password: " AUTHENTIK_EMAIL_PASSWORD
+                    echo
+                    read -p "From address: " AUTHENTIK_EMAIL_FROM
+                fi
+            fi
         fi
 
         # Step-CA (Certificate Authority) - Control Node
@@ -3346,6 +3522,67 @@ offer_control_node_setup() {
 
             # Generate encryption key for Semaphore
             SEMAPHORE_ACCESS_KEY_ENCRYPTION=$(openssl rand -base64 32)
+
+            echo
+            echo "  Semaphore can send notifications when tasks complete or fail."
+            read -p "Configure Semaphore notifications? (y/N): " -r ENABLE_SEMAPHORE_NOTIFICATIONS
+            ENABLE_SEMAPHORE_NOTIFICATIONS=${ENABLE_SEMAPHORE_NOTIFICATIONS:-n}
+
+            if [[ $ENABLE_SEMAPHORE_NOTIFICATIONS =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                # Semaphore SMTP
+                echo
+                read -p "Enable Semaphore email notifications? (y/N): " -r ENABLE_SEMAPHORE_SMTP
+                ENABLE_SEMAPHORE_SMTP=${ENABLE_SEMAPHORE_SMTP:-n}
+                if [[ $ENABLE_SEMAPHORE_SMTP =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                    if [[ -n "${SMTP_PASSWORD:-}" ]]; then
+                        read -p "Use same SMTP settings as global notifications? (Y/n): " -r USE_GLOBAL_SMTP
+                        USE_GLOBAL_SMTP=${USE_GLOBAL_SMTP:-y}
+                        if [[ $USE_GLOBAL_SMTP =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                            SEMAPHORE_SMTP_PASSWORD="$SMTP_PASSWORD"
+                        fi
+                    fi
+                    if [[ -z "${SEMAPHORE_SMTP_PASSWORD:-}" ]]; then
+                        read -sp "Semaphore SMTP password: " SEMAPHORE_SMTP_PASSWORD
+                        echo
+                    fi
+                fi
+
+                # Semaphore Telegram
+                echo
+                read -p "Enable Semaphore Telegram notifications? (y/N): " -r ENABLE_SEMAPHORE_TELEGRAM
+                ENABLE_SEMAPHORE_TELEGRAM=${ENABLE_SEMAPHORE_TELEGRAM:-n}
+                if [[ $ENABLE_SEMAPHORE_TELEGRAM =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                    if [[ -n "${TELEGRAM_BOT_TOKEN:-}" ]]; then
+                        read -p "Use same Telegram settings as global notifications? (Y/n): " -r USE_GLOBAL_TELEGRAM
+                        USE_GLOBAL_TELEGRAM=${USE_GLOBAL_TELEGRAM:-y}
+                        if [[ $USE_GLOBAL_TELEGRAM =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                            SEMAPHORE_TELEGRAM_TOKEN="$TELEGRAM_BOT_TOKEN"
+                            SEMAPHORE_TELEGRAM_CHAT="$TELEGRAM_CHAT_ID"
+                        fi
+                    fi
+                    if [[ -z "${SEMAPHORE_TELEGRAM_TOKEN:-}" ]]; then
+                        read -p "Semaphore Telegram bot token: " SEMAPHORE_TELEGRAM_TOKEN
+                        read -p "Semaphore Telegram chat ID: " SEMAPHORE_TELEGRAM_CHAT
+                    fi
+                fi
+
+                # Semaphore Slack
+                echo
+                read -p "Enable Semaphore Slack notifications? (y/N): " -r ENABLE_SEMAPHORE_SLACK
+                ENABLE_SEMAPHORE_SLACK=${ENABLE_SEMAPHORE_SLACK:-n}
+                if [[ $ENABLE_SEMAPHORE_SLACK =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                    if [[ -n "${SLACK_WEBHOOK:-}" ]]; then
+                        read -p "Use same Slack webhook as global notifications? (Y/n): " -r USE_GLOBAL_SLACK
+                        USE_GLOBAL_SLACK=${USE_GLOBAL_SLACK:-y}
+                        if [[ $USE_GLOBAL_SLACK =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                            SEMAPHORE_SLACK_WEBHOOK="$SLACK_WEBHOOK"
+                        fi
+                    fi
+                    if [[ -z "${SEMAPHORE_SLACK_WEBHOOK:-}" ]]; then
+                        read -p "Semaphore Slack webhook URL: " SEMAPHORE_SLACK_WEBHOOK
+                    fi
+                fi
+            fi
         fi
 
         # DNS (Pi-hole + Unbound) - Control Node
@@ -3393,14 +3630,64 @@ offer_control_node_setup() {
             read -p "Traefik dashboard port [8080]: " TRAEFIK_DASHBOARD_PORT
             TRAEFIK_DASHBOARD_PORT=${TRAEFIK_DASHBOARD_PORT:-8080}
 
-            echo "  Use Cloudflare for DNS challenge (recommended for wildcard certs)?"
-            read -p "Enable Cloudflare DNS challenge? (y/N): " -r TRAEFIK_CLOUDFLARE
-            TRAEFIK_CLOUDFLARE=${TRAEFIK_CLOUDFLARE:-n}
-
-            if [[ $TRAEFIK_CLOUDFLARE =~ ^[Yy]([Ee][Ss])?$ ]]; then
-                read -p "Cloudflare API token: " CF_API_TOKEN
-                read -p "Cloudflare Zone ID: " CF_ZONE_ID
+            echo
+            echo "  Set a password to protect the Traefik dashboard (username: admin)"
+            read -sp "Traefik dashboard password [auto-generate]: " TRAEFIK_DASHBOARD_PASSWORD
+            echo
+            if [[ -z "$TRAEFIK_DASHBOARD_PASSWORD" ]]; then
+                TRAEFIK_DASHBOARD_PASSWORD=$(openssl rand -base64 16)
+                print_info "Generated Traefik dashboard password (will be shown at end)"
             fi
+
+            echo
+            echo "  DNS challenge is required for wildcard certificates and internal services."
+            echo "  Choose your DNS provider for automatic certificate renewal:"
+            echo
+            echo "  1) Cloudflare (recommended)"
+            echo "  2) DigitalOcean"
+            echo "  3) AWS Route53"
+            echo "  4) Namecheap"
+            echo "  5) GoDaddy"
+            echo "  6) None / HTTP challenge only"
+            echo
+            read -p "DNS provider [1]: " DNS_PROVIDER_CHOICE
+            DNS_PROVIDER_CHOICE=${DNS_PROVIDER_CHOICE:-1}
+
+            case "$DNS_PROVIDER_CHOICE" in
+                1)
+                    DNS_PROVIDER="cloudflare"
+                    read -p "Cloudflare API token: " CF_API_TOKEN
+                    read -p "Cloudflare Zone ID: " CF_ZONE_ID
+                    ;;
+                2)
+                    DNS_PROVIDER="digitalocean"
+                    read -p "DigitalOcean API token: " DO_API_TOKEN
+                    ;;
+                3)
+                    DNS_PROVIDER="route53"
+                    read -p "AWS Access Key ID: " DNS_AWS_ACCESS_KEY
+                    read -sp "AWS Secret Access Key: " DNS_AWS_SECRET_KEY
+                    echo
+                    read -p "AWS Region [us-east-1]: " DNS_AWS_REGION
+                    DNS_AWS_REGION=${DNS_AWS_REGION:-us-east-1}
+                    ;;
+                4)
+                    DNS_PROVIDER="namecheap"
+                    read -p "Namecheap API user: " NAMECHEAP_API_USER
+                    read -sp "Namecheap API key: " NAMECHEAP_API_KEY
+                    echo
+                    ;;
+                5)
+                    DNS_PROVIDER="godaddy"
+                    read -p "GoDaddy API key: " GODADDY_API_KEY
+                    read -sp "GoDaddy API secret: " GODADDY_API_SECRET
+                    echo
+                    ;;
+                6|*)
+                    DNS_PROVIDER="none"
+                    print_info "Using HTTP challenge only (no wildcard certs)"
+                    ;;
+            esac
         fi
 
         # Watchtower (Auto Container Updates) - Control Node
@@ -3722,6 +4009,11 @@ vault_authentik_credentials:
   admin_password: "${AUTHENTIK_ADMIN_PASSWORD}"
   secret_key: "$(openssl rand -base64 32)"
   postgres_password: "$(openssl rand -base64 16)"
+  email_host: "${AUTHENTIK_EMAIL_HOST:-}"
+  email_port: ${AUTHENTIK_EMAIL_PORT:-587}
+  email_username: "${AUTHENTIK_EMAIL_USER:-}"
+  email_password: "${AUTHENTIK_EMAIL_PASSWORD:-}"
+  email_from: "${AUTHENTIK_EMAIL_FROM:-}"
 
 EOF
     fi
@@ -3741,6 +4033,10 @@ EOF
 vault_semaphore_db_password: "$(openssl rand -base64 16)"
 vault_semaphore_admin_password: "${SEMAPHORE_ADMIN_PASSWORD}"
 vault_semaphore_access_key_encryption: "${SEMAPHORE_ACCESS_KEY_ENCRYPTION:-$(openssl rand -base64 32)}"
+vault_semaphore_smtp_password: "${SEMAPHORE_SMTP_PASSWORD:-}"
+vault_semaphore_telegram_token: "${SEMAPHORE_TELEGRAM_TOKEN:-}"
+vault_semaphore_telegram_chat: "${SEMAPHORE_TELEGRAM_CHAT:-}"
+vault_semaphore_slack_webhook: "${SEMAPHORE_SLACK_WEBHOOK:-}"
 
 EOF
     fi
@@ -3756,12 +4052,42 @@ EOF
 
     # Traefik/Cloudflare secrets
     if [[ ${ENABLE_REVERSE_PROXY:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        # Generate htpasswd for Traefik dashboard
+        local traefik_htpasswd=""
+        if [[ -n "${TRAEFIK_DASHBOARD_PASSWORD:-}" ]]; then
+            if command -v htpasswd &>/dev/null; then
+                traefik_htpasswd=$(htpasswd -nb admin "$TRAEFIK_DASHBOARD_PASSWORD" | sed -e 's/\$/\$\$/g')
+            else
+                # Fallback: use openssl for basic auth
+                local hash=$(openssl passwd -apr1 "$TRAEFIK_DASHBOARD_PASSWORD")
+                traefik_htpasswd="admin:$(echo "$hash" | sed -e 's/\$/\$\$/g')"
+            fi
+        fi
+
         cat >> "$temp_vault" <<EOF
 vault_letsencrypt_email: "${TRAEFIK_ACME_EMAIL:-}"
+vault_traefik_dashboard_auth: "${traefik_htpasswd}"
+vault_traefik_dashboard_password: "${TRAEFIK_DASHBOARD_PASSWORD:-}"
 
+# DNS Provider: ${DNS_PROVIDER:-none}
 vault_cloudflare_credentials:
   api_token: "${CF_API_TOKEN:-}"
   zone_id: "${CF_ZONE_ID:-}"
+
+vault_digitalocean_api_token: "${DO_API_TOKEN:-}"
+
+vault_aws_route53_credentials:
+  access_key: "${DNS_AWS_ACCESS_KEY:-}"
+  secret_key: "${DNS_AWS_SECRET_KEY:-}"
+  region: "${DNS_AWS_REGION:-us-east-1}"
+
+vault_namecheap_credentials:
+  api_user: "${NAMECHEAP_API_USER:-}"
+  api_key: "${NAMECHEAP_API_KEY:-}"
+
+vault_godaddy_credentials:
+  api_key: "${GODADDY_API_KEY:-}"
+  api_secret: "${GODADDY_API_SECRET:-}"
 
 EOF
     fi
@@ -3780,6 +4106,28 @@ EOF
         cat >> "$temp_vault" <<EOF
 # Central Grafana admin password (overrides the default from initial setup)
 vault_control_grafana_password: "${CONTROL_GRAFANA_PASSWORD}"
+
+EOF
+    fi
+
+    # Grafana SMTP settings
+    if [[ ${ENABLE_GRAFANA_SMTP:-n} =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        cat >> "$temp_vault" <<EOF
+vault_grafana_smtp:
+  host: "${GRAFANA_SMTP_HOST:-}"
+  port: ${GRAFANA_SMTP_PORT:-587}
+  user: "${GRAFANA_SMTP_USER:-}"
+  password: "${GRAFANA_SMTP_PASSWORD:-}"
+  from_address: "${GRAFANA_SMTP_FROM:-}"
+
+EOF
+    fi
+
+    # Uptime Kuma password
+    if [[ -n "${UPTIME_KUMA_PASSWORD:-}" ]]; then
+        cat >> "$temp_vault" <<EOF
+# Uptime Kuma admin password (overrides the default)
+vault_uptime_kuma_password: "${UPTIME_KUMA_PASSWORD}"
 
 EOF
     fi
@@ -3854,13 +4202,19 @@ show_completion_message() {
     fi
 
     # Show generated passwords if any
-    if [[ -n "${DOCKGE_ADMIN_PASSWORD:-}" ]] || [[ -n "${CONTROL_GRAFANA_PASSWORD:-}" ]]; then
+    if [[ -n "${DOCKGE_ADMIN_PASSWORD:-}" ]] || [[ -n "${CONTROL_GRAFANA_PASSWORD:-}" ]] || [[ -n "${UPTIME_KUMA_PASSWORD:-}" ]] || [[ -n "${TRAEFIK_DASHBOARD_PASSWORD:-}" ]]; then
         echo -e "${BOLD}Generated Credentials (save these!):${NC}"
         if [[ -n "${DOCKGE_ADMIN_PASSWORD:-}" ]]; then
             echo -e "  ${YELLOW}Dockge:${NC}          admin / ${DOCKGE_ADMIN_PASSWORD}"
         fi
+        if [[ -n "${UPTIME_KUMA_PASSWORD:-}" ]]; then
+            echo -e "  ${YELLOW}Uptime Kuma:${NC}     admin / ${UPTIME_KUMA_PASSWORD}"
+        fi
         if [[ -n "${CONTROL_GRAFANA_PASSWORD:-}" ]]; then
             echo -e "  ${YELLOW}Grafana:${NC}         admin / ${CONTROL_GRAFANA_PASSWORD}"
+        fi
+        if [[ -n "${TRAEFIK_DASHBOARD_PASSWORD:-}" ]]; then
+            echo -e "  ${YELLOW}Traefik:${NC}         admin / ${TRAEFIK_DASHBOARD_PASSWORD}"
         fi
         echo
         print_warning "These passwords are stored encrypted in group_vars/vault.yml"
