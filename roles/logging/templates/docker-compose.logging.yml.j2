@@ -64,7 +64,7 @@ services:
       - ./grafana-provisioning:/etc/grafana/provisioning:ro
     environment:
       - GF_SECURITY_ADMIN_USER={{ logging.grafana.admin_user | default('admin') }}
-      - GF_SECURITY_ADMIN_PASSWORD={{ vault_grafana_admin_password }}
+      - GF_SECURITY_ADMIN_PASSWORD={{ vault_grafana_admin_password | default('admin') }}
       - GF_SERVER_ROOT_URL=http://{{ ansible_default_ipv4.address | default('localhost') }}:{{ logging.grafana.port | default('3000') }}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_INSTALL_PLUGINS={{ logging.grafana.plugins | default('') }}
