@@ -71,8 +71,7 @@
   when: target_docker is defined
 
 - name: Install Docker Python SDK
-  ansible.builtin.pip:
+  ansible.builtin.apt:
     name:
-      - docker
-      - docker-compose
+      - python3-docker
     state: present

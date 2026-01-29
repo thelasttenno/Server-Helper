@@ -47,6 +47,7 @@ EXISTING_HOSTNAMES=()
 EXISTING_USERS=()
 EXISTING_CONFIG_FOUND=false
 
+
 # Function to print colored messages
 print_header() {
     echo -e "\n${BLUE}${BOLD}╔════════════════════════════════════════╗${NC}"
@@ -477,7 +478,7 @@ vault_encrypt() {
     print_info "Created backup: $BACKUP_FILE"
 
     # Encrypt
-    if ansible-vault encrypt "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"; then
+    if ansible-vault encrypt --encrypt-vault-id default "$FILE" --vault-password-file="$VAULT_PASSWORD_FILE"; then
         print_success "File encrypted successfully: $FILE"
         print_info "Backup saved at: $BACKUP_FILE"
     else
@@ -3784,7 +3785,7 @@ EOF
     fi
 
     # Re-encrypt the vault
-    if ansible-vault encrypt "$temp_vault" --vault-password-file="$vault_password_file" --output="$vault_file"; then
+    if ansible-vault encrypt --encrypt-vault-id default "$temp_vault" --vault-password-file="$vault_password_file" --output="$vault_file"; then
         print_success "Vault updated with control node service secrets"
     else
         print_warning "Failed to re-encrypt vault"
