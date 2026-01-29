@@ -38,20 +38,73 @@ declare -a _TESTING_FAILED=()
 declare -a _TESTING_SKIPPED=()
 
 # =============================================================================
-# Dependency Checks
+# Dependency Checks & Auto-Install
 # =============================================================================
 
-# Check if all testing dependencies are available
+# Auto-install testing dependencies if missing
+testing_install_dependencies() {
+    local needs_install=0
+
+    # Check for pipx
+    if ! command -v pipx &>/dev/null; then
+        print_info "Installing pipx..."
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq pipx
+        pipx ensurepath
+        export PATH="$HOME/.local/bin:$PATH"
+        needs_install=1
+    fi
+
+    # Check for molecule
+    if ! command -v molecule &>/dev/null; then
+        print_info "Installing molecule via pipx (PEP 668 compliant)..."
+        pipx install molecule || pipx upgrade molecule
+        pipx inject molecule molecule-plugins[docker] pytest-testinfra ansible
+        needs_install=1
+    fi
+
+    # Install collections in molecule's pipx venv
+    local molecule_venv="$HOME/.local/share/pipx/venvs/molecule"
+    if [[ -d "$molecule_venv" ]]; then
+        local galaxy_bin="$molecule_venv/bin/ansible-galaxy"
+        if [[ -x "$galaxy_bin" ]]; then
+            if ! "$galaxy_bin" collection list 2>/dev/null | grep -q "ansible.posix"; then
+                print_info "Installing Ansible collections in molecule venv..."
+                "$galaxy_bin" collection install ansible.posix community.general community.docker --force
+                needs_install=1
+            fi
+        fi
+    fi
+
+    # Also install system-wide for ansible-lint etc
+    if command -v ansible-galaxy &>/dev/null; then
+        if ! ansible-galaxy collection list 2>/dev/null | grep -q "ansible.posix"; then
+            print_info "Installing Ansible collections system-wide..."
+            ansible-galaxy collection install ansible.posix community.general community.docker --force 2>/dev/null || true
+        fi
+    fi
+
+    if [[ $needs_install -eq 1 ]]; then
+        print_success "Dependencies installed successfully!"
+    fi
+
+    return 0
+}
+
+# Check if all testing dependencies are available (with auto-install)
 testing_check_dependencies() {
     local missing=0
 
+    # Auto-install if molecule is missing
     if ! command -v molecule &>/dev/null; then
-        print_error "Molecule is not installed"
-        echo "Install via pipx (PEP 668 compliant):"
-        echo "  sudo apt install pipx"
-        echo "  pipx install molecule"
-        echo "  pipx inject molecule molecule-plugins[docker]"
-        echo "  pipx ensurepath  # if molecule command not found"
+        print_info "Molecule not found, installing dependencies..."
+        testing_install_dependencies
+    fi
+
+    # Final check
+    if ! command -v molecule &>/dev/null; then
+        print_error "Molecule installation failed"
+        echo "Try manually: pipx install molecule && pipx inject molecule molecule-plugins[docker]"
         ((missing++))
     fi
 
