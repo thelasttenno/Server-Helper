@@ -1,0 +1,11 @@
+---
+# Dockge Role Default Variables
+
+dockge_base_dir: "/opt/dockge"
+dockge_stacks_dir: "{{ dockge_base_dir }}/stacks"
+dockge_data_dir: "{{ dockge_base_dir }}/data"
+
+dockge:
+  enabled: true
+  port: 5001
+  version: "1"
