@@ -955,3 +955,262 @@ vault_menu_show() {
 show_vault_menu() {
     vault_menu_show "$@"
 }
+
+# =============================================================================
+# Vault Backup/Restore Operations
+# =============================================================================
+
+# Create backup of vault file
+vault_backup() {
+    local file="${1:-}"
+    local script_dir="${SCRIPT_DIR:-.}"
+
+    if [[ -z "$file" ]]; then
+        print_error "Usage: vault_backup <file>"
+        return 1
+    fi
+
+    if [[ ! -f "$file" ]]; then
+        print_error "File not found: $file"
+        return 1
+    fi
+
+    local backup_dir="${script_dir}/backups/vault"
+    mkdir -p "$backup_dir"
+
+    local backup_file="${backup_dir}/$(basename "$file").backup.$(date +%Y%m%d_%H%M%S)"
+    cp "$file" "$backup_file"
+
+    print_success "Backup created: $backup_file"
+
+    # Keep only last 10 backups
+    local backup_count
+    backup_count=$(ls -1 "$backup_dir" 2>/dev/null | wc -l)
+    if [[ $backup_count -gt 10 ]]; then
+        print_info "Cleaning old backups (keeping last 10)..."
+        ls -1t "$backup_dir" | tail -n +11 | while read -r old_backup; do
+            rm -f "${backup_dir}/${old_backup}"
+        done
+    fi
+}
+
+# Restore vault from backup
+vault_restore() {
+    local backup_file="${1:-}"
+    local script_dir="${SCRIPT_DIR:-.}"
+
+    if [[ -z "$backup_file" ]]; then
+        print_info "Available backups:"
+        ls -lh "${script_dir}/backups/vault/" 2>/dev/null || echo "No backups found"
+        echo
+        print_error "Usage: vault_restore <backup-file>"
+        return 1
+    fi
+
+    if [[ ! -f "$backup_file" ]]; then
+        print_error "Backup file not found: $backup_file"
+        return 1
+    fi
+
+    # Determine original file path
+    local original_file="group_vars/$(basename "$backup_file" | sed 's/.backup.*//')"
+
+    print_warning "This will restore: $original_file"
+    print_warning "From backup: $backup_file"
+    echo
+
+    if ! prompt_confirm "Continue?"; then
+        print_info "Aborted."
+        return 0
+    fi
+
+    # Create backup of current file first
+    if [[ -f "$original_file" ]]; then
+        vault_backup "$original_file"
+    fi
+
+    cp "$backup_file" "$original_file"
+    print_success "Restored: $original_file"
+}
+
+# Show diff for encrypted vault file
+vault_diff() {
+    local file="${1:-}"
+    local password_file="${VAULT_PASSWORD_FILE:-.vault_password}"
+
+    if [[ -z "$file" ]]; then
+        print_error "Usage: vault_diff <file>"
+        return 1
+    fi
+
+    if [[ ! -f "$password_file" ]]; then
+        print_error "Vault password file not found: $password_file"
+        return 1
+    fi
+
+    if [[ ! -f "$file" ]]; then
+        print_error "File not found: $file"
+        return 1
+    fi
+
+    print_info "Showing diff for: $file"
+    echo
+
+    git diff --textconv="ansible-vault view --vault-password-file=$password_file" "$file" || \
+        print_error "Git diff failed. Is this a git repository?"
+}
+
+# =============================================================================
+# CLI Interface (when run directly)
+# =============================================================================
+
+_vault_cli_usage() {
+    echo "Usage: $0 <command> [args]"
+    echo
+    echo "Commands:"
+    echo "  init                  Initialize vault setup"
+    echo "  create <file>         Create new encrypted vault file"
+    echo "  edit <file>           Edit encrypted vault file"
+    echo "  view <file>           View encrypted vault file"
+    echo "  encrypt <file>        Encrypt a plain text file"
+    echo "  rekey <file|--all>    Change vault password"
+    echo "  validate [file]       Validate vault file(s)"
+    echo "  status                Show vault status"
+    echo "  backup <file>         Create backup of vault file"
+    echo "  restore <backup>      Restore from backup"
+    echo "  diff <file>           Show diff of encrypted file"
+    echo "  help                  Show this help"
+    echo
+    echo "Examples:"
+    echo "  $0 init"
+    echo "  $0 edit group_vars/vault.yml"
+    echo "  $0 view group_vars/vault.yml"
+    echo
+}
+
+_vault_cli_main() {
+    local cmd="${1:-}"
+    shift 2>/dev/null || true
+
+    local password_file="${VAULT_PASSWORD_FILE:-.vault_password}"
+    local script_dir="${SCRIPT_DIR:-.}"
+
+    # Check ansible-vault
+    if ! command -v ansible-vault &>/dev/null; then
+        print_error "ansible-vault not found. Please install Ansible first."
+        exit 1
+    fi
+
+    case "$cmd" in
+        init)
+            _vault_menu_init
+            ;;
+        create|edit)
+            local file="${1:-group_vars/vault.yml}"
+            export EDITOR="${EDITOR:-nano}"
+            if [[ ! -f "$password_file" ]]; then
+                print_error "Vault password file not found: $password_file"
+                exit 1
+            fi
+            if [[ ! -f "$file" ]]; then
+                print_info "Creating new encrypted vault file: $file"
+                mkdir -p "$(dirname "$file")"
+                ansible-vault create "$file" --vault-password-file="$password_file"
+            else
+                print_info "Editing encrypted file: $file"
+                ansible-vault edit "$file" --vault-password-file="$password_file"
+            fi
+            ;;
+        view)
+            local file="${1:-group_vars/vault.yml}"
+            if [[ ! -f "$file" ]]; then
+                print_error "File not found: $file"
+                exit 1
+            fi
+            ansible-vault view "$file" --vault-password-file="$password_file"
+            ;;
+        encrypt)
+            local file="$1"
+            if [[ -z "$file" ]]; then
+                print_error "Usage: $0 encrypt <file>"
+                exit 1
+            fi
+            vault_encrypt "$file" "$password_file"
+            ;;
+        rekey)
+            local target="$1"
+            if [[ -z "$target" ]]; then
+                print_error "Usage: $0 rekey <file|--all>"
+                exit 1
+            fi
+            if [[ "$target" == "--all" ]]; then
+                vault_rekey_all "$password_file"
+            else
+                vault_rekey "$target" "$password_file"
+            fi
+            ;;
+        validate)
+            local file="${1:-}"
+            if [[ -n "$file" ]]; then
+                vault_validate "$file" "$password_file"
+            else
+                _vault_menu_validate
+            fi
+            ;;
+        status)
+            vault_show_status "$password_file"
+            ;;
+        backup)
+            vault_backup "$1"
+            ;;
+        restore)
+            vault_restore "$1"
+            ;;
+        diff)
+            vault_diff "$1"
+            ;;
+        help|--help|-h)
+            _vault_cli_usage
+            ;;
+        "")
+            _vault_cli_usage
+            exit 1
+            ;;
+        *)
+            print_error "Unknown command: $cmd"
+            _vault_cli_usage
+            exit 1
+            ;;
+    esac
+}
+
+# Run CLI if executed directly (not sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Minimal fallbacks if dependencies not available
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    if [[ -z "${_UI_UTILS_LOADED:-}" ]]; then
+        RED='\033[0;31m'
+        GREEN='\033[0;32m'
+        YELLOW='\033[1;33m'
+        BLUE='\033[0;34m'
+        NC='\033[0m'
+        print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+        print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+        print_warning() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+        print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+        print_header() { echo -e "${BLUE}═══${NC} $1"; }
+        print_section() { echo -e "\n$1\n"; }
+        prompt_confirm() { read -p "$1 (y/N): " -n 1 -r; echo; [[ $REPLY =~ ^[Yy]$ ]]; }
+        prompt_input() { local v; read -p "$1: " v; echo "$v"; }
+        prompt_password() { local v; read -s -p "$1: " v; echo; echo "$v"; }
+    fi
+    if [[ -z "${_SECURITY_LOADED:-}" ]]; then
+        security_check_vault_permissions() {
+            local f="$1"
+            if [[ -f "$f" ]]; then
+                chmod 600 "$f" 2>/dev/null || true
+            fi
+        }
+    fi
+    _vault_cli_main "$@"
+fi

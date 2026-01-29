@@ -75,15 +75,16 @@ install-test-deps:
 	@echo "Installing molecule via pipx (PEP 668 compliant)..."
 	pipx install molecule || pipx upgrade molecule
 	pipx inject molecule molecule-plugins[docker] pytest-testinfra ansible
-	@echo "Installing required Ansible collections..."
-	ansible-galaxy collection install ansible.posix community.general community.docker --force
+	@echo "Installing required Ansible collections to ~/.ansible/collections..."
+	@mkdir -p ~/.ansible/collections
+	~/.local/share/pipx/venvs/molecule/bin/ansible-galaxy collection install ansible.posix community.general community.docker -p ~/.ansible/collections --force
 	@echo "Done! Run 'pipx ensurepath' if molecule command is not found."
 
 test:
-	@./scripts/test-all-roles.sh
+	@bash scripts/lib/testing.sh test-all
 
 test-all:
-	@./scripts/test-all-roles.sh
+	@bash scripts/lib/testing.sh test-all
 
 test-role:
 ifndef ROLE
@@ -91,7 +92,7 @@ ifndef ROLE
 	@echo "Usage: make test-role ROLE=<role-name> [CMD=<molecule-command>]"
 	@exit 1
 endif
-	@./scripts/test-single-role.sh $(ROLE) $(CMD)
+	@bash scripts/lib/testing.sh test-role $(ROLE) $(CMD)
 
 lint:
 	@echo "Running ansible-lint..."
@@ -214,28 +215,28 @@ ui-uptime:
 
 vault-init:
 	@echo "Initializing Ansible Vault..."
-	@bash scripts/vault.sh init
+	@bash scripts/lib/vault_mgr.sh init
 
 vault-edit:
 	@echo "Editing vault file..."
-	@bash scripts/vault.sh edit $(or $(FILE),group_vars/vault.yml)
+	@bash scripts/lib/vault_mgr.sh edit $(or $(FILE),group_vars/vault.yml)
 
 vault-view:
-	@bash scripts/vault.sh view $(or $(FILE),group_vars/vault.yml)
+	@bash scripts/lib/vault_mgr.sh view $(or $(FILE),group_vars/vault.yml)
 
 vault-encrypt:
 	@echo "Encrypting file: $(FILE)..."
-	@bash scripts/vault.sh create $(FILE)
+	@bash scripts/lib/vault_mgr.sh encrypt $(FILE)
 
 vault-rekey:
 	@echo "Changing vault password..."
-	@bash scripts/vault.sh rekey --all
+	@bash scripts/lib/vault_mgr.sh rekey --all
 
 vault-status:
-	@bash scripts/vault.sh status
+	@bash scripts/lib/vault_mgr.sh status
 
 vault-validate:
-	@bash scripts/vault.sh validate
+	@bash scripts/lib/vault_mgr.sh validate
 
 ##@ Status & Information
 

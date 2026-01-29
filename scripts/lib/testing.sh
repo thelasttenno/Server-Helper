@@ -63,25 +63,23 @@ testing_install_dependencies() {
         needs_install=1
     fi
 
-    # Install collections in molecule's pipx venv
+    # Install collections to ~/.ansible/collections (molecule's first search path)
+    # This MUST be done before running molecule as it checks collections before installing
+    local collections_dir="$HOME/.ansible/collections"
+    mkdir -p "$collections_dir"
+
+    # Use molecule's ansible-galaxy to ensure compatibility
     local molecule_venv="$HOME/.local/share/pipx/venvs/molecule"
-    if [[ -d "$molecule_venv" ]]; then
-        local galaxy_bin="$molecule_venv/bin/ansible-galaxy"
-        if [[ -x "$galaxy_bin" ]]; then
-            if ! "$galaxy_bin" collection list 2>/dev/null | grep -q "ansible.posix"; then
-                print_info "Installing Ansible collections in molecule venv..."
-                "$galaxy_bin" collection install ansible.posix community.general community.docker --force
-                needs_install=1
-            fi
-        fi
+    local galaxy_bin="ansible-galaxy"
+    if [[ -x "$molecule_venv/bin/ansible-galaxy" ]]; then
+        galaxy_bin="$molecule_venv/bin/ansible-galaxy"
     fi
 
-    # Also install system-wide for ansible-lint etc
-    if command -v ansible-galaxy &>/dev/null; then
-        if ! ansible-galaxy collection list 2>/dev/null | grep -q "ansible.posix"; then
-            print_info "Installing Ansible collections system-wide..."
-            ansible-galaxy collection install ansible.posix community.general community.docker --force 2>/dev/null || true
-        fi
+    if ! "$galaxy_bin" collection list 2>/dev/null | grep -q "ansible.posix"; then
+        print_info "Installing Ansible collections to ~/.ansible/collections..."
+        "$galaxy_bin" collection install ansible.posix community.general community.docker \
+            -p "$collections_dir" --force
+        needs_install=1
     fi
 
     if [[ $needs_install -eq 1 ]]; then
@@ -455,3 +453,87 @@ testing_show_menu() {
         esac
     done
 }
+
+# =============================================================================
+# CLI Interface (when run directly)
+# =============================================================================
+
+_testing_cli_usage() {
+    echo "Usage: $0 <command> [args]"
+    echo
+    echo "Commands:"
+    echo "  test-all              Run Molecule tests for all roles"
+    echo "  test-role <role>      Run Molecule test for specific role"
+    echo "  list                  List all testable roles"
+    echo "  install-deps          Install test dependencies"
+    echo "  help                  Show this help"
+    echo
+    echo "Examples:"
+    echo "  $0 test-all"
+    echo "  $0 test-role common"
+    echo "  $0 test-role common converge"
+    echo
+}
+
+_testing_cli_main() {
+    local cmd="${1:-}"
+    shift 2>/dev/null || true
+
+    case "$cmd" in
+        test-all|all)
+            testing_run_all
+            ;;
+        test-role|role|test)
+            local role="${1:-}"
+            local molecule_cmd="${2:-test}"
+            if [[ -z "$role" ]]; then
+                echo "Error: No role specified"
+                echo "Usage: $0 test-role <role-name> [molecule-command]"
+                echo
+                echo "Available roles:"
+                testing_list_roles
+                exit 1
+            fi
+            testing_check_dependencies || exit 1
+            testing_run_role "$role" "$molecule_cmd"
+            ;;
+        list)
+            testing_list_roles
+            ;;
+        install-deps|deps)
+            testing_install_dependencies
+            ;;
+        help|--help|-h)
+            _testing_cli_usage
+            ;;
+        "")
+            _testing_cli_usage
+            exit 1
+            ;;
+        *)
+            echo "Error: Unknown command: $cmd"
+            _testing_cli_usage
+            exit 1
+            ;;
+    esac
+}
+
+# Run CLI if executed directly (not sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Minimal fallbacks if ui_utils not available
+    if [[ -z "${_UI_UTILS_LOADED:-}" ]]; then
+        RED='\033[0;31m'
+        GREEN='\033[0;32m'
+        YELLOW='\033[1;33m'
+        BLUE='\033[0;34m'
+        BOLD='\033[1m'
+        NC='\033[0m'
+        print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+        print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+        print_warning() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+        print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+        print_header() { echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"; echo -e "${BLUE}  $1${NC}"; echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"; }
+        print_section() { echo -e "${BOLD}$1${NC}"; }
+    fi
+    _testing_cli_main "$@"
+fi
