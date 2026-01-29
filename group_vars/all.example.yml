@@ -134,6 +134,18 @@ traefik_docker_network: "traefik-public"
 # Let's Encrypt ACME email
 traefik_acme_email: "admin@{{ target_domain }}"
 
+# DNS configuration for Pi-hole upstream servers
+target_dns:
+  upstream_servers:
+    - "1.1.1.1"    # Cloudflare primary
+    - "1.0.0.1"    # Cloudflare secondary
+  # Alternative DNS providers:
+  # Google: 8.8.8.8, 8.8.4.4
+  # Quad9: 9.9.9.9, 149.112.112.112
+
+# Notification email for security alerts (fail2ban, lynis, etc.)
+target_notification_email: "admin@{{ target_domain }}"
+
 # Pi-hole custom DNS records
 pihole_custom_dns_records:
   - hostname: "control.{{ target_domain }}"

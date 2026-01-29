@@ -34,9 +34,9 @@ stack: [Ansible 2.14+, Docker CE, Ubuntu 24.04, Traefik v3, Authentik, Step-CA, 
 5. inventory/hosts.yml inline - Connection: SSH, ports, LXC skip flags
 
 ## Naming
-- global_vars: target_* (target_domain, target_timezone)
+- global_vars: target_* (target_domain, target_timezone, target_dns, target_notification_email)
 - control_services: control_* (control_traefik, control_grafana)
-- secrets: vault_{service}_{secret}
+- secrets: vault_{service}_{secret} or vault_{service}_credentials (nested)
 - lxc_flags: {feature}_skip (lvm_skip, swap_skip, qemu_agent_skip)
 - docker_paths: /opt/stacks/{service}/
 - docker_network: traefik-public

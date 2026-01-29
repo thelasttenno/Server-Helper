@@ -197,6 +197,86 @@ with open('$file', 'w') as f:
 }
 
 # =============================================================================
+# Auto-Detection Functions
+# =============================================================================
+
+# Auto-detect primary IP address (for control node)
+config_detect_ip() {
+    local ip=""
+
+    # Try to get IP from default route interface
+    if command -v ip &>/dev/null; then
+        ip=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[0-9.]+' | head -1)
+    fi
+
+    # Fallback: try hostname -I
+    if [[ -z "$ip" ]] && command -v hostname &>/dev/null; then
+        ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    fi
+
+    # Fallback: check common interfaces
+    if [[ -z "$ip" ]]; then
+        for iface in eth0 ens18 ens192 enp0s3; do
+            if ip addr show "$iface" &>/dev/null; then
+                ip=$(ip addr show "$iface" 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1)
+                [[ -n "$ip" ]] && break
+            fi
+        done
+    fi
+
+    echo "${ip:-192.168.1.10}"
+}
+
+# Auto-detect system timezone
+config_detect_timezone() {
+    local tz=""
+
+    # Try timedatectl (systemd)
+    if command -v timedatectl &>/dev/null; then
+        tz=$(timedatectl show --property=Timezone --value 2>/dev/null)
+    fi
+
+    # Fallback: /etc/timezone
+    if [[ -z "$tz" ]] && [[ -f /etc/timezone ]]; then
+        tz=$(cat /etc/timezone 2>/dev/null)
+    fi
+
+    # Fallback: readlink /etc/localtime
+    if [[ -z "$tz" ]] && [[ -L /etc/localtime ]]; then
+        tz=$(readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||')
+    fi
+
+    echo "${tz:-UTC}"
+}
+
+# Auto-detect current username for ansible
+config_detect_user() {
+    echo "${SUDO_USER:-${USER:-ansible}}"
+}
+
+# Auto-detect domain from hostname (or use default)
+config_detect_domain() {
+    local domain=""
+
+    # Try to get domain from hostname -d
+    if command -v hostname &>/dev/null; then
+        domain=$(hostname -d 2>/dev/null)
+    fi
+
+    # Fallback: get FQDN and extract domain
+    if [[ -z "$domain" ]] || [[ "$domain" == "(none)" ]]; then
+        local fqdn
+        fqdn=$(hostname -f 2>/dev/null || echo "")
+        if [[ "$fqdn" == *.* ]]; then
+            domain=$(echo "$fqdn" | cut -d. -f2-)
+        fi
+    fi
+
+    # Use local if still empty
+    echo "${domain:-local}"
+}
+
+# =============================================================================
 # Domain Configuration
 # =============================================================================
 
@@ -295,6 +375,92 @@ config_set_ansible_user() {
     fi
 
     config_set "$CONFIG_ALL_YML" "ansible_user" "$user"
+}
+
+# =============================================================================
+# DNS Configuration
+# =============================================================================
+
+# Get DNS upstream servers
+config_get_dns_servers() {
+    config_get "$CONFIG_ALL_YML" "target_dns.upstream_servers"
+}
+
+# Set DNS upstream servers (expects YAML list format)
+config_set_dns_servers() {
+    local servers="$1"
+
+    if [[ -z "$servers" ]]; then
+        print_error "DNS servers are required"
+        return 1
+    fi
+
+    config_set "$CONFIG_ALL_YML" "target_dns.upstream_servers" "$servers"
+}
+
+# =============================================================================
+# Notification Email Configuration
+# =============================================================================
+
+# Get notification email
+config_get_notification_email() {
+    config_get "$CONFIG_ALL_YML" "target_notification_email"
+}
+
+# Set notification email
+config_set_notification_email() {
+    local email="$1"
+
+    if [[ -z "$email" ]]; then
+        print_error "Email is required"
+        return 1
+    fi
+
+    # Basic email validation
+    if ! [[ "$email" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+        print_warning "Email format may be invalid"
+    fi
+
+    config_set "$CONFIG_ALL_YML" "target_notification_email" "$email"
+}
+
+# =============================================================================
+# Backup Destination Configuration
+# =============================================================================
+
+# Get backup local path
+config_get_backup_local_path() {
+    config_get "$CONFIG_TARGETS_YML" "target_restic.destinations.local.path"
+}
+
+# Set backup local path
+config_set_backup_local_path() {
+    local path="$1"
+
+    if [[ -z "$path" ]]; then
+        print_error "Backup path is required"
+        return 1
+    fi
+
+    config_set "$CONFIG_TARGETS_YML" "target_restic.destinations.local.path" "$path"
+    config_set "$CONFIG_TARGETS_YML" "target_restic.destinations.local.enabled" "true"
+}
+
+# Get backup NAS path
+config_get_backup_nas_path() {
+    config_get "$CONFIG_TARGETS_YML" "target_restic.destinations.nas.path"
+}
+
+# Set backup NAS path
+config_set_backup_nas_path() {
+    local path="$1"
+
+    if [[ -z "$path" ]]; then
+        return 1
+    fi
+
+    config_set "$CONFIG_TARGETS_YML" "target_restic.destinations.nas.path" "$path"
+    config_set "$CONFIG_TARGETS_YML" "target_restic.destinations.nas.enabled" "true"
 }
 
 # =============================================================================
@@ -415,6 +581,130 @@ config_setup_ansible_user() {
     fi
 }
 
+# Interactive DNS setup
+config_setup_dns() {
+    print_section "DNS Configuration"
+
+    echo "Configure upstream DNS servers for Pi-hole."
+    echo "Default uses Cloudflare DNS (1.1.1.1, 1.0.0.1)."
+    echo ""
+    echo "Options:"
+    echo "  1) Cloudflare (1.1.1.1, 1.0.0.1) - Fast, privacy-focused"
+    echo "  2) Google (8.8.8.8, 8.8.4.4) - Reliable, widely used"
+    echo "  3) Quad9 (9.9.9.9, 149.112.112.112) - Security-focused"
+    echo "  4) Custom - Enter your own DNS servers"
+    echo ""
+
+    local choice
+    choice=$(prompt_input "Choose DNS provider [1-4]" "1")
+
+    local servers
+    case "$choice" in
+        1)
+            servers="[1.1.1.1, 1.0.0.1]"
+            print_success "Using Cloudflare DNS"
+            ;;
+        2)
+            servers="[8.8.8.8, 8.8.4.4]"
+            print_success "Using Google DNS"
+            ;;
+        3)
+            servers="[9.9.9.9, 149.112.112.112]"
+            print_success "Using Quad9 DNS"
+            ;;
+        4)
+            local primary secondary
+            primary=$(prompt_input "Enter primary DNS server" "1.1.1.1")
+            secondary=$(prompt_input "Enter secondary DNS server" "1.0.0.1")
+            servers="[$primary, $secondary]"
+            ;;
+        *)
+            servers="[1.1.1.1, 1.0.0.1]"
+            print_info "Using default Cloudflare DNS"
+            ;;
+    esac
+
+    config_set_dns_servers "$servers"
+}
+
+# Interactive notification email setup
+config_setup_notification_email() {
+    print_section "Notification Email Configuration"
+
+    local current_email
+    current_email=$(config_get_notification_email)
+    local current_domain
+    current_domain=$(config_get_domain)
+
+    if [[ -n "$current_email" ]]; then
+        print_info "Current notification email: $current_email"
+    fi
+
+    echo "This email receives security alerts from fail2ban and other services."
+    echo ""
+
+    local default_email="admin@${current_domain:-example.com}"
+    local email
+    email=$(prompt_input "Enter notification email" "${current_email:-$default_email}")
+
+    if [[ -n "$email" ]]; then
+        config_set_notification_email "$email"
+    fi
+}
+
+# Interactive backup destination setup
+config_setup_backup_destination() {
+    print_section "Backup Destination Configuration"
+
+    echo "Configure where backups will be stored."
+    echo ""
+    echo "Options:"
+    echo "  1) Local only - Store backups on each server locally"
+    echo "  2) NAS/S3 - Store backups on a NAS or S3-compatible storage"
+    echo "  3) Both - Local + NAS for redundancy"
+    echo ""
+
+    local choice
+    choice=$(prompt_input "Choose backup destination [1-3]" "1")
+
+    case "$choice" in
+        1)
+            local local_path
+            local_path=$(prompt_input "Enter local backup path" "/opt/server-helper/backups/restic")
+            config_set_backup_local_path "$local_path"
+            print_success "Local backups enabled at: $local_path"
+            ;;
+        2)
+            print_info "NAS/S3 backup requires additional configuration."
+            local nas_path
+            nas_path=$(prompt_input "Enter NAS/S3 repository URL" "s3:http://nas.local:9000/backups")
+            if [[ -n "$nas_path" ]]; then
+                config_set_backup_nas_path "$nas_path"
+                print_success "NAS backups enabled"
+                print_warning "Remember to configure vault_nas_credentials and vault_restic_passwords.nas"
+            fi
+            ;;
+        3)
+            local local_path
+            local_path=$(prompt_input "Enter local backup path" "/opt/server-helper/backups/restic")
+            config_set_backup_local_path "$local_path"
+            print_success "Local backups enabled at: $local_path"
+
+            local nas_path
+            nas_path=$(prompt_input "Enter NAS/S3 repository URL" "s3:http://nas.local:9000/backups")
+            if [[ -n "$nas_path" ]]; then
+                config_set_backup_nas_path "$nas_path"
+                print_success "NAS backups enabled"
+                print_warning "Remember to configure vault_nas_credentials and vault_restic_passwords.nas"
+            fi
+            ;;
+        *)
+            print_info "Using default local backup path"
+            config_set_backup_local_path "/opt/server-helper/backups/restic"
+            ;;
+    esac
+}
+
 # Full interactive setup wizard
 config_wizard() {
     print_header "Configuration Wizard"
@@ -448,6 +738,30 @@ config_wizard() {
 
     # Ansible user
     config_setup_ansible_user
+
+    # Network settings
+    print_section "Network Settings"
+
+    # DNS configuration
+    if prompt_confirm "Configure DNS servers for Pi-hole?"; then
+        config_setup_dns
+    else
+        print_info "Using default DNS (Cloudflare: 1.1.1.1, 1.0.0.1)"
+    fi
+
+    # Notification email
+    if prompt_confirm "Configure notification email for security alerts?"; then
+        config_setup_notification_email
+    fi
+
+    # Backup settings
+    print_section "Backup Settings"
+
+    if prompt_confirm "Configure backup destinations?"; then
+        config_setup_backup_destination
+    else
+        print_info "Using default local backup path"
+    fi
 
     # Service configuration
     print_section "Service Configuration"
@@ -484,11 +798,259 @@ config_wizard() {
     echo "  - vault_step_ca_password (for certificate authority)"
     echo "  - vault_control_grafana_password (for Grafana admin)"
     echo "  - vault_authentik_credentials (for SSO)"
+    echo "  - vault_restic_passwords (for backups)"
     echo ""
     print_info "Edit group_vars/vault.yml and run: ./scripts/vault.sh encrypt"
+    print_info "Or use: Extras menu -> Configure Secrets"
 
     print_success "Configuration complete!"
     print_info "Run 'make deploy' to apply the configuration"
+}
+
+# =============================================================================
+# Quick Setup (Minimal Interaction)
+# =============================================================================
+
+# Quick setup with auto-detection and sensible defaults
+# Only requires: domain and target server IPs
+config_quick_setup() {
+    print_header "Quick Setup (Auto-Configuration)"
+
+    # Initialize config files if needed
+    if ! config_check_files &>/dev/null; then
+        config_init
+    fi
+
+    print_info "Auto-detecting system configuration..."
+    echo ""
+
+    # Auto-detect settings
+    local detected_ip detected_tz detected_user detected_domain
+    detected_ip=$(config_detect_ip)
+    detected_tz=$(config_detect_timezone)
+    detected_user=$(config_detect_user)
+    detected_domain=$(config_detect_domain)
+
+    print_success "Detected Control Node IP: $detected_ip"
+    print_success "Detected Timezone: $detected_tz"
+    print_success "Detected User: $detected_user"
+    print_success "Detected Domain: $detected_domain"
+    echo ""
+
+    # Only prompt for domain (most likely to need customization)
+    print_section "Domain Configuration"
+    local domain
+    domain=$(prompt_input "Enter your domain (or press Enter to accept)" "${detected_domain}")
+    domain="${domain:-$detected_domain}"
+
+    # Apply all settings
+    print_section "Applying Configuration"
+
+    config_set_domain "$domain"
+    config_set_control_ip "$detected_ip"
+    config_set_timezone "$detected_tz"
+    config_set_ansible_user "$detected_user"
+    config_set_dns_servers "[1.1.1.1, 1.0.0.1]"
+    config_set_notification_email "admin@${domain}"
+    config_set_backup_local_path "/opt/server-helper/backups/restic"
+
+    # Enable all recommended services
+    print_section "Enabling Services"
+    config_enable_feature "control_traefik.enabled"
+    config_enable_feature "control_grafana.enabled"
+    config_enable_feature "control_loki.enabled"
+    config_enable_feature "control_netdata.enabled"
+    config_enable_feature "control_step_ca.enabled"
+    config_enable_feature "control_dns.enabled"
+    config_enable_feature "control_uptime_kuma.enabled"
+    config_enable_feature "target_netdata.enabled"
+    config_enable_feature "target_dockge.enabled"
+
+    print_success "All services enabled"
+
+    # Auto-generate secrets
+    if prompt_confirm "Auto-generate all service passwords?"; then
+        config_auto_generate_secrets
+    fi
+
+    echo ""
+    print_success "Quick setup complete!"
+    print_info "Configuration summary:"
+    echo "  Domain:     $domain"
+    echo "  Control IP: $detected_ip"
+    echo "  Timezone:   $detected_tz"
+    echo "  User:       $detected_user"
+    echo ""
+}
+
+# Auto-generate all secrets and write to vault
+config_auto_generate_secrets() {
+    print_section "Auto-Generating Secrets"
+
+    local password_file="${VAULT_PASSWORD_FILE:-.vault_password}"
+
+    # Create vault password if it doesn't exist
+    if [[ ! -f "$password_file" ]]; then
+        print_info "Creating vault password file..."
+        openssl rand -base64 32 > "$password_file"
+        chmod 600 "$password_file"
+        print_success "Created: $password_file"
+    fi
+
+    # Generate all secrets
+    local netdata_key grafana_pass pihole_pass traefik_pass dockge_pass
+    local uptime_kuma_pass restic_pass stepca_pass
+    local authentik_admin authentik_secret authentik_pg
+
+    netdata_key=$(_generate_password 32)
+    grafana_pass=$(_generate_password 16)
+    pihole_pass=$(_generate_password 16)
+    traefik_pass=$(_generate_password 16)
+    dockge_pass=$(_generate_password 16)
+    uptime_kuma_pass=$(_generate_password 16)
+    restic_pass=$(_generate_password 32)
+    stepca_pass=$(_generate_password 24)
+    authentik_admin=$(_generate_password 16)
+    authentik_secret=$(_generate_password 64)
+    authentik_pg=$(_generate_password 24)
+
+    # Write to vault file (unencrypted first)
+    cat > "$CONFIG_VAULT_YML" << EOF
+---
+# Server Helper Vault (Auto-generated)
+# =====================================
+# Generated: $(date '+%Y-%m-%d %H:%M:%S')
+# Encrypt with: ansible-vault encrypt group_vars/vault.yml
+
+# NAS Credentials (configure if using NAS backups)
+vault_nas_credentials:
+  - username: "backup_user"
+    password: ""
+
+# Backup Passwords (Restic)
+vault_restic_passwords:
+  nas: ""
+  local: "$restic_pass"
+
+# Cloud Provider Credentials (optional)
+vault_aws_credentials:
+  access_key: ""
+  secret_key: ""
+
+# Dockge Credentials
+vault_dockge_credentials:
+  username: "admin"
+  password: "$dockge_pass"
+
+# Authentik (SSO/Identity Provider)
+vault_authentik_credentials:
+  admin_password: "$authentik_admin"
+  secret_key: "$authentik_secret"
+  postgres_password: "$authentik_pg"
+
+# Grafana OIDC (configure after Authentik setup)
+vault_grafana_oidc:
+  client_id: "grafana"
+  client_secret: ""
+
+# Grafana Admin
+vault_control_grafana_password: "$grafana_pass"
+
+# Uptime Kuma
+vault_uptime_kuma_credentials:
+  username: "admin"
+  password: "$uptime_kuma_pass"
+
+# Step-CA (Certificate Authority)
+vault_step_ca_password: "$stepca_pass"
+
+# Pi-hole
+vault_pihole_password: "$pihole_pass"
+
+# Traefik Dashboard
+vault_traefik_dashboard:
+  username: "admin"
+  password: "$traefik_pass"
+
+# Netdata Streaming API Key
+vault_netdata_stream_api_key: "$netdata_key"
+EOF
+
+    print_success "Generated all secrets in $CONFIG_VAULT_YML"
+
+    # Encrypt the vault
+    print_info "Encrypting vault..."
+    if ansible-vault encrypt "$CONFIG_VAULT_YML" --vault-password-file="$password_file" 2>/dev/null; then
+        print_success "Vault encrypted successfully"
+    else
+        print_warning "Could not encrypt vault - please run: ansible-vault encrypt group_vars/vault.yml"
+    fi
+
+    # Show generated passwords for user to save
+    echo ""
+    print_warning "SAVE THESE PASSWORDS SECURELY!"
+    echo "─────────────────────────────────────────"
+    echo "Grafana Admin:      $grafana_pass"
+    echo "Pi-hole:            $pihole_pass"
+    echo "Traefik Dashboard:  $traefik_pass"
+    echo "Dockge:             $dockge_pass"
+    echo "Uptime Kuma:        $uptime_kuma_pass"
+    echo "Authentik Admin:    $authentik_admin"
+    echo "Step-CA:            $stepca_pass"
+    echo "Restic Backup:      $restic_pass"
+    echo "─────────────────────────────────────────"
+    echo ""
+
+    if prompt_confirm "Save passwords to file? (passwords.txt)"; then
+        cat > passwords.txt << EOF
+# Server Helper Passwords
+# Generated: $(date '+%Y-%m-%d %H:%M:%S')
+# DELETE THIS FILE AFTER SAVING PASSWORDS SECURELY!
+
+Grafana Admin:      $grafana_pass
+Pi-hole:            $pihole_pass
+Traefik Dashboard:  $traefik_pass
+Dockge:             $dockge_pass
+Uptime Kuma:        $uptime_kuma_pass
+Authentik Admin:    $authentik_admin
+Step-CA:            $stepca_pass
+Restic Backup:      $restic_pass
+Netdata API Key:    $netdata_key
+EOF
+        chmod 600 passwords.txt
+        print_success "Passwords saved to passwords.txt"
+        print_warning "DELETE this file after saving passwords to a password manager!"
+    fi
+}
+
+# Choose setup mode
+config_choose_setup_mode() {
+    print_header "Configuration Setup"
+    echo ""
+    echo "Choose setup mode:"
+    echo ""
+    echo "  1) Quick Setup    - Auto-detect settings, minimal prompts"
+    echo "                      Best for: Getting started quickly"
+    echo ""
+    echo "  2) Advanced Setup - Step-by-step configuration wizard"
+    echo "                      Best for: Customizing every option"
+    echo ""
+
+    local choice
+    choice=$(prompt_input "Choose setup mode [1-2]" "1")
+
+    case "$choice" in
+        1)
+            config_quick_setup
+            ;;
+        2)
+            config_wizard
+            ;;
+        *)
+            print_info "Defaulting to quick setup"
+            config_quick_setup
+            ;;
+    esac
 }
 
 # =============================================================================
@@ -701,18 +1263,50 @@ config_setup_secrets() {
         print_success "Uptime Kuma password: configured"
     fi
 
-    # Restic Backup Password
+    # Restic Backup Password (Local)
     print_section "Restic Backups"
     local restic_pass
     restic_pass=$(_vault_get "vault_restic_passwords.local")
     if _vault_is_placeholder "$restic_pass"; then
-        print_warning "Restic backup password needs configuration"
-        if new_value=$(config_prompt_secret "Restic Password" "Encryption password for backups" "" "true"); then
+        print_warning "Restic local backup password needs configuration"
+        if new_value=$(config_prompt_secret "Restic Local Password" "Encryption password for local backups" "" "true"); then
             temp_values+="restic_pass=$new_value\n"
             changes_made=true
         fi
     else
-        print_success "Restic password: configured"
+        print_success "Restic local password: configured"
+    fi
+
+    # Restic NAS Password (optional)
+    local restic_nas_pass
+    restic_nas_pass=$(_vault_get "vault_restic_passwords.nas")
+    if _vault_is_placeholder "$restic_nas_pass"; then
+        if prompt_confirm "Configure NAS backup password?"; then
+            if new_value=$(config_prompt_secret "Restic NAS Password" "Encryption password for NAS backups" "" "true"); then
+                temp_values+="restic_nas_pass=$new_value\n"
+                changes_made=true
+            fi
+        fi
+    else
+        print_success "Restic NAS password: configured"
+    fi
+
+    # NAS Credentials (optional)
+    print_section "NAS Credentials (Optional)"
+    local nas_user
+    nas_user=$(_vault_get "vault_nas_credentials.0.username")
+    if [[ -z "$nas_user" ]] || [[ "$nas_user" == "backup_user" ]]; then
+        if prompt_confirm "Configure NAS/S3 access credentials?"; then
+            local nas_username
+            nas_username=$(prompt_input "NAS/S3 username" "backup_user")
+            if new_value=$(config_prompt_secret "NAS/S3 Password" "Access password for NAS or S3 storage" "" "true"); then
+                temp_values+="nas_user=$nas_username\n"
+                temp_values+="nas_pass=$new_value\n"
+                changes_made=true
+            fi
+        fi
+    else
+        print_success "NAS credentials: configured"
     fi
 
     # Step-CA Password
@@ -768,14 +1362,17 @@ config_setup_secrets() {
                     netdata_key) echo "vault_netdata_stream_api_key: \"$value\"" ;;
                     grafana_pass) echo "vault_control_grafana_password: \"$value\"" ;;
                     pihole_pass) echo "vault_pihole_password: \"$value\"" ;;
-                    traefik_pass) echo "vault_traefik_dashboard.password: \"$value\"" ;;
-                    dockge_pass) echo "vault_dockge_credentials.password: \"$value\"" ;;
-                    uptime_kuma_pass) echo "vault_uptime_kuma_credentials.password: \"$value\"" ;;
-                    restic_pass) echo "vault_restic_passwords.local: \"$value\"" ;;
+                    traefik_pass) echo "vault_traefik_dashboard:" ; echo "  password: \"$value\"" ;;
+                    dockge_pass) echo "vault_dockge_credentials:" ; echo "  password: \"$value\"" ;;
+                    uptime_kuma_pass) echo "vault_uptime_kuma_credentials:" ; echo "  password: \"$value\"" ;;
+                    restic_pass) echo "vault_restic_passwords:" ; echo "  local: \"$value\"" ;;
+                    restic_nas_pass) echo "  nas: \"$value\"" ;;
+                    nas_user) echo "vault_nas_credentials:" ; echo "  - username: \"$value\"" ;;
+                    nas_pass) echo "    password: \"$value\"" ;;
                     stepca_pass) echo "vault_step_ca_password: \"$value\"" ;;
-                    authentik_admin) echo "vault_authentik_credentials.admin_password: \"$value\"" ;;
-                    authentik_secret) echo "vault_authentik_credentials.secret_key: \"$value\"" ;;
-                    authentik_pg) echo "vault_authentik_credentials.postgres_password: \"$value\"" ;;
+                    authentik_admin) echo "vault_authentik_credentials:" ; echo "  admin_password: \"$value\"" ;;
+                    authentik_secret) echo "  secret_key: \"$value\"" ;;
+                    authentik_pg) echo "  postgres_password: \"$value\"" ;;
                 esac
             fi
         done

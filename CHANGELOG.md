@@ -5,6 +5,63 @@ All notable changes to Server Helper will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+#### Configuration Wizard Enhancements
+
+- **Quick Setup Mode**: New auto-configuration option with minimal prompts
+  - Auto-detects control node IP address from default route
+  - Auto-detects system timezone from timedatectl/localtime
+  - Auto-detects current user for Ansible
+  - Auto-detects domain from hostname
+  - Single-command setup with sensible defaults
+
+- **Auto-Generate Secrets**: One-click password generation for all services
+  - Generates secure passwords for Grafana, Pi-hole, Traefik, Dockge, Uptime Kuma, Authentik, Step-CA, Restic
+  - Auto-encrypts vault with ansible-vault
+  - Optionally saves passwords to file for user backup
+
+- **DNS Configuration**: New `target_dns` variable for Pi-hole upstream servers
+  - Cloudflare, Google, Quad9 presets
+  - Custom DNS server option
+  - Interactive setup in config wizard
+
+- **Notification Email**: New `target_notification_email` variable
+  - Used for fail2ban and security alerts
+  - Configurable via wizard
+
+- **Backup Destination Configuration**: Interactive backup setup
+  - Local-only, NAS/S3, or both options
+  - Configures `target_restic.destinations` automatically
+
+#### Config Manager Functions
+
+- `config_detect_ip()` - Auto-detect primary IP from default route
+- `config_detect_timezone()` - Auto-detect system timezone
+- `config_detect_user()` - Auto-detect current username
+- `config_detect_domain()` - Auto-detect domain from hostname
+- `config_get/set_dns_servers()` - DNS upstream management
+- `config_get/set_notification_email()` - Email configuration
+- `config_get/set_backup_local_path()` - Local backup path
+- `config_get/set_backup_nas_path()` - NAS backup path
+- `config_setup_dns()` - Interactive DNS wizard
+- `config_setup_notification_email()` - Interactive email wizard
+- `config_setup_backup_destination()` - Interactive backup wizard
+- `config_quick_setup()` - Minimal-interaction setup
+- `config_auto_generate_secrets()` - Auto-generate all vault secrets
+- `config_choose_setup_mode()` - Choose between quick and advanced setup
+
+### Changed
+
+- Config wizard now offers network settings (DNS, notification email)
+- Config wizard now offers backup destination configuration
+- Secrets setup includes NAS credentials and separate local/NAS restic passwords
+- Vault structure updated for nested credentials (traefik, dockge, uptime_kuma, authentik)
+
+---
+
 ## [2.0.0] - 2025-01-29
 
 ### Major Release - Complete Architecture Rewrite

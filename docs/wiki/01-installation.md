@@ -61,11 +61,22 @@ cd server-helper
 ./setup.sh
 ```
 
-The setup wizard will:
-1. Install Ansible and dependencies
-2. Guide you through configuration
-3. Test connectivity to targets
-4. Optionally run the deployment
+The setup wizard offers two modes:
+
+**Quick Setup** (recommended for getting started):
+
+- Auto-detects control node IP, timezone, username, and domain
+- Configures sensible defaults for all services
+- Optionally auto-generates all service passwords
+- Minimal prompts - just confirm detected values
+
+**Advanced Setup** (for full customization):
+
+- Step-by-step configuration wizard
+- DNS server selection (Cloudflare, Google, Quad9, or custom)
+- Notification email configuration
+- Backup destination setup (local, NAS/S3, or both)
+- Individual service toggles
 
 ### Option 2: Manual Setup
 
@@ -226,31 +237,49 @@ grafana_enabled: true
 
 ### Step 4: Configure Secrets
 
-Edit `group_vars/vault.yml`:
+Edit `group_vars/vault.yml` manually, or use the setup wizard to auto-generate:
 
 ```yaml
-# Restic backup
-vault_restic_password: "your-secure-password"
-vault_restic_aws_access_key: "minio-access-key"
-vault_restic_aws_secret_key: "minio-secret-key"
-
 # Netdata streaming
 vault_netdata_stream_api_key: "generate-with-uuidgen"
 
 # Grafana
-vault_grafana_admin_password: "grafana-admin-password"
+vault_control_grafana_password: "grafana-admin-password"
 
 # Pi-hole
-vault_pihole_web_password: "pihole-password"
+vault_pihole_password: "pihole-password"
 
 # Step-CA
-vault_step_ca_provisioner_password: "step-ca-password"
+vault_step_ca_password: "step-ca-password"
 
 # Authentik
-vault_authentik_secret_key: "generate-64-char-hex"
-vault_authentik_postgres_password: "postgres-password"
-vault_authentik_admin_password: "authentik-admin-password"
+vault_authentik_credentials:
+  admin_password: "authentik-admin-password"
+  secret_key: "generate-64-char-hex"
+  postgres_password: "postgres-password"
+
+# Restic backup passwords
+vault_restic_passwords:
+  local: "local-backup-password"
+  nas: "nas-backup-password"  # if using NAS
+
+# Traefik dashboard
+vault_traefik_dashboard:
+  username: "admin"
+  password: "traefik-password"
+
+# Dockge
+vault_dockge_credentials:
+  username: "admin"
+  password: "dockge-password"
+
+# Uptime Kuma
+vault_uptime_kuma_credentials:
+  username: "admin"
+  password: "uptime-kuma-password"
 ```
+
+**Tip:** Run `./setup.sh` and select "Extras → Configure Secrets" to auto-generate all passwords.
 
 ### Step 5: Encrypt Secrets
 

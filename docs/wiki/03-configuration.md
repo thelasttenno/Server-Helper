@@ -163,6 +163,18 @@ traefik_docker_network: "traefik-public"
 # Let's Encrypt email
 traefik_acme_email: "admin@example.com"
 
+# DNS configuration for Pi-hole upstream servers
+target_dns:
+  upstream_servers:
+    - "1.1.1.1"    # Cloudflare primary
+    - "1.0.0.1"    # Cloudflare secondary
+  # Alternative DNS providers:
+  # Google: 8.8.8.8, 8.8.4.4
+  # Quad9: 9.9.9.9, 149.112.112.112
+
+# Notification email for security alerts (fail2ban, lynis, etc.)
+target_notification_email: "admin@example.com"
+
 # Pi-hole custom DNS records
 pihole_custom_dns_records:
   - hostname: "control.example.com"
@@ -187,9 +199,20 @@ pihole_custom_cname_records:
 ### Restic Backup
 
 ```yaml
-vault_restic_password: "strong-repository-password"
-vault_restic_aws_access_key: "minio-access-key"
-vault_restic_aws_secret_key: "minio-secret-key"
+# Backup passwords (separate for local and NAS)
+vault_restic_passwords:
+  local: "strong-local-password"
+  nas: "strong-nas-password"
+
+# AWS/S3 credentials (for S3-compatible storage)
+vault_aws_credentials:
+  access_key: "minio-access-key"
+  secret_key: "minio-secret-key"
+
+# NAS credentials (for NAS/SMB storage)
+vault_nas_credentials:
+  - username: "backup_user"
+    password: "nas-password"
 ```
 
 ### Netdata Streaming
@@ -202,50 +225,58 @@ vault_netdata_stream_api_key: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 ### Grafana
 
 ```yaml
-vault_grafana_admin_password: "grafana-admin-password"
+vault_control_grafana_password: "grafana-admin-password"
 
-# OAuth (after Authentik setup)
-vault_grafana_oauth_client_id: "grafana-client-id"
-vault_grafana_oauth_client_secret: "grafana-client-secret"
+# OAuth/OIDC (after Authentik setup)
+vault_grafana_oidc:
+  client_id: "grafana-client-id"
+  client_secret: "grafana-client-secret"
 ```
 
 ### Pi-hole
 
 ```yaml
-vault_pihole_web_password: "pihole-admin-password"
+vault_pihole_password: "pihole-admin-password"
 ```
 
 ### Step-CA
 
 ```yaml
-vault_step_ca_provisioner_password: "step-ca-password"
+vault_step_ca_password: "step-ca-password"
 ```
 
 ### Authentik
 
 ```yaml
-# Generate: openssl rand -hex 32
-vault_authentik_secret_key: "64-character-hex-string"
-vault_authentik_postgres_password: "postgres-password"
-vault_authentik_admin_email: "admin@example.com"
-vault_authentik_admin_password: "authentik-admin-password"
-
-# Optional: API bootstrap token
-vault_authentik_bootstrap_token: ""
+vault_authentik_credentials:
+  admin_password: "authentik-admin-password"
+  # Generate: openssl rand -hex 32
+  secret_key: "64-character-hex-string"
+  postgres_password: "postgres-password"
 ```
 
 ### Uptime Kuma
 
 ```yaml
-vault_uptime_kuma_admin_username: "admin"
-vault_uptime_kuma_admin_password: "uptime-kuma-password"
+vault_uptime_kuma_credentials:
+  username: "admin"
+  password: "uptime-kuma-password"
 ```
 
-### NAS Credentials (Optional)
+### Traefik Dashboard
 
 ```yaml
-vault_nas_username: "backup_user"
-vault_nas_password: "nas-password"
+vault_traefik_dashboard:
+  username: "admin"
+  password: "traefik-password"
+```
+
+### Dockge
+
+```yaml
+vault_dockge_credentials:
+  username: "admin"
+  password: "dockge-password"
 ```
 
 ---

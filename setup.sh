@@ -623,7 +623,9 @@ prompt_target_nodes() {
 prompt_config() {
     print_section "Configuration"
     print_info "Configure global settings..."
-    if type -t config_wizard &>/dev/null; then
+    if type -t config_choose_setup_mode &>/dev/null; then
+        config_choose_setup_mode
+    elif type -t config_wizard &>/dev/null; then
         config_wizard "$CONFIG_FILE"
     else
         print_warning "config_mgr.sh not loaded, skipping config wizard"

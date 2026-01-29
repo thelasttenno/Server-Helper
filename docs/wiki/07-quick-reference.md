@@ -2,6 +2,20 @@
 
 One-page reference for common Server Helper operations.
 
+## Setup Modes
+
+```bash
+# Run interactive setup
+./setup.sh
+
+# Choose setup mode when prompted:
+# 1) Quick Setup    - Auto-detect settings, minimal prompts
+# 2) Advanced Setup - Step-by-step configuration wizard
+
+# Auto-generate all secrets
+# (Available in setup wizard under Extras → Configure Secrets)
+```
+
 ## Deployment Commands
 
 ```bash
@@ -165,7 +179,7 @@ docker system prune -a
 | `scripts/lib/menu_extras.sh` | Extras menu functions: add server, open UI, validate, test, upgrade |
 | `scripts/lib/inventory_mgr.sh` | Inventory parsing and host management |
 | `scripts/lib/health_check.sh` | SSH, Docker, disk, memory health checks |
-| `scripts/lib/config_mgr.sh` | YAML configuration management |
+| `scripts/lib/config_mgr.sh` | YAML configuration management, auto-detection, quick setup |
 | `scripts/lib/upgrade.sh` | Docker image upgrades and service restarts |
 
 ### Library Architecture
@@ -190,6 +204,15 @@ target_domain: "example.com"
 target_timezone: "America/Vancouver"
 control_node_ip: "192.168.1.10"
 ansible_user: "ansible"
+
+# DNS configuration for Pi-hole
+target_dns:
+  upstream_servers:
+    - "1.1.1.1"
+    - "1.0.0.1"
+
+# Notification email for security alerts
+target_notification_email: "admin@example.com"
 
 # Service toggles
 restic_enabled: true
