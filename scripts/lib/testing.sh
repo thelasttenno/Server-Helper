@@ -521,21 +521,23 @@ testing_run_all() {
 
     # Find testable roles
     print_info "Finding roles with Molecule tests..."
+    print_info "Roles directory: ${_TESTING_ROLES_DIR}"
     local -a roles
-    read -ra roles <<< "$(testing_find_testable_roles)"
-
-    if [[ ${#roles[@]} -eq 0 ]]; then
+    local roles_output
+    roles_output="$(testing_find_testable_roles)"
+    if [[ -z "$roles_output" ]]; then
         print_warning "No roles with Molecule tests found"
         echo "To add tests, create: roles/<role>/molecule/default/molecule.yml"
         return 0
     fi
+    read -ra roles <<< "$roles_output"
 
     # Check if we have cached results and offer to skip passed tests
     if [[ "$force" != "force" ]] && [[ -f "$_TESTING_CACHE_FILE" ]]; then
         local cached_pass=0
         for role in "${roles[@]}"; do
             if _testing_cache_is_passed "$role"; then
-                ((cached_pass++))
+                ((cached_pass++)) || true
             fi
         done
 
