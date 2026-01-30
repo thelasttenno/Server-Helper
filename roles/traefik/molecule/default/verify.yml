@@ -5,19 +5,19 @@
   tasks:
     - name: Check stack directory exists
       ansible.builtin.stat:
-        path: /opt/stacks/traefik
+        path: "{{ traefik_stack_dir }}"
       register: stack_dir
       failed_when: not stack_dir.stat.exists
 
     - name: Check compose file exists
       ansible.builtin.stat:
-        path: /opt/stacks/traefik/compose.yaml
+        path: "{{ traefik_stack_dir }}/compose.yaml"
       register: compose_file
       failed_when: not compose_file.stat.exists
 
     - name: Check traefik.yml exists
       ansible.builtin.stat:
-        path: /opt/stacks/traefik/traefik.yml
+        path: "{{ traefik_stack_dir }}/traefik.yml"
       register: traefik_yml
       failed_when: not traefik_yml.stat.exists
 
@@ -29,6 +29,6 @@
     
     - name: Check dynamic config exists
       ansible.builtin.stat:
-        path: "/opt/Server-Helper/traefik/config/dynamic.yml" # Match your task's dest
+        path: "{{ traefik_stack_dir }}/{{ item }}/dynamic.yml" # Match your task's dest
       register: dynamic_cfg
       failed_when: not dynamic_cfg.stat.exists 
