@@ -13,6 +13,6 @@
 
     - name: Check SSH hardening config exists
       ansible.builtin.stat:
-        path: /etc/ssh/sshd_config.d/99-hardening.conf
+        path: /etc/ssh/sshd_config.d/99-server-helper.conf
       register: ssh_hardening
       failed_when: not ssh_hardening.stat.exists

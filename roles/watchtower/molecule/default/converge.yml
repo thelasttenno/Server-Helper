@@ -3,6 +3,8 @@
   hosts: all
   become: true
   vars:
+    target_watchtower:
+      enabled: true
     watchtower_skip_deploy: true
   roles:
     - role: ../../../watchtower

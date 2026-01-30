@@ -6,5 +6,6 @@
     ansible_user: root
     docker_users:
       - root
+    docker_skip_start: true
   roles:
     - role: ../../../docker

@@ -32,5 +32,8 @@ docker_default_address_pools:
 # Uses target_dockge_stacks_dir from group_vars/all.yml for consistency
 docker_stacks_dir: "{{ target_dockge_stacks_dir | default('/opt/stacks') }}"
 
+# Skip service start (for molecule testing)
+docker_skip_start: false
+
 # Create stacks directory
 docker_create_stacks_dir: true

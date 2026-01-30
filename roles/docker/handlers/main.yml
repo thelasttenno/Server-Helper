@@ -7,9 +7,11 @@
     state: restarted
     daemon_reload: true
   become: true
+  when: not docker_skip_start | default(false)
 
 - name: Reload docker
   ansible.builtin.systemd:
     name: docker
     state: reloaded
   become: true
+  when: not docker_skip_start | default(false)

@@ -7,6 +7,7 @@
     state: present
     recreate: always
   become: true
+  when: not netdata_skip_deploy | default(false)
 
 - name: Reload netdata
   community.docker.docker_container_exec:

@@ -119,6 +119,7 @@
         enabled: true
         daemon_reload: true
       become: true
+      when: not docker_skip_start | default(false)
 
     - name: Start and enable containerd
       ansible.builtin.systemd:
@@ -126,6 +127,7 @@
         state: started
         enabled: true
       become: true
+      when: not docker_skip_start | default(false)
 
     # Create stacks directory for Dockge compatibility
     - name: Create stacks directory
