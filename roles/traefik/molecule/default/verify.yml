@@ -21,8 +21,14 @@
       register: traefik_yml
       failed_when: not traefik_yml.stat.exists
 
+    # - name: Check dynamic config exists
+    #   ansible.builtin.stat:
+    #     path: /opt/stacks/traefik/config/dynamic-config.yml
+    #   register: dynamic_conf
+    #   failed_when: not dynamic_conf.stat.exists
+    
     - name: Check dynamic config exists
       ansible.builtin.stat:
-        path: /opt/stacks/traefik/config/dynamic-config.yml
-      register: dynamic_conf
-      failed_when: not dynamic_conf.stat.exists
+        path: "/opt/Server-Helper/traefik/config/dynamic.yml" # Match your task's dest
+      register: dynamic_cfg
+      failed_when: not dynamic_cfg.stat.exists 
