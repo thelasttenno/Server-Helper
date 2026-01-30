@@ -736,13 +736,12 @@ extras_show_menu() {
         echo "  4) Add Server           - Add new server to inventory"
         echo "  5) Open Service UIs     - Open web dashboards in browser"
         echo "  6) Validate Fleet       - Check connectivity and service health"
-        echo "  7) Test All Roles       - Run Molecule tests for all roles"
-        echo "  8) Test Single Role     - Run Molecule test for one role"
-        echo "  9) Back to Main Menu"
+        echo "  7) Molecule Testing     - Run and manage Ansible role tests"
+        echo "  8) Back to Main Menu"
         echo
 
         local choice
-        choice=$(prompt_input "Choose an option [1-9]")
+        choice=$(prompt_input "Choose an option [1-8]")
 
         case "$choice" in
             1)
@@ -783,14 +782,14 @@ extras_show_menu() {
                 read -p "Press Enter to continue..."
                 ;;
             7)
-                extras_test_all_roles
-                read -p "Press Enter to continue..."
+                if declare -F testing_show_menu &>/dev/null; then
+                    testing_show_menu
+                else
+                    print_warning "Testing library not loaded"
+                    read -rp "Press Enter to continue..."
+                fi
                 ;;
             8)
-                extras_test_single_role
-                read -p "Press Enter to continue..."
-                ;;
-            9)
                 if [[ -n "$return_callback" ]] && declare -F "$return_callback" &>/dev/null; then
                     "$return_callback"
                 fi
