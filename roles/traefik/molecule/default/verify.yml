@@ -29,6 +29,6 @@
     
     - name: Check dynamic config exists
       ansible.builtin.stat:
-        path: "{{ traefik_stack_dir }}/{{ item }}/dynamic.yml" # Match your task's dest
+        path: "{{ traefik_stack_dir }}/config/dynamic.yml" # Match your task's dest
       register: dynamic_cfg
       failed_when: not dynamic_cfg.stat.exists 
