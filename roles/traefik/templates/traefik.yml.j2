@@ -1,92 +1,50 @@
-# Traefik Static Configuration
-# Managed by Ansible - Server Helper
+# {{ ansible_managed }}
+# Traefik v3 static configuration
 
-global:
-  checkNewVersion: false
-  sendAnonymousUsage: false
+api:
+  dashboard: true
+  insecure: true
+
+ping: {}
 
 log:
-  level: {{ traefik_log_level }}
-  format: json
+  level: {{ control_traefik.log_level }}
 
-{% if traefik_access_log_enabled %}
 accessLog:
+  filePath: /var/log/traefik/access.log
   format: json
   filters:
     statusCodes:
-      - "400-599"
-{% endif %}
-
-api:
-  dashboard: {{ traefik_dashboard_enabled | lower }}
-{% if traefik_dashboard_insecure %}
-  insecure: true
-{% endif %}
-
-ping:
-  entryPoint: traefik
+      - "200-599"
+  bufferingSize: 100
 
 entryPoints:
-  traefik:
-    address: ":8080"
-{% for name, config in traefik_entrypoints.items() %}
-  {{ name }}:
-    address: "{{ config.address }}"
-{% if config.http is defined %}
+  web:
+    address: ":80"
     http:
-{% if config.http.redirections is defined %}
       redirections:
         entryPoint:
-          to: {{ config.http.redirections.entryPoint.to }}
-          scheme: {{ config.http.redirections.entryPoint.scheme }}
-{% endif %}
-{% if config.http.tls is defined %}
-      tls:
-{% if config.http.tls.certResolver is defined %}
-        certResolver: {{ config.http.tls.certResolver }}
-{% endif %}
-{% endif %}
-{% endif %}
-{% endfor %}
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
 
 providers:
-{% if traefik_docker_provider_enabled %}
   docker:
     endpoint: "unix:///var/run/docker.sock"
-    exposedByDefault: {{ traefik_docker_exposedbydefault | lower }}
-    network: {{ traefik_docker_network }}
-    watch: true
-{% endif %}
-{% if traefik_file_provider_enabled %}
+    exposedByDefault: false
+    network: traefik-public
   file:
-    directory: /etc/traefik/config
+    filename: /dynamic-config.yml
     watch: true
-{% endif %}
 
-{% if traefik_acme_enabled %}
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: {{ traefik_acme_email }}
-      storage: {{ traefik_acme_storage }}
-      caServer: {{ traefik_acme_ca_server }}
-{% if traefik_acme_http_challenge_enabled %}
-      httpChallenge:
-        entryPoint: web
-{% endif %}
-{% if traefik_acme_dns_challenge_enabled %}
+      email: {{ control_traefik.acme_email }}
+      storage: /acme/acme.json
       dnsChallenge:
-        provider: {{ traefik_acme_dns_provider }}
-        delayBeforeCheck: 10
-{% endif %}
-{% endif %}
-
-{% if traefik_step_ca_enabled %}
-  step-ca:
-    acme:
-      email: {{ traefik_acme_email }}
-      storage: /letsencrypt/acme-step.json
-      caServer: {{ traefik_step_ca_endpoint }}/acme/acme/directory
-      certificatesDuration: 24
-      tlsChallenge: {}
-{% endif %}
+        provider: {{ control_traefik.acme_dns_provider }}
+        resolvers:
+          - "1.1.1.1:53"
+          - "8.8.8.8:53"

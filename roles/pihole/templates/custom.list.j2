@@ -1,6 +1,24 @@
-# Custom DNS records for Pi-hole
-# Managed by Ansible - Server Helper
+# {{ ansible_managed }}
+# Pi-hole custom DNS records (A records)
 
-{% for record in pihole_custom_dns_records %}
+# --- Auto-generated from inventory ---
+{% for host in groups['all'] %}
+{{ hostvars[host]['ansible_host'] }} {{ host }}
+{{ hostvars[host]['ansible_host'] }} {{ host }}.{{ target_domain }}
+{% endfor %}
+
+# --- Service subdomains → control node ---
+{{ target_control_ip }} traefik.{{ target_domain }}
+{{ target_control_ip }} grafana.{{ target_domain }}
+{{ target_control_ip }} netdata.{{ target_domain }}
+{{ target_control_ip }} status.{{ target_domain }}
+{{ target_control_ip }} pihole.{{ target_domain }}
+{{ target_control_ip }} auth.{{ target_domain }}
+{{ target_control_ip }} step-ca.{{ target_domain }}
+{{ target_control_ip }} dockge.{{ target_domain }}
+{{ target_control_ip }} loki.{{ target_domain }}
+
+# --- Manual overrides ---
+{% for record in pihole_custom_dns_records | default([]) %}
 {{ record.ip }} {{ record.hostname }}
 {% endfor %}

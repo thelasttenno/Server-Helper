@@ -1,151 +1,92 @@
 ---
-# Docker installation tasks
+# Role: docker — Install Docker CE from official repository
 
-- name: Docker installation
-  when: docker_enabled | bool
-  block:
-    # Remove old Docker packages
-    - name: Remove old Docker packages
-      ansible.builtin.apt:
-        name:
-          - docker
-          - docker-engine
-          - docker.io
-          - containerd
-          - runc
-        state: absent
-      become: true
+- name: Install Docker prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
 
-    # Install dependencies
-    - name: Install Docker dependencies
-      ansible.builtin.apt:
-        name:
-          - ca-certificates
-          - curl
-          - gnupg
-          - lsb-release
-        state: present
-        update_cache: true
-      become: true
+- name: Add Docker GPG key
+  ansible.builtin.apt_key:
+    url: https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg
+    keyring: /etc/apt/keyrings/docker.gpg
+    state: present
 
-    # Add Docker GPG key
-    - name: Create keyrings directory
-      ansible.builtin.file:
-        path: /etc/apt/keyrings
-        state: directory
-        mode: "0755"
-      become: true
+- name: Add Docker repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch={{ ansible_architecture | replace('x86_64', 'amd64') }}
+      signed-by=/etc/apt/keyrings/docker.gpg]
+      https://download.docker.com/linux/{{ ansible_distribution | lower }}
+      {{ ansible_distribution_release }} stable
+    state: present
+    filename: docker
 
-    - name: Download Docker GPG key
-      ansible.builtin.get_url:
-        url: https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg
-        dest: /etc/apt/keyrings/docker.asc
-        mode: "0644"
-      become: true
+- name: Install Docker CE
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
 
-    # Add Docker repository
-    - name: Get architecture
-      ansible.builtin.command: dpkg --print-architecture
-      register: dpkg_arch
-      changed_when: false
+- name: Deploy Docker daemon configuration
+  ansible.builtin.template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Docker
 
-    - name: Add Docker repository
-      ansible.builtin.apt_repository:
-        repo: "deb [arch={{ dpkg_arch.stdout }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
-        filename: docker
-        state: present
-      become: true
+- name: Ensure Docker is enabled and running
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
 
-    # Install Docker packages
-    - name: Install Docker packages (latest)
-      ansible.builtin.apt:
-        name:
-          - docker-ce
-          - docker-ce-cli
-          - containerd.io
-          - docker-buildx-plugin
-          - docker-compose-plugin
-        state: present
-        update_cache: true
-      become: true
-      when: docker_version == ""
+- name: Add admin user to docker group
+  ansible.builtin.user:
+    name: "{{ target_admin_user }}"
+    groups: docker
+    append: true
+  when: target_admin_user is defined
 
-    - name: Install Docker packages (specific version)
-      ansible.builtin.apt:
-        name:
-          - "docker-ce={{ docker_version }}"
-          - "docker-ce-cli={{ docker_version }}"
-          - containerd.io
-          - docker-buildx-plugin
-          - docker-compose-plugin
-        state: present
-        update_cache: true
-      become: true
-      when: docker_version != ""
+- name: Create Docker stack base directory
+  ansible.builtin.file:
+    path: "{{ docker_stack_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
-    # Configure Docker daemon
-    - name: Create Docker config directory
-      ansible.builtin.file:
-        path: /etc/docker
-        state: directory
-        mode: "0755"
-      become: true
+- name: Deploy Docker cleanup service
+  ansible.builtin.template:
+    src: docker-cleanup.service.j2
+    dest: /etc/systemd/system/docker-cleanup.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
 
-    - name: Deploy Docker daemon configuration
-      ansible.builtin.template:
-        src: daemon.json.j2
-        dest: /etc/docker/daemon.json
-        owner: root
-        group: root
-        mode: "0644"
-      become: true
-      notify: Restart docker
+- name: Deploy Docker cleanup timer (weekly)
+  ansible.builtin.template:
+    src: docker-cleanup.timer.j2
+    dest: /etc/systemd/system/docker-cleanup.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
 
-    # Add users to docker group
-    - name: Add users to docker group
-      ansible.builtin.user:
-        name: "{{ item }}"
-        groups: docker
-        append: true
-      loop: "{{ docker_users }}"
-      become: true
-      when: docker_users | length > 0
-
-    # Ensure Docker is started and enabled
-    - name: Start and enable Docker
-      ansible.builtin.systemd:
-        name: docker
-        state: started
-        enabled: true
-        daemon_reload: true
-      become: true
-      when: not docker_skip_start | default(false)
-
-    - name: Start and enable containerd
-      ansible.builtin.systemd:
-        name: containerd
-        state: started
-        enabled: true
-      become: true
-      when: not docker_skip_start | default(false)
-
-    # Create stacks directory for Dockge compatibility
-    - name: Create stacks directory
-      ansible.builtin.file:
-        path: "{{ docker_stacks_dir }}"
-        state: directory
-        owner: root
-        group: docker
-        mode: "0775"
-      become: true
-      when: docker_create_stacks_dir | bool
-
-    # Verify Docker installation
-    - name: Verify Docker installation
-      ansible.builtin.command: docker --version
-      register: docker_version_check
-      changed_when: false
-
-    - name: Display Docker version
-      ansible.builtin.debug:
-        msg: "Docker installed: {{ docker_version_check.stdout }}"
+- name: Enable Docker cleanup timer
+  ansible.builtin.systemd:
+    name: docker-cleanup.timer
+    enabled: true
+    state: started
+    daemon_reload: true

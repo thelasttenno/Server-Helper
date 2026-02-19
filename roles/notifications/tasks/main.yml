@@ -1,0 +1,32 @@
+---
+# Role: notifications — Deploy notification scripts for multi-channel alerting
+# Called by other roles (restic, security, update) with notification_message and notification_subject
+
+- name: Create notification scripts directory
+  ansible.builtin.file:
+    path: /usr/local/lib/server-helper
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy notification dispatcher script
+  ansible.builtin.template:
+    src: notify.sh.j2
+    dest: /usr/local/bin/server-helper-notify
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy notification channel scripts
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "/usr/local/lib/server-helper/{{ item | replace('.j2', '') }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - notify-discord.sh.j2
+    - notify-telegram.sh.j2
+    - notify-slack.sh.j2
+    - notify-email.sh.j2

@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: common
+  author: Server Helper
+  description: Base system configuration — packages, chrony NTP, locale, microcode, sysctl
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bookworm
+  galaxy_tags:
+    - system
+    - common
+    - foundation
+
+dependencies: []

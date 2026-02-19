@@ -1,96 +1,39 @@
 ---
-# Authentik deployment tasks (Control Node)
+- name: Create Authentik stack directory
+  ansible.builtin.file:
+    path: "{{ docker_stack_path }}/authentik"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
-- name: Authentik deployment
-  when: authentik_enabled | bool
-  block:
-    # Create stack directory
-    - name: Create Authentik stack directory
-      ansible.builtin.file:
-        path: "{{ authentik_stack_dir }}"
-        state: directory
-        owner: root
-        group: docker
-        mode: "0755"
-      become: true
+- name: Deploy Authentik Docker Compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ docker_stack_path }}/authentik/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0640"
+  no_log: true
 
-    # Create subdirectories
-    - name: Create Authentik subdirectories
-      ansible.builtin.file:
-        path: "{{ authentik_stack_dir }}/{{ item }}"
-        state: directory
-        owner: root
-        group: docker
-        mode: "0755"
-      loop:
-        - media
-        - templates
-        - certs
-        - postgres
-        - redis
-      become: true
+- name: Deploy Authentik environment file
+  ansible.builtin.template:
+    src: authentik.env.j2
+    dest: "{{ docker_stack_path }}/authentik/.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
 
-    # Deploy environment file
-    - name: Deploy Authentik environment file
-      ansible.builtin.template:
-        src: authentik.env.j2
-        dest: "{{ authentik_stack_dir }}/.env"
-        owner: root
-        group: docker
-        mode: "0600"
-      become: true
-      no_log: true
+- name: Deploy Authentik setup guide
+  ansible.builtin.template:
+    src: setup-guide.md.j2
+    dest: "{{ docker_stack_path }}/authentik/SETUP-GUIDE.md"
+    owner: root
+    group: root
+    mode: "0644"
 
-    # Deploy docker-compose file
-    - name: Deploy Authentik docker-compose
-      ansible.builtin.template:
-        src: docker-compose.yml.j2
-        dest: "{{ authentik_stack_dir }}/compose.yaml"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
-      register: authentik_compose
-
-    # Deploy the stack
-    - name: Deploy Authentik stack
-      community.docker.docker_compose_v2:
-        project_src: "{{ authentik_stack_dir }}"
-        state: present
-        pull: always
-      become: true
-      when:
-        - not authentik_skip_deploy | default(false)
-        - authentik_compose.changed
-
-    # Ensure Authentik is running
-    - name: Ensure Authentik is running
-      community.docker.docker_compose_v2:
-        project_src: "{{ authentik_stack_dir }}"
-        state: present
-      become: true
-      when:
-        - not authentik_skip_deploy | default(false)
-        - not authentik_compose.changed
-
-    # Wait for Authentik to be ready
-    - name: Wait for Authentik to be ready
-      ansible.builtin.uri:
-        url: "http://localhost:{{ authentik_http_port }}/-/health/ready/"
-        method: GET
-        status_code: 200
-      register: authentik_health
-      until: authentik_health.status == 200
-      retries: 60
-      delay: 5
-      when: not authentik_skip_deploy | default(false)
-
-    # Deploy setup guide
-    - name: Deploy Authentik setup guide
-      ansible.builtin.template:
-        src: setup-guide.md.j2
-        dest: "{{ authentik_stack_dir }}/SETUP-GUIDE.md"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
+- name: Start Authentik
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_stack_path }}/authentik"
+    state: present

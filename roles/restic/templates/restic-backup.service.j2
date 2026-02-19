@@ -1,24 +1,14 @@
+# {{ ansible_managed }}
 [Unit]
-Description=Restic Backup Service
-Documentation=https://restic.readthedocs.io/
+Description=Restic Backup
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart={{ restic_script_dir }}/backup.sh
-Nice={{ restic_nice_level }}
-IOSchedulingClass={{ restic_ionice_class }}
-IOSchedulingPriority={{ restic_ionice_level }}
-
-# Security hardening
-PrivateTmp=true
-ProtectSystem=strict
-ReadWritePaths={{ restic_log_dir }}
-ReadOnlyPaths={{ restic_script_dir }}
-{% for path in restic_backup_paths %}
-ReadOnlyPaths={{ path }}
-{% endfor %}
-
-[Install]
-WantedBy=multi-user.target
+EnvironmentFile=/etc/restic/restic.env
+ExecStart=/usr/local/bin/restic-backup.sh
+StandardOutput=journal
+StandardError=journal
+Nice=10
+IOSchedulingClass=idle

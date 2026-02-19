@@ -1,323 +1,252 @@
-.PHONY: help setup bootstrap deploy update upgrade backup security test lint clean ui vault status
-
-# Default target
 .DEFAULT_GOAL := help
+SHELL := /bin/bash
 
-# Configuration
-INVENTORY ?= inventory/hosts.yml
-PLAYBOOK_DIR = playbooks
-ANSIBLE_OPTS ?=
-VAULT_PASSWORD_FILE ?= .vault_password
+VERSION := $(shell cat VERSION 2>/dev/null || echo "unknown")
+ANSIBLE_PLAYBOOK := ansible-playbook
+ANSIBLE_VAULT := ansible-vault
+ANSIBLE_LINT := ansible-lint
+YAMLLINT := yamllint
+MOLECULE := molecule
 
-help:
+# Colors
+CYAN := \033[36m
+GREEN := \033[32m
+YELLOW := \033[33m
+RED := \033[31m
+RESET := \033[0m
+BOLD := \033[1m
+
+# Input validation — reject shell metacharacters
+define validate_input
+$(if $(shell echo '$(2)' | grep -qE '^[a-zA-Z0-9._-]+$$' && echo ok),,$(error $(RED)SECURITY: Invalid $(1) value '$(2)'. Only [a-zA-Z0-9._-] allowed.$(RESET)))
+endef
+
+##@ General
+.PHONY: help
+help: ## Show this help message
 	@echo ""
-	@echo "Server-Helper - Available Commands"
-	@echo "===================================="
+	@echo "$(BOLD)Server Helper v$(VERSION)$(RESET)"
 	@echo ""
-	@echo "Setup & Bootstrap:"
-	@echo "  make setup                      - Run interactive setup script"
-	@echo "  make bootstrap                  - Bootstrap target servers"
-	@echo "  make bootstrap-host HOST=...    - Bootstrap specific host"
-	@echo ""
-	@echo "Deployment:"
-	@echo "  make deploy                     - Deploy to all servers (site.yml)"
-	@echo "  make deploy-targets             - Deploy to target servers only"
-	@echo "  make deploy-host HOST=...       - Deploy to specific host"
-	@echo "  make deploy-control             - Deploy to control node only"
-	@echo "  make deploy-check               - Dry run deployment"
-	@echo ""
-	@echo "Operations:"
-	@echo "  make update                     - Update all servers"
-	@echo "  make upgrade                    - Upgrade Docker images"
-	@echo "  make upgrade-service SERVICE=...- Upgrade specific service"
-	@echo "  make backup                     - Run backups"
-	@echo "  make security                   - Run security audit"
-	@echo "  make restart-all                - Restart all services"
-	@echo ""
-	@echo "Testing & Quality:"
-	@echo "  make test                       - Run all Molecule tests"
-	@echo "  make test-role ROLE=...         - Test specific role"
-	@echo "  make test-logs                  - List recent test logs"
-	@echo "  make lint                       - Run linting"
-	@echo "  make syntax-check               - Check playbook syntax"
-	@echo ""
-	@echo "UI & Monitoring:"
-	@echo "  make ui                         - List service URLs"
-	@echo "  make ui-all                     - Open all UIs"
-	@echo "  make ui-dockge                  - Open Dockge"
-	@echo "  make ui-netdata                 - Open Netdata"
-	@echo "  make ui-uptime                  - Open Uptime Kuma"
-	@echo ""
-	@echo "Vault Management:"
-	@echo "  make vault-edit [FILE=...]      - Edit vault file"
-	@echo "  make vault-view [FILE=...]      - View vault file"
-	@echo "  make vault-status               - Check vault status"
-	@echo ""
-	@echo "Status & Information:"
-	@echo "  make status                     - Show service status"
-	@echo "  make ping                       - Ping all hosts"
-	@echo "  make list-hosts                 - List inventory hosts"
-	@echo "  make version                    - Show version info"
-	@echo ""
-	@echo "Dependencies:"
-	@echo "  make install-deps               - Install all dependencies"
-	@echo "  make install-test-deps          - Install test dependencies"
-	@echo ""
-	@echo "Examples:"
-	@echo "  make deploy-host HOST=server-01"
-	@echo "  make test-role ROLE=common"
-	@echo "  make upgrade-service SERVICE=netdata"
+	@awk 'BEGIN {FS = ":.*##"; printf ""} /^[a-zA-Z_-]+:.*?##/ { printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2 } /^##@/ { printf "\n$(BOLD)%s$(RESET)\n", substr($$0, 5) }' $(MAKEFILE_LIST)
 	@echo ""
 
-install-test-deps:
-	@echo "Installing test dependencies..."
-	@echo "Installing apt packages..."
-	@sudo apt-get install -y -qq pipx python3-pytest python3-docker yamllint ansible-lint || true
-	@echo "Installing molecule via pipx (PEP 668 compliant)..."
-	pipx install molecule || pipx upgrade molecule
-	pipx inject molecule molecule-plugins[docker] pytest-testinfra ansible
-	@echo "Installing required Ansible collections to ~/.ansible/collections..."
-	@mkdir -p ~/.ansible/collections
-	~/.local/share/pipx/venvs/molecule/bin/ansible-galaxy collection install ansible.posix community.general community.docker -p ~/.ansible/collections --force
-	@echo "Done! Run 'pipx ensurepath' if molecule command is not found."
-
-test:
-	@bash scripts/lib/testing.sh test-all
-
-test-all:
-	@bash scripts/lib/testing.sh test-all
-
-test-role:
-ifndef ROLE
-	@echo "Error: ROLE variable not set"
-	@echo "Usage: make test-role ROLE=<role-name> [CMD=<molecule-command>]"
-	@exit 1
-endif
-	@bash scripts/lib/testing.sh test-role $(ROLE) $(CMD)
-
-test-logs:
-	@echo "Recent test logs (logs/molecule/):"
-	@echo ""
-	@if [ -d "logs/molecule" ]; then \
-		ls -lt logs/molecule/*.log 2>/dev/null | head -10 || echo "  No logs found"; \
-	else \
-		echo "  No logs directory yet. Run 'make test' to generate logs."; \
-	fi
-	@echo ""
-	@echo "View a log with: cat logs/molecule/<filename>.log"
-
-lint:
-	@echo "Running ansible-lint..."
-	ansible-lint playbooks/ roles/
-	@echo ""
-	@echo "Running yamllint..."
-	yamllint -c .yamllint playbooks/ roles/ inventory/
-	@echo ""
-	@echo "Lint checks passed!"
-
-syntax-check:
-	@echo "Checking playbook syntax..."
-	@for playbook in playbooks/*.yml; do \
-		echo "Checking $$playbook..."; \
-		ansible-playbook --syntax-check "$$playbook" -i inventory/hosts.example.yml; \
-	done
-	@echo "Syntax check passed!"
-
-clean:
-	@echo "Cleaning up test artifacts..."
-	find roles -type d -name ".molecule" -exec rm -rf {} + 2>/dev/null || true
-	find roles -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	find roles -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
-	find . -name "*.pyc" -delete 2>/dev/null || true
-	@echo "Cleanup complete!"
-	@echo "Note: Test logs preserved in logs/molecule/. Use 'make clean-test-logs' to remove."
-
-clean-test-logs:
-	@echo "Cleaning test logs older than 7 days..."
-	@if [ -d "logs/molecule" ]; then \
-		find logs/molecule -name "*.log" -mtime +7 -delete 2>/dev/null || true; \
-		echo "Old logs cleaned."; \
-	else \
-		echo "No logs directory found."; \
-	fi
-
-clean-all-logs:
-	@echo "Removing all test logs..."
-	@rm -rf logs/molecule
-	@echo "All test logs removed."
-
-##@ Setup & Bootstrap
-
-setup:
-	@echo "Running setup script..."
+.PHONY: setup
+setup: ## Run interactive setup wizard
 	@bash setup.sh
 
-bootstrap:
-	@echo "Bootstrapping target servers..."
-	@ansible-playbook $(PLAYBOOK_DIR)/bootstrap.yml --ask-become-pass $(ANSIBLE_OPTS)
-
-bootstrap-host:
-	@echo "Bootstrapping host: $(HOST)..."
-	@ansible-playbook $(PLAYBOOK_DIR)/bootstrap.yml --limit $(HOST) --ask-become-pass $(ANSIBLE_OPTS)
+.PHONY: version
+version: ## Show version
+	@echo "Server Helper v$(VERSION)"
 
 ##@ Deployment
+.PHONY: deploy
+deploy: ## Full deployment (site.yml)
+	$(ANSIBLE_PLAYBOOK) playbooks/site.yml
 
-deploy:
-	@echo "Deploying to all servers..."
-	@ansible-playbook $(PLAYBOOK_DIR)/site.yml $(ANSIBLE_OPTS)
+.PHONY: deploy-control
+deploy-control: ## Deploy control node only
+	$(ANSIBLE_PLAYBOOK) playbooks/control.yml
 
-deploy-targets:
-	@echo "Deploying to target servers..."
-	@ansible-playbook $(PLAYBOOK_DIR)/target.yml $(ANSIBLE_OPTS)
+.PHONY: deploy-targets
+deploy-targets: ## Deploy target nodes only
+	$(ANSIBLE_PLAYBOOK) playbooks/target.yml
 
-deploy-host:
-	@echo "Deploying to host: $(HOST)..."
-	@ansible-playbook $(PLAYBOOK_DIR)/site.yml --limit $(HOST) $(ANSIBLE_OPTS)
+.PHONY: deploy-host
+deploy-host: ## Deploy specific host (HOST=hostname)
+	@if [ -z "$(HOST)" ]; then echo "$(RED)ERROR: HOST is required. Usage: make deploy-host HOST=server1$(RESET)"; exit 1; fi
+	$(call validate_input,HOST,$(HOST))
+	$(ANSIBLE_PLAYBOOK) playbooks/site.yml --limit $(HOST)
 
-deploy-control:
-	@echo "Deploying to control node..."
-	@ansible-playbook $(PLAYBOOK_DIR)/control.yml $(ANSIBLE_OPTS)
+.PHONY: deploy-check
+deploy-check: ## Dry run of full deployment
+	$(ANSIBLE_PLAYBOOK) playbooks/site.yml --check --diff
 
-deploy-check:
-	@echo "Running deployment in check mode..."
-	@ansible-playbook $(PLAYBOOK_DIR)/site.yml --check --diff $(ANSIBLE_OPTS)
+.PHONY: deploy-role
+deploy-role: ## Deploy specific role (ROLE=role_name HOST=hostname)
+	@if [ -z "$(ROLE)" ]; then echo "$(RED)ERROR: ROLE is required. Usage: make deploy-role ROLE=docker HOST=server1$(RESET)"; exit 1; fi
+	$(call validate_input,ROLE,$(ROLE))
+	$(if $(HOST),$(call validate_input,HOST,$(HOST)),)
+	$(ANSIBLE_PLAYBOOK) playbooks/site.yml --tags $(ROLE) $(if $(HOST),--limit $(HOST),)
 
-##@ Operations
+.PHONY: bootstrap
+bootstrap: ## Bootstrap new target nodes
+	$(ANSIBLE_PLAYBOOK) playbooks/bootstrap.yml
 
-update:
-	@echo "Updating all servers..."
-	@ansible-playbook $(PLAYBOOK_DIR)/update.yml $(ANSIBLE_OPTS)
+.PHONY: add-target
+add-target: ## Add new server to fleet
+	$(ANSIBLE_PLAYBOOK) playbooks/add-target.yml
 
-update-host:
-	@echo "Updating host: $(HOST)..."
-	@ansible-playbook $(PLAYBOOK_DIR)/update.yml --limit $(HOST) $(ANSIBLE_OPTS)
+##@ Updates & Upgrades
+.PHONY: update
+update: ## Rolling system updates
+	$(ANSIBLE_PLAYBOOK) playbooks/update.yml
 
-upgrade:
-	@echo "Upgrading Docker images..."
-	@ansible-playbook $(PLAYBOOK_DIR)/upgrade.yml $(ANSIBLE_OPTS)
+.PHONY: update-reboot
+update-reboot: ## Rolling system updates with reboot
+	$(ANSIBLE_PLAYBOOK) playbooks/update.yml --tags reboot
 
-upgrade-service:
-	@echo "Upgrading service: $(SERVICE)..."
-	@ansible-playbook $(PLAYBOOK_DIR)/upgrade.yml -e "target_service=$(SERVICE)" $(ANSIBLE_OPTS)
+.PHONY: upgrade
+upgrade: ## Docker image upgrades
+	$(ANSIBLE_PLAYBOOK) playbooks/upgrade.yml
 
-backup:
-	@echo "Running backups..."
-	@ansible-playbook $(PLAYBOOK_DIR)/backup.yml $(ANSIBLE_OPTS)
+.PHONY: upgrade-service
+upgrade-service: ## Upgrade specific service (SERVICE=name)
+	@if [ -z "$(SERVICE)" ]; then echo "$(RED)ERROR: SERVICE is required. Usage: make upgrade-service SERVICE=grafana$(RESET)"; exit 1; fi
+	$(call validate_input,SERVICE,$(SERVICE))
+	$(ANSIBLE_PLAYBOOK) playbooks/upgrade.yml -e "target_service=$(SERVICE)"
 
-backup-host:
-	@echo "Running backup on host: $(HOST)..."
-	@ansible-playbook $(PLAYBOOK_DIR)/backup.yml --limit $(HOST) $(ANSIBLE_OPTS)
+.PHONY: upgrade-cleanup
+upgrade-cleanup: ## Upgrade with image cleanup
+	$(ANSIBLE_PLAYBOOK) playbooks/upgrade.yml --tags cleanup
 
-security:
-	@echo "Running security audit (Lynis scan)..."
-	@ansible all -m shell -a "sudo lynis audit system --quick" $(ANSIBLE_OPTS)
+##@ Backups
+.PHONY: backup
+backup: ## Trigger manual backups on all hosts
+	$(ANSIBLE_PLAYBOOK) playbooks/backup.yml
 
-security-host:
-	@echo "Running security audit on host: $(HOST)..."
-	@ansible $(HOST) -m shell -a "sudo lynis audit system --quick" $(ANSIBLE_OPTS)
+.PHONY: backup-host
+backup-host: ## Trigger backup on specific host (HOST=hostname)
+	@if [ -z "$(HOST)" ]; then echo "$(RED)ERROR: HOST is required. Usage: make backup-host HOST=server1$(RESET)"; exit 1; fi
+	$(call validate_input,HOST,$(HOST))
+	$(ANSIBLE_PLAYBOOK) playbooks/backup.yml --limit $(HOST)
 
-restart-all:
-	@echo "Restarting all Docker services..."
-	@ansible all -m shell -a "for d in /opt/stacks/*/; do cd \"\$$d\" && docker compose restart 2>/dev/null || true; done" $(ANSIBLE_OPTS)
-	@echo "All services restarted!"
+##@ Testing
+.PHONY: test
+test: ## Run all molecule tests
+	@bash -c 'source scripts/lib/testing.sh && test_all_roles'
 
-##@ UI & Monitoring
+.PHONY: test-role
+test-role: ## Test specific role (ROLE=role_name)
+	@if [ -z "$(ROLE)" ]; then echo "$(RED)ERROR: ROLE is required. Usage: make test-role ROLE=common$(RESET)"; exit 1; fi
+	$(call validate_input,ROLE,$(ROLE))
+	cd roles/$(ROLE) && $(MOLECULE) test
 
-ui:
-	@bash scripts/open-ui.sh list
+.PHONY: test-lint
+test-lint: lint ## Alias for lint
 
-ui-all:
-	@bash scripts/open-ui.sh all
+##@ Linting
+.PHONY: lint
+lint: lint-ansible lint-yaml ## Run all linters
 
-ui-dockge:
-	@bash scripts/open-ui.sh dockge
+.PHONY: lint-ansible
+lint-ansible: ## Run ansible-lint
+	$(ANSIBLE_LINT) playbooks/ roles/
 
-ui-netdata:
-	@bash scripts/open-ui.sh netdata
+.PHONY: lint-yaml
+lint-yaml: ## Run yamllint
+	$(YAMLLINT) -c .yamllint .
 
-ui-uptime:
-	@bash scripts/open-ui.sh uptime-kuma
+.PHONY: syntax-check
+syntax-check: ## Ansible syntax check
+	$(ANSIBLE_PLAYBOOK) playbooks/site.yml --syntax-check
+	$(ANSIBLE_PLAYBOOK) playbooks/bootstrap.yml --syntax-check
+	$(ANSIBLE_PLAYBOOK) playbooks/update.yml --syntax-check
+	$(ANSIBLE_PLAYBOOK) playbooks/upgrade.yml --syntax-check
+	$(ANSIBLE_PLAYBOOK) playbooks/backup.yml --syntax-check
 
-##@ Vault Management
+##@ Vault
+.PHONY: vault-edit
+vault-edit: ## Edit encrypted vault
+	$(ANSIBLE_VAULT) edit group_vars/vault.yml
 
-vault-init:
-	@echo "Initializing Ansible Vault..."
-	@bash scripts/lib/vault_mgr.sh init
+.PHONY: vault-view
+vault-view: ## View encrypted vault
+	$(ANSIBLE_VAULT) view group_vars/vault.yml
 
-vault-edit:
-	@echo "Editing vault file..."
-	@bash scripts/lib/vault_mgr.sh edit $(or $(FILE),group_vars/vault.yml)
+.PHONY: vault-encrypt
+vault-encrypt: ## Encrypt vault file
+	$(ANSIBLE_VAULT) encrypt group_vars/vault.yml
 
-vault-view:
-	@bash scripts/lib/vault_mgr.sh view $(or $(FILE),group_vars/vault.yml)
+.PHONY: vault-decrypt
+vault-decrypt: ## Decrypt vault file
+	$(ANSIBLE_VAULT) decrypt group_vars/vault.yml
 
-vault-encrypt:
-	@echo "Encrypting file: $(FILE)..."
-	@bash scripts/lib/vault_mgr.sh encrypt $(FILE)
+.PHONY: vault-rekey
+vault-rekey: ## Change vault password
+	$(ANSIBLE_VAULT) rekey group_vars/vault.yml
 
-vault-rekey:
-	@echo "Changing vault password..."
-	@bash scripts/lib/vault_mgr.sh rekey --all
+##@ Fleet Management
+.PHONY: ping
+ping: ## Ansible ping all hosts
+	ansible all -m ping
 
-vault-status:
-	@bash scripts/lib/vault_mgr.sh status
+.PHONY: ping-control
+ping-control: ## Ping control node
+	ansible control -m ping
 
-vault-validate:
-	@bash scripts/lib/vault_mgr.sh validate
+.PHONY: ping-targets
+ping-targets: ## Ping target nodes
+	ansible targets -m ping
 
-##@ Status & Information
+.PHONY: status
+status: ## Docker ps across fleet
+	ansible all -m shell -a "docker ps --format 'table {{ '{{' }}.Names{{ '}}' }}\t{{ '{{' }}.Status{{ '}}' }}\t{{ '{{' }}.Ports{{ '}}' }}'" 2>/dev/null || true
 
-status:
-	@echo "Checking service status..."
-	@ansible all -m shell -a "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'" $(ANSIBLE_OPTS)
+.PHONY: facts
+facts: ## Gather facts from all hosts
+	ansible all -m setup --tree .ansible_cache/facts/
 
-status-host:
-	@echo "Checking status on host: $(HOST)..."
-	@ansible $(HOST) -m shell -a "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'" $(ANSIBLE_OPTS)
+.PHONY: disk
+disk: ## Check disk usage across fleet
+	ansible all -m shell -a "df -h / | tail -1"
 
-ping:
-	@echo "Pinging all hosts..."
-	@ansible all -m ping $(ANSIBLE_OPTS)
+.PHONY: memory
+memory: ## Check memory usage across fleet
+	ansible all -m shell -a "free -h | grep Mem"
 
-ping-host:
-	@ansible $(HOST) -m ping $(ANSIBLE_OPTS)
-
-list-hosts:
-	@echo "Hosts in inventory:"
-	@ansible all --list-hosts
-
-disk-space:
-	@echo "Checking disk space..."
-	@ansible all -m shell -a "df -h /" $(ANSIBLE_OPTS)
-
-version:
-	@echo ""
-	@echo "Server Helper v2.0.0"
-	@echo ""
-	@echo "Ansible: $$(ansible --version | head -1)"
-	@echo "Python: $$(python3 --version)"
+.PHONY: uptime
+uptime: ## Check uptime across fleet
+	ansible all -m shell -a "uptime"
 
 ##@ Dependencies
+.PHONY: deps
+deps: ## Install Ansible Galaxy dependencies
+	ansible-galaxy collection install -r requirements.yml --force
 
-install-deps:
-	@echo "Installing system dependencies..."
-	@sudo apt-get update -qq
-	@sudo apt-get install -y -qq ansible python3-pip git curl wget sshpass
-	@echo "Installing Python dependencies..."
-	@sudo apt-get install -y -qq python3-docker python3-jmespath python3-netaddr python3-requests
-	@echo "Installing Ansible Galaxy dependencies..."
-	@ansible-galaxy install -r requirements.yml
-	@echo "All dependencies installed!"
+.PHONY: deps-check
+deps-check: ## Check if dependencies are installed
+	ansible-galaxy collection list
 
 ##@ Cleanup
+.PHONY: clean
+clean: ## Clean temporary files
+	rm -rf .ansible_cache/
+	find . -name "*.retry" -delete
+	find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
-clean-logs:
-	@echo "Cleaning log files..."
-	@rm -f setup.log
-	@rm -f *.retry
-	@echo "Log files cleaned!"
+.PHONY: clean-all
+clean-all: clean ## Clean everything including molecule
+	find roles/ -path "*/molecule/default/.molecule" -type d -exec rm -rf {} + 2>/dev/null || true
 
-clean-docker:
-	@echo "Warning: This will remove unused Docker images, containers, and volumes"
-	@ansible all -m shell -a "docker system prune -af --volumes" $(ANSIBLE_OPTS)
-	@echo "Docker cleanup complete!"
+##@ Diagnostics
+.PHONY: doctor
+doctor: ## Run full environment diagnostic check
+	@echo ""
+	@echo "$(BOLD)Server Helper v$(VERSION) — Doctor$(RESET)"
+	@echo ""
+	@echo "$(BOLD)Prerequisites:$(RESET)"
+	@command -v python3 >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Python3: $$(python3 --version)" || echo "  $(RED)✗$(RESET) Python3: NOT FOUND"
+	@command -v ansible >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Ansible: $$(ansible --version | head -1)" || echo "  $(RED)✗$(RESET) Ansible: NOT FOUND"
+	@command -v ansible-lint >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) ansible-lint: $$(ansible-lint --version | head -1)" || echo "  $(YELLOW)⚠$(RESET) ansible-lint: not installed (optional)"
+	@command -v docker >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Docker: $$(docker --version)" || echo "  $(YELLOW)⚠$(RESET) Docker: not installed (needed for molecule)"
+	@command -v molecule >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Molecule: $$(molecule --version | head -1)" || echo "  $(YELLOW)⚠$(RESET) Molecule: not installed (optional)"
+	@command -v yamllint >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) yamllint: $$(yamllint --version)" || echo "  $(YELLOW)⚠$(RESET) yamllint: not installed (optional)"
+	@echo ""
+	@echo "$(BOLD)Galaxy Collections:$(RESET)"
+	@ansible-galaxy collection list 2>/dev/null | grep -E "(community\.docker|community\.general|ansible\.posix)" | awk '{printf "  $(GREEN)✓$(RESET) %s %s\n", $$1, $$2}' || echo "  $(RED)✗$(RESET) Collections not installed. Run: make deps"
+	@echo ""
+	@echo "$(BOLD)Configuration:$(RESET)"
+	@test -f group_vars/vault.yml && (head -1 group_vars/vault.yml | grep -q '$$ANSIBLE_VAULT' && echo "  $(GREEN)✓$(RESET) Vault: encrypted" || echo "  $(YELLOW)⚠$(RESET) Vault: NOT encrypted") || echo "  $(RED)✗$(RESET) Vault: group_vars/vault.yml not found"
+	@test -f inventory/hosts.yml && echo "  $(GREEN)✓$(RESET) Inventory: exists" || echo "  $(RED)✗$(RESET) Inventory: inventory/hosts.yml not found"
+	@test -f .vault_password && echo "  $(GREEN)✓$(RESET) Vault password file: exists" || echo "  $(YELLOW)⚠$(RESET) Vault password file: not found"
+	@test -f ansible.cfg && echo "  $(GREEN)✓$(RESET) ansible.cfg: exists" || echo "  $(RED)✗$(RESET) ansible.cfg: not found"
+	@echo ""
+	@echo "$(BOLD)SSH Keys:$(RESET)"
+	@test -f ~/.ssh/id_ed25519 && echo "  $(GREEN)✓$(RESET) Ed25519 key found" || (test -f ~/.ssh/id_rsa && echo "  $(GREEN)✓$(RESET) RSA key found" || echo "  $(YELLOW)⚠$(RESET) No SSH key found in ~/.ssh/")
+	@echo ""
+
+##@ Setup
+.PHONY: git-hooks
+git-hooks: ## Install git hooks
+	git config core.hooksPath .githooks
+	@echo "$(GREEN)✓$(RESET) Git hooks installed from .githooks/"

@@ -1,0 +1,23 @@
+#!/bin/bash
+# Server Helper — Git pre-commit hook
+# Blocks commits if group_vars/vault.yml is staged and NOT encrypted
+
+VAULT_FILE="group_vars/vault.yml"
+
+# Check if vault.yml is staged for commit
+if git diff --cached --name-only | grep -qF "$VAULT_FILE"; then
+    # Read the staged version of the file (not the working copy)
+    FIRST_LINE=$(git show ":${VAULT_FILE}" 2>/dev/null | head -1)
+
+    if ! echo "$FIRST_LINE" | grep -q '^\$ANSIBLE_VAULT'; then
+        echo ""
+        echo "✗ SECURITY BLOCK: $VAULT_FILE is NOT encrypted!"
+        echo ""
+        echo "  The vault file must be encrypted before committing."
+        echo "  Run: ansible-vault encrypt $VAULT_FILE"
+        echo ""
+        exit 1
+    fi
+fi
+
+exit 0

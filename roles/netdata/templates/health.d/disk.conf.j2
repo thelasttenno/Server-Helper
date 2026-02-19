@@ -1,24 +1,11 @@
-# Disk health alarms
-# Managed by Ansible - Server Helper
+# {{ ansible_managed }}
+# Disk alarm thresholds
 
-template: disk_space_usage
-      on: disk.space
-  lookup: average -1m percentage of used
+alarm: disk_space_warning
+   on: disk.space
+   lookup: average -5m percentage of used
    units: %
    every: 1m
-    warn: $this > {{ netdata_alarm_disk_threshold }}
-    crit: $this > 98
-   delay: down 5m multiplier 1.5 max 1h
-    info: Disk space utilization
-      to: sysadmin
-
-template: disk_inode_usage
-      on: disk.inodes
-  lookup: average -1m percentage of used
-   units: %
-   every: 1m
-    warn: $this > 90
-    crit: $this > 98
-   delay: down 5m multiplier 1.5 max 1h
-    info: Disk inode utilization
-      to: sysadmin
+   warn: $this > {{ target_netdata.alarms.disk_warning }}
+   crit: $this > {{ target_netdata.alarms.disk_critical }}
+   info: Disk space utilization alarm

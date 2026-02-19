@@ -1,0 +1,9 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Telegram notification — URL-encoded
+MSG="${1:-Alert}"
+curl -fsS -m 10 \
+  "https://api.telegram.org/bot{{ notifications_telegram.bot_token }}/sendMessage" \
+  --data-urlencode "chat_id={{ notifications_telegram.chat_id }}" \
+  --data-urlencode "text=$MSG" \
+  -d "parse_mode=Markdown" >/dev/null 2>&1 || true

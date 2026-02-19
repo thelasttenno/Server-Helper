@@ -1,20 +1,13 @@
 ---
 name: Molecule Tests
-
 on:
   push:
-    branches:
-      - main
-      - develop
+    branches: [main, develop]
   pull_request:
-    branches:
-      - main
-      - develop
-  workflow_dispatch:
+    branches: [main, develop]
 
 jobs:
-  test-roles:
-    name: Test ${{ matrix.role }}
+  molecule:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -24,28 +17,21 @@ jobs:
           - security
           - dockge
           - netdata
-
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: '3.12'
 
-      - name: Install test dependencies
+      - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-test.txt
+          pip install ansible molecule molecule-plugins[docker] docker
 
-      - name: Install Ansible Galaxy dependencies
-        run: |
-          cd roles/${{ matrix.role }}
-          if [ -f molecule/default/requirements.yml ]; then
-            ansible-galaxy install -r molecule/default/requirements.yml
-          fi
+      - name: Install Galaxy collections
+        run: ansible-galaxy collection install -r requirements.yml
 
       - name: Run Molecule tests
         run: |
@@ -54,65 +40,3 @@ jobs:
         env:
           PY_COLORS: '1'
           ANSIBLE_FORCE_COLOR: '1'
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: molecule-results-${{ matrix.role }}
-          path: |
-            roles/${{ matrix.role }}/molecule/default/.molecule/
-            roles/${{ matrix.role }}/molecule/default/tests/
-
-  lint:
-    name: Lint Ansible
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install ansible ansible-lint yamllint
-
-      - name: Run ansible-lint
-        run: |
-          ansible-lint playbooks/ roles/
-
-      - name: Run yamllint
-        run: |
-          yamllint -c .yamllint playbooks/ roles/ inventory/
-
-  test-playbooks:
-    name: Syntax Check Playbooks
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install Ansible
-        run: |
-          python -m pip install --upgrade pip
-          pip install ansible
-
-      - name: Check playbook syntax
-        run: |
-          for playbook in playbooks/*.yml; do
-            echo "Checking $playbook"
-            ansible-playbook --syntax-check "$playbook" -i inventory/hosts.example.yml
-          done

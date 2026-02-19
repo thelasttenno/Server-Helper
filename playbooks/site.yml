@@ -1,305 +1,184 @@
 ---
-# Site playbook - Main entry point for Server Helper
-# Implements Tiered Inheritance Model for consistent management
-#
-# Tier 1 (Foundation): All nodes get base hardening
-# Tier 2 (Target Muscle): Worker nodes get monitoring agents
-# Tier 3 (Control Brain): Control node gets management stacks
+# =============================================================================
+# Server Helper v2.0 — site.yml (Main Entry Point)
+# =============================================================================
+# Full 3-tier deployment:
+#   1. Pre-flight: Detect virtualization, set skip flags
+#   2. Tier 1: Foundation roles on ALL nodes
+#   3. Tier 2: Agent roles on TARGET nodes
+#   4. Tier 3: Control stacks on CONTROL node
+#   5. Post-deploy: Distribute Step-CA root cert
+#   6. Validation: Health checks and summary
 #
 # Usage:
 #   ansible-playbook playbooks/site.yml
-#   ansible-playbook playbooks/site.yml --tags "tier1"
-#   ansible-playbook playbooks/site.yml --limit targets
+#   ansible-playbook playbooks/site.yml --limit server1
+#   ansible-playbook playbooks/site.yml --check --diff
 
 # =============================================================================
-# PRE-FLIGHT CHECKS
+# PRE-FLIGHT: Detect virtualization and set skip flags (improvement #4)
 # =============================================================================
-- name: Server Helper - Pre-flight Validation
+- name: Pre-flight checks
   hosts: all
   gather_facts: true
-
-  pre_tasks:
-    - name: Display deployment information
+  tags: [always]
+  tasks:
+    - name: Display target information
       ansible.builtin.debug:
-        msg: |
-          ================================================
-          Server Helper Deployment
-          ================================================
-          Target: {{ inventory_hostname }}
-          Groups: {{ group_names | join(', ') }}
-          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
-          Virtualization: {{ ansible_virtualization_type | default('none') }}
-          ================================================
+        msg: >-
+          Host: {{ inventory_hostname }} |
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }} |
+          Virtualization: {{ ansible_virtualization_type | default('none') }} |
+          Role: {{ ansible_virtualization_role | default('none') }}
 
-    - name: Verify Ansible version
-      ansible.builtin.assert:
-        that:
-          - ansible_version.full is version('2.14', '>=')
-        fail_msg: "Ansible 2.14 or higher is required"
-        success_msg: "Ansible version {{ ansible_version.full }} OK"
-
-    - name: Detect virtualization environment
+    - name: Auto-detect LXC containers and set skip flags
       ansible.builtin.set_fact:
-        is_lxc: "{{ ansible_virtualization_type == 'lxc' or ansible_virtualization_type == 'container' }}"
-        is_vm: "{{ ansible_virtualization_type in ['kvm', 'qemu', 'vmware', 'virtualbox', 'xen', 'hyperv'] }}"
-        is_bare_metal: "{{ ansible_virtualization_type == 'NA' or ansible_virtualization_role == 'host' }}"
+        lvm_skip: "{{ lvm_skip | default(ansible_virtualization_type == 'lxc') }}"
+        swap_skip: "{{ swap_skip | default(ansible_virtualization_type == 'lxc') }}"
+        qemu_agent_skip: "{{ qemu_agent_skip | default(ansible_virtualization_type not in ['kvm', 'qemu']) }}"
 
-    - name: Set skip flags based on virtualization
-      ansible.builtin.set_fact:
-        lvm_skip: "{{ is_lxc | bool or (lvm_skip | default(false) | bool) }}"
-        swap_skip: "{{ is_lxc | bool or (swap_skip | default(false) | bool) }}"
-        qemu_agent_skip: "{{ (not is_vm | bool) or (qemu_agent_skip | default(false) | bool) }}"
-
-    - name: Display virtualization detection
+    - name: Display skip flags
       ansible.builtin.debug:
-        msg: |
-          Virtualization Detection:
-          - Type: {{ ansible_virtualization_type | default('unknown') }}
-          - Is LXC: {{ is_lxc }}
-          - Is VM: {{ is_vm }}
-          - Skip LVM: {{ lvm_skip }}
-          - Skip Swap: {{ swap_skip }}
-          - Skip QEMU Agent: {{ qemu_agent_skip }}
+        msg: >-
+          Skip flags — LVM: {{ lvm_skip }} | Swap: {{ swap_skip }} | QEMU: {{ qemu_agent_skip }}
 
 # =============================================================================
-# TIER 1: FOUNDATION (All Nodes)
+# TIER 1: Foundation (ALL nodes)
 # =============================================================================
-- name: "Tier 1: Foundation - Base Hardening (All Nodes)"
+- name: "Tier 1: Foundation"
   hosts: all
-  become: true
-  gather_facts: true
   tags: [tier1, foundation]
-
   roles:
     - role: common
-      tags: [common, base]
-
+      tags: [common]
     - role: lvm_config
-      tags: [lvm, storage]
-      when: not (lvm_skip | default(false) | bool)
-
+      tags: [lvm_config]
     - role: swap
-      tags: [swap, memory]
-      when: not (swap_skip | default(false) | bool)
-
+      tags: [swap]
     - role: qemu_agent
-      tags: [qemu, virtualization]
-      when: not (qemu_agent_skip | default(false) | bool)
-
+      tags: [qemu_agent]
     - role: security
-      tags: [security, hardening]
-
+      tags: [security]
     - role: docker
-      tags: [docker, containers]
-
+      tags: [docker]
     - role: watchtower
-      tags: [watchtower, auto-update]
-
+      tags: [watchtower]
     - role: restic
-      tags: [restic, backup]
-      when: restic_enabled | default(true) | bool
-
-    - role: dockge
-      tags: [dockge, stacks]
-      when: "'control' in group_names"
+      tags: [restic]
 
 # =============================================================================
-# TIER 2: TARGET MUSCLE (Worker Nodes)
+# TIER 2: Target Agents
 # =============================================================================
-- name: "Tier 2: Target Muscle - Monitoring Agents (Target Nodes)"
+- name: "Tier 2: Target Agents"
   hosts: targets
-  become: true
-  gather_facts: true
-  tags: [tier2, targets, agents]
-
+  tags: [tier2, agents]
   roles:
     - role: netdata
-      tags: [netdata, monitoring]
+      tags: [netdata]
       vars:
         netdata_mode: "child"
-        netdata_parent_host: "{{ control_node_ip }}"
-
     - role: promtail
-      tags: [promtail, logging]
-      vars:
-        promtail_loki_url: "http://{{ control_node_ip }}:3100/loki/api/v1/push"
-
+      tags: [promtail]
     - role: docker_socket_proxy
-      tags: [docker-proxy, security]
-
-  post_tasks:
-    - name: Verify target node connectivity to control
-      ansible.builtin.wait_for:
-        host: "{{ control_node_ip }}"
-        port: "{{ item.port }}"
-        timeout: 10
-      loop:
-        - { name: "Netdata Parent", port: 19999 }
-        - { name: "Loki", port: 3100 }
-      failed_when: false
-      register: connectivity_check
-
-    - name: Display target node status
-      ansible.builtin.debug:
-        msg: |
-          ================================================
-          Target Node Configured: {{ inventory_hostname }}
-          ================================================
-          Netdata streaming to: {{ control_node_ip }}:19999
-          Logs shipping to: {{ control_node_ip }}:3100
-          Docker Socket Proxy: localhost:2375 (control only)
-          ================================================
+      tags: [docker_socket_proxy]
+    - role: dockge
+      tags: [dockge]
 
 # =============================================================================
-# TIER 3: CONTROL BRAIN (Management Node)
+# TIER 3: Control Stacks
 # =============================================================================
-- name: "Tier 3: Control Brain - Management Stacks (Control Node)"
+- name: "Tier 3: Control Stacks"
   hosts: control
-  become: true
-  gather_facts: true
-  tags: [tier3, control, management]
-
+  tags: [tier3, control]
   roles:
-    # Gateway & Proxy
     - role: traefik
-      tags: [traefik, proxy, gateway]
-
-    # Internal PKI
-    - role: step_ca
-      tags: [step-ca, pki, certificates]
-
-    # Identity / SSO
+      tags: [traefik]
     - role: authentik
-      tags: [authentik, sso, identity]
-
-    # DNS with ad-blocking
+      tags: [authentik]
+    - role: step_ca
+      tags: [step_ca]
     - role: pihole
-      tags: [pihole, dns]
-
-    # Monitoring (Parent)
+      tags: [pihole]
+    - role: loki
+      tags: [loki]
     - role: netdata
-      tags: [netdata, monitoring]
+      tags: [netdata]
       vars:
         netdata_mode: "parent"
-
-    # Logging stack
-    - role: loki
-      tags: [loki, logging]
-
     - role: grafana
-      tags: [grafana, dashboards, monitoring]
-
-    # Status monitoring
+      tags: [grafana]
     - role: uptime_kuma
-      tags: [uptime-kuma, status, monitoring]
+      tags: [uptime_kuma]
+    - role: dockge
+      tags: [dockge]
 
 # =============================================================================
-# POST-DEPLOYMENT: TRUST DISTRIBUTION
+# POST-DEPLOY: Distribute Step-CA root certificate
 # =============================================================================
-- name: "Post-Deployment: Distribute Step-CA Root Certificate"
+- name: Post-deployment — Distribute root CA
   hosts: targets
-  become: true
-  gather_facts: false
-  tags: [tier3, trust, certificates]
-
+  tags: [post_deploy, step_ca]
   tasks:
-    - name: Fetch Step-CA root certificate from control node
+    - name: Fetch Step-CA root certificate from control
       ansible.builtin.slurp:
-        src: /opt/stacks/step-ca/certs/root_ca.crt
-      delegate_to: "{{ groups['control'][0] }}"
+        src: "{{ docker_stack_path }}/step-ca/certs/root_ca.crt"
       register: step_ca_root_cert
-      failed_when: false
+      delegate_to: "{{ groups['control'][0] }}"
+      run_once: true
+      ignore_errors: true
 
-    - name: Install Step-CA root certificate
+    - name: Install root CA on targets
       ansible.builtin.copy:
         content: "{{ step_ca_root_cert.content | b64decode }}"
-        dest: /usr/local/share/ca-certificates/step-ca-root.crt
+        dest: /usr/local/share/ca-certificates/internal-ca.crt
         owner: root
         group: root
         mode: "0644"
-      when: step_ca_root_cert is succeeded and step_ca_root_cert.content is defined
+      when: step_ca_root_cert is success
       notify: Update CA certificates
-
-    - name: Update CA certificates
-      ansible.builtin.command: update-ca-certificates
-      when: step_ca_root_cert is succeeded and step_ca_root_cert.content is defined
 
   handlers:
     - name: Update CA certificates
       ansible.builtin.command: update-ca-certificates
+      changed_when: true
 
 # =============================================================================
-# FINAL VALIDATION
+# VALIDATION: Health checks and deployment summary
 # =============================================================================
-- name: "Final Validation: Service Health Checks"
+- name: Validation — Health checks
   hosts: control
-  become: true
-  gather_facts: false
-  tags: [validation, health]
-
+  tags: [validation]
   tasks:
-    - name: Wait for services to initialize
-      ansible.builtin.pause:
-        seconds: 30
-        prompt: "Waiting for services to initialize..."
-
-    - name: Check control node service health
+    - name: Check control services health
       ansible.builtin.uri:
-        url: "{{ item.url }}"
+        url: "http://localhost:{{ item.port }}{{ item.path }}"
         method: GET
-        status_code: "{{ item.status }}"
-        validate_certs: false
+        status_code: [200, 301, 302]
+        timeout: 10
       loop:
-        - { name: "Traefik", url: "http://localhost:8080/ping", status: [200] }
-        - { name: "Grafana", url: "http://localhost:3000/api/health", status: [200] }
-        - { name: "Loki", url: "http://localhost:3100/ready", status: [200] }
-        - { name: "Netdata", url: "http://localhost:19999/api/v1/info", status: [200] }
-        - { name: "Uptime Kuma", url: "http://localhost:3001", status: [200, 302] }
-        - { name: "Pi-hole", url: "http://localhost:8053/admin/", status: [200, 302] }
-        - { name: "Authentik", url: "http://localhost:9000/-/health/ready/", status: [200] }
-        - { name: "Dockge", url: "http://localhost:5001", status: [200, 302] }
-      register: health_checks
-      failed_when: false
+        - { name: "Traefik", port: "{{ control_traefik.dashboard_port }}", path: "/ping" }
+        - { name: "Grafana", port: "{{ control_grafana.port }}", path: "/api/health" }
+        - { name: "Netdata", port: "{{ control_netdata.port }}", path: "/api/v1/info" }
+        - { name: "Loki", port: "{{ control_loki.port }}", path: "/ready" }
+        - { name: "Uptime Kuma", port: "{{ control_uptime_kuma.port }}", path: "/" }
+      register: health_results
+      ignore_errors: true
 
     - name: Display deployment summary
       ansible.builtin.debug:
         msg: |
-          ================================================
-          SERVER HELPER DEPLOYMENT COMPLETE!
-          ================================================
+          ══════════════════════════════════════════════════
+          Server Helper v2.0 — Deployment Complete
+          ══════════════════════════════════════════════════
 
-          Service Status:
-          {% for result in health_checks.results %}
-          - {{ result.item.name }}: {{ 'OK' if result.status | default(0) in result.item.status else 'STARTING' }}
-          {% endfor %}
+          Service URLs:
+            Traefik:     https://traefik.{{ target_domain }}
+            Grafana:     https://grafana.{{ target_domain }}
+            Netdata:     https://netdata.{{ target_domain }}
+            Uptime Kuma: https://status.{{ target_domain }}
+            Pi-hole:     https://pihole.{{ target_domain }}
+            Authentik:   https://auth.{{ target_domain }}
+            Step-CA:     https://step-ca.{{ target_domain }}
+            Dockge:      https://dockge.{{ target_domain }}
 
-          ================================================
-          Access URLs (https://{{ target_domain }}):
-          ================================================
-          Traefik Dashboard: https://traefik.{{ target_domain }}
-          Grafana:           https://grafana.{{ target_domain }}
-          Netdata:           https://netdata.{{ target_domain }}
-          Uptime Kuma:       https://status.{{ target_domain }}
-          Pi-hole:           https://pihole.{{ target_domain }}
-          Authentik:         https://auth.{{ target_domain }}
-          Step-CA:           https://step-ca.{{ target_domain }}
-          Dockge:            https://dockge.{{ target_domain }}
-
-          ================================================
-          Tiered Architecture:
-          ================================================
-          Tier 1 (Foundation): {{ groups['all'] | length }} nodes hardened
-          Tier 2 (Targets):    {{ groups['targets'] | default([]) | length }} worker nodes
-          Tier 3 (Control):    {{ groups['control'] | length }} management node(s)
-
-          ================================================
-          Next Steps:
-          ================================================
-          1. Configure DNS: *.{{ target_domain }} → {{ control_node_ip }}
-          2. Complete Authentik setup at https://auth.{{ target_domain }}
-          3. Configure OAuth for Grafana
-          4. Set up monitors in Uptime Kuma
-          5. Install Step-CA root cert on clients
-
-          Setup Guides: /opt/stacks/*/SETUP-GUIDE.md
-          ================================================
+          ══════════════════════════════════════════════════

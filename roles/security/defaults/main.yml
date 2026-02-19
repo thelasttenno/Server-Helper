@@ -1,51 +1,22 @@
 ---
-# Security role defaults
-
-# Master toggle for security hardening
-security_enabled: true
-
-# =============================================================================
-# SSH HARDENING
-# =============================================================================
-
-security_ssh_enabled: "{{ target_security.ssh_hardening.enabled | default(true) }}"
-security_ssh_port: "{{ target_security.ssh_hardening.port | default(22) }}"
-security_ssh_permit_root_login: "{{ 'yes' if target_security.ssh_hardening.permit_root_login | default(false) else 'no' }}"
-security_ssh_password_auth: "{{ 'yes' if target_security.ssh_hardening.password_authentication | default(false) else 'no' }}"
-security_ssh_pubkey_auth: "{{ 'yes' if target_security.ssh_hardening.pubkey_authentication | default(true) else 'no' }}"
-security_ssh_max_auth_tries: "{{ target_security.ssh_hardening.max_auth_tries | default(3) }}"
-security_ssh_x11_forwarding: "no"
-security_ssh_allow_agent_forwarding: "no"
-security_ssh_tcp_forwarding: "no"
-
-# =============================================================================
-# UFW FIREWALL
-# =============================================================================
-
-security_ufw_enabled: "{{ target_security.ufw.enabled | default(true) }}"
-security_ufw_default_incoming: "{{ target_security.ufw.default_incoming | default('deny') }}"
-security_ufw_default_outgoing: "{{ target_security.ufw.default_outgoing | default('allow') }}"
-
-# Default UFW rules (SSH is always allowed)
-security_ufw_rules:
-  - { rule: allow, port: "{{ security_ssh_port }}", proto: tcp, comment: "SSH" }
-
-# Additional UFW rules from configuration
-security_ufw_extra_rules: []
-
-# =============================================================================
-# FAIL2BAN
-# =============================================================================
-
-security_fail2ban_enabled: "{{ target_security.fail2ban.enabled | default(true) }}"
-security_fail2ban_sshd_maxretry: "{{ target_security.fail2ban.sshd_maxretry | default(3) }}"
-security_fail2ban_sshd_bantime: "{{ target_security.fail2ban.sshd_bantime | default(86400) }}"
-security_fail2ban_sshd_findtime: 600
-
-# =============================================================================
-# LYNIS (Security Auditing)
-# =============================================================================
-
-security_lynis_enabled: "{{ target_security.lynis.enabled | default(true) }}"
-security_lynis_schedule: "{{ target_security.lynis.schedule | default('0 3 * * 0') }}"
-security_lynis_report_dir: "/var/log/lynis"
+# Role: security — Defaults
+target_security:
+  ssh_hardening:
+    permit_root_login: "no"
+    password_authentication: "no"
+    max_auth_tries: 3
+    x11_forwarding: "no"
+    allow_tcp_forwarding: "no"
+    client_alive_interval: 300
+    client_alive_count_max: 2
+  fail2ban:
+    enabled: true
+    max_retry: 3
+    ban_time: 86400
+    find_time: 600
+  ufw:
+    enabled: true
+    default_incoming: "deny"
+    default_outgoing: "allow"
+    allowed_ports:
+      - { port: 22, proto: "tcp", comment: "SSH" }

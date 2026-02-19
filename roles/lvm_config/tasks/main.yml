@@ -1,190 +1,39 @@
 ---
-# LVM Configuration role - Expand logical volumes to use available space
+# Role: lvm_config — Expand LVM volumes to use 100% free space
+# Auto-skipped on LXC containers via lvm_skip flag
 
-- name: Display role info
+- name: Skip LVM config message
   ansible.builtin.debug:
-    msg: "Configuring LVM on {{ inventory_hostname }}"
-
-- name: Skip LVM for LXC containers
-  ansible.builtin.debug:
-    msg: "Skipping LVM configuration (lvm_skip is true - likely LXC container)"
+    msg: "Skipping LVM configuration (lvm_skip={{ lvm_skip }})"
   when: lvm_skip | bool
 
-- name: Run LVM configuration
+- name: Check for LVM volumes
+  ansible.builtin.command: lvs --noheadings -o lv_name,vg_name
+  register: lvm_volumes
+  changed_when: false
+  failed_when: false
+  when: not (lvm_skip | bool)
+
+- name: Extend logical volumes to 100% free space
+  ansible.builtin.command: >
+    lvextend -l +100%FREE /dev/{{ item.split()[1] }}/{{ item.split()[0] }}
+  loop: "{{ lvm_volumes.stdout_lines | default([]) }}"
   when:
-    - lvm_enabled | bool
     - not (lvm_skip | bool)
-  block:
-    # ==========================================================================
-    # CHECK LVM AVAILABILITY
-    # ==========================================================================
+    - lvm_volumes.rc == 0
+    - lvm_volumes.stdout_lines | length > 0
+  register: lvm_extend_result
+  changed_when: "'successfully resized' in lvm_extend_result.stdout | default('')"
+  failed_when: false
+  notify: Resize filesystem
 
-    - name: Check if LVM tools are installed
-      ansible.builtin.command: which lvs
-      register: lvm_installed
-      changed_when: false
-      failed_when: false
-
-    - name: Install LVM tools if missing
-      ansible.builtin.apt:
-        name:
-          - lvm2
-        state: present
-      become: true
-      when: lvm_installed.rc != 0
-
-    # ==========================================================================
-    # DETECT ROOT LV
-    # ==========================================================================
-
-    - name: Get root filesystem device
-      ansible.builtin.shell: |
-        findmnt -n -o SOURCE / | head -1
-      register: root_device
-      changed_when: false
-
-    - name: Check if root is on LVM
-      ansible.builtin.set_fact:
-        root_is_lvm: "{{ '/dev/mapper/' in root_device.stdout or '/dev/dm-' in root_device.stdout }}"
-
-    - name: Display root device info
-      ansible.builtin.debug:
-        msg: "Root device: {{ root_device.stdout }} (LVM: {{ root_is_lvm }})"
-
-    # ==========================================================================
-    # EXPAND ROOT LV (Ubuntu default setup)
-    # ==========================================================================
-
-    - name: Expand Ubuntu root LV
-      when:
-        - root_is_lvm
-        - lvm_auto_extend_ubuntu
-      block:
-        - name: Get volume group info
-          ansible.builtin.shell: |
-            lvs --noheadings -o vg_name {{ root_device.stdout }} 2>/dev/null | tr -d ' '
-          register: root_vg
-          changed_when: false
-          failed_when: false
-
-        - name: Get VG free space
-          ansible.builtin.shell: |
-            vgs --noheadings -o vg_free --units g {{ root_vg.stdout }} 2>/dev/null | tr -d ' ' | sed 's/g$//' | sed 's/<//g'
-          register: vg_free_space
-          changed_when: false
-          when: root_vg.stdout != ""
-
-        - name: Display VG free space
-          ansible.builtin.debug:
-            msg: "Volume group {{ root_vg.stdout }} has {{ vg_free_space.stdout | default('0') }}G free"
-          when: root_vg.stdout != ""
-
-        - name: Extend root LV to use all free space
-          ansible.builtin.command: lvextend -l +100%FREE {{ root_device.stdout }}
-          become: true
-          register: lv_extend_result
-          changed_when: "'successfully resized' in lv_extend_result.stdout or 'extended' in lv_extend_result.stdout"
-          failed_when: false
-          when:
-            - root_vg.stdout != ""
-            - vg_free_space.stdout | default('0') | float > 0.1
-
-        - name: Get root filesystem type
-          ansible.builtin.shell: |
-            findmnt -n -o FSTYPE / | head -1
-          register: root_fs_type
-          changed_when: false
-
-        - name: Resize ext4 filesystem
-          ansible.builtin.command: resize2fs {{ root_device.stdout }}
-          become: true
-          register: resize_result
-          changed_when: "'nothing to do' not in resize_result.stderr | default('')"
-          failed_when: false
-          when:
-            - lv_extend_result.changed | default(false)
-            - root_fs_type.stdout in ['ext4', 'ext3', 'ext2']
-
-        - name: Resize XFS filesystem
-          ansible.builtin.command: xfs_growfs /
-          become: true
-          register: xfs_result
-          changed_when: "'data blocks changed' in xfs_result.stdout"
-          failed_when: false
-          when:
-            - lv_extend_result.changed | default(false)
-            - root_fs_type.stdout == 'xfs'
-
-    # ==========================================================================
-    # EXTEND CUSTOM LVs
-    # ==========================================================================
-
-    - name: Extend custom logical volumes
-      ansible.builtin.command: >
-        lvextend -L {{ item.size }} /dev/{{ item.vg_name }}/{{ item.lv_name }}
-      become: true
-      loop: "{{ lvm_custom_lvs }}"
-      when: lvm_custom_lvs | length > 0
-      register: custom_lv_result
-      changed_when: "'successfully resized' in custom_lv_result.stdout"
-      failed_when: false
-
-    # ==========================================================================
-    # CREATE NEW LVs
-    # ==========================================================================
-
-    - name: Create new logical volumes
-      community.general.lvol:
-        vg: "{{ item.vg_name }}"
-        lv: "{{ item.lv_name }}"
-        size: "{{ item.size }}"
-        state: present
-      become: true
-      loop: "{{ lvm_create_lvs }}"
-      when: lvm_create_lvs | length > 0
-
-    - name: Create filesystem on new LVs
-      community.general.filesystem:
-        fstype: "{{ item.fs_type | default('ext4') }}"
-        dev: "/dev/{{ item.vg_name }}/{{ item.lv_name }}"
-      become: true
-      loop: "{{ lvm_create_lvs }}"
-      when:
-        - lvm_create_lvs | length > 0
-        - item.fs_type is defined
-
-    - name: Create mount points
-      ansible.builtin.file:
-        path: "{{ item.mount_point }}"
-        state: directory
-        mode: "0755"
-      become: true
-      loop: "{{ lvm_create_lvs }}"
-      when:
-        - lvm_create_lvs | length > 0
-        - item.mount_point is defined
-
-    - name: Mount new LVs
-      ansible.posix.mount:
-        path: "{{ item.mount_point }}"
-        src: "/dev/{{ item.vg_name }}/{{ item.lv_name }}"
-        fstype: "{{ item.fs_type | default('ext4') }}"
-        state: mounted
-      become: true
-      loop: "{{ lvm_create_lvs }}"
-      when:
-        - lvm_create_lvs | length > 0
-        - item.mount_point is defined
-
-    # ==========================================================================
-    # DISPLAY RESULTS
-    # ==========================================================================
-
-    - name: Get final disk usage
-      ansible.builtin.shell: df -h / | tail -1 | awk '{print $2 " total, " $4 " free (" $5 " used)"}'
-      register: final_disk_usage
-      changed_when: false
-
-    - name: Display final disk usage
-      ansible.builtin.debug:
-        msg: "Root filesystem: {{ final_disk_usage.stdout }}"
+- name: Detect filesystem type for each volume
+  ansible.builtin.command: >
+    blkid -o value -s TYPE /dev/{{ item.split()[1] }}/{{ item.split()[0] }}
+  loop: "{{ lvm_volumes.stdout_lines | default([]) }}"
+  register: lvm_fs_types
+  changed_when: false
+  when:
+    - not (lvm_skip | bool)
+    - lvm_volumes.rc == 0
+    - lvm_volumes.stdout_lines | length > 0

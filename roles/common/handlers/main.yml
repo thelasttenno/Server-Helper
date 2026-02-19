@@ -1,21 +1,5 @@
 ---
-# Common role handlers
-
 - name: Restart chrony
   ansible.builtin.systemd:
     name: chrony
     state: restarted
-  become: true
-
-- name: Restart cron
-  ansible.builtin.systemd:
-    name: cron
-    state: restarted
-  become: true
-  failed_when: false  # cron may not exist in containers
-
-- name: Restart journald
-  ansible.builtin.systemd:
-    name: systemd-journald
-    state: restarted
-  become: true

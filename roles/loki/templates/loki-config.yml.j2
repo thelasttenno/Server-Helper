@@ -1,31 +1,19 @@
-# Loki configuration
-# Managed by Ansible - Server Helper
-
-auth_enabled: {{ loki_auth_enabled | lower }}
+# {{ ansible_managed }}
+auth_enabled: false
 
 server:
   http_listen_port: 3100
-  grpc_listen_port: 9096
-  log_level: info
 
 common:
-  path_prefix: {{ loki_storage_path }}
+  path_prefix: /loki
   storage:
     filesystem:
-      chunks_directory: {{ loki_storage_path }}/chunks
-      rules_directory: {{ loki_storage_path }}/rules
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
   replication_factor: 1
   ring:
-    instance_addr: 127.0.0.1
     kvstore:
       store: inmemory
-
-query_range:
-  results_cache:
-    cache:
-      embedded_cache:
-        enabled: true
-        max_size_mb: 100
 
 schema_config:
   configs:
@@ -37,33 +25,27 @@ schema_config:
         prefix: index_
         period: 24h
 
-ruler:
-  alertmanager_url: http://localhost:9093
-
-ingester:
-  chunk_target_size: {{ loki_chunk_target_size }}
-  max_chunk_age: 1h
-  chunk_idle_period: 30m
-  chunk_retain_period: 30s
-  lifecycler:
-    ring:
-      kvstore:
-        store: inmemory
-      replication_factor: 1
-
-limits_config:
-  ingestion_rate_mb: {{ loki_ingestion_rate_mb }}
-  ingestion_burst_size_mb: {{ loki_ingestion_burst_size_mb }}
-  max_streams_per_user: {{ loki_max_streams_per_user }}
-  max_entries_limit_per_query: {{ loki_max_entries_limit_per_query }}
-  retention_period: {{ loki_retention_period }}
+storage_config:
+  boltdb_shipper:
+    active_index_directory: /loki/boltdb-shipper-active
+    cache_location: /loki/boltdb-shipper-cache
+    shared_store: filesystem
 
 compactor:
-  working_directory: {{ loki_storage_path }}/compactor
+  working_directory: /loki/compactor
   shared_store: filesystem
-  retention_enabled: {{ loki_compactor_retention_enabled | lower }}
-  retention_delete_delay: {{ loki_compactor_retention_delete_delay }}
-  retention_delete_worker_count: {{ loki_compactor_retention_delete_worker_count }}
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 150
+
+limits_config:
+  retention_period: {{ control_loki.retention_period }}
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  max_cache_freshness_per_query: 10m
+  ingestion_rate_mb: 16
+  ingestion_burst_size_mb: 32
 
 analytics:
   reporting_enabled: false

@@ -1,24 +1,11 @@
-# CPU health alarms
-# Managed by Ansible - Server Helper
+# {{ ansible_managed }}
+# CPU alarm thresholds
 
-alarm: cpu_usage
-    on: system.cpu
-lookup: average -3m percentage foreach user,system,softirq,irq,guest
- units: %
- every: 1m
-  warn: $this > {{ netdata_alarm_cpu_threshold }}
-  crit: $this > 95
- delay: down 5m multiplier 1.5 max 1h
-  info: CPU utilization over the last 3 minutes
-    to: sysadmin
-
-alarm: cpu_iowait
-    on: system.cpu
-lookup: average -3m percentage of iowait
- units: %
- every: 1m
-  warn: $this > 20
-  crit: $this > 40
- delay: down 5m multiplier 1.5 max 1h
-  info: CPU I/O wait over the last 3 minutes
-    to: sysadmin
+alarm: cpu_usage_warning
+   on: system.cpu
+   lookup: average -5m percentage foreach user,system,softirq,irq
+   units: %
+   every: 1m
+   warn: $this > {{ target_netdata.alarms.cpu_warning }}
+   crit: $this > {{ target_netdata.alarms.cpu_critical }}
+   info: CPU utilization alarm

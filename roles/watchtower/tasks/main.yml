@@ -1,47 +1,23 @@
 ---
-# Watchtower deployment tasks
+# Role: watchtower — Deploy Watchtower for automatic Docker image updates
 
-- name: Watchtower deployment
-  when: watchtower_enabled | bool
-  block:
-    # Create stack directory
-    - name: Create Watchtower stack directory
-      ansible.builtin.file:
-        path: "{{ watchtower_stack_dir }}"
-        state: directory
-        owner: root
-        group: docker
-        mode: "0755"
-      become: true
+- name: Create Watchtower stack directory
+  ansible.builtin.file:
+    path: "{{ docker_stack_path }}/watchtower"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
-    # Deploy docker-compose file
-    - name: Deploy Watchtower docker-compose
-      ansible.builtin.template:
-        src: docker-compose.yml.j2
-        dest: "{{ watchtower_stack_dir }}/compose.yaml"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
-      register: watchtower_compose
+- name: Deploy Watchtower Docker Compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ docker_stack_path }}/watchtower/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
 
-    # Deploy the stack
-    - name: Deploy Watchtower stack
-      community.docker.docker_compose_v2:
-        project_src: "{{ watchtower_stack_dir }}"
-        state: present
-        pull: always
-      become: true
-      when:
-        - not watchtower_skip_deploy | default(false)
-        - watchtower_compose.changed
-
-    # Ensure Watchtower is running
-    - name: Ensure Watchtower is running
-      community.docker.docker_compose_v2:
-        project_src: "{{ watchtower_stack_dir }}"
-        state: present
-      become: true
-      when:
-        - not watchtower_skip_deploy | default(false)
-        - not watchtower_compose.changed
+- name: Start Watchtower
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_stack_path }}/watchtower"
+    state: present

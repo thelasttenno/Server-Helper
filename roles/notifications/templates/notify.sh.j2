@@ -1,0 +1,31 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Server Helper — Notification Dispatcher
+# Usage: server-helper-notify "Subject" "Message"
+
+set -euo pipefail
+
+SUBJECT="${1:-Alert}"
+MESSAGE="${2:-No details provided}"
+HOSTNAME="{{ inventory_hostname }}"
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+FULL_MESSAGE="[$HOSTNAME] $SUBJECT — $MESSAGE ($TIMESTAMP)"
+
+{% if notifications_discord.enabled | bool %}
+/usr/local/lib/server-helper/notify-discord.sh "$FULL_MESSAGE" &
+{% endif %}
+
+{% if notifications_telegram.enabled | bool %}
+/usr/local/lib/server-helper/notify-telegram.sh "$FULL_MESSAGE" &
+{% endif %}
+
+{% if notifications_slack.enabled | bool %}
+/usr/local/lib/server-helper/notify-slack.sh "$FULL_MESSAGE" &
+{% endif %}
+
+{% if notifications_smtp.enabled | bool %}
+/usr/local/lib/server-helper/notify-email.sh "$SUBJECT" "$FULL_MESSAGE" &
+{% endif %}
+
+wait

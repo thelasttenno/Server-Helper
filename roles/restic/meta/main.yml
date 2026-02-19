@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: restic
+  author: Server Helper
+  description: Restic backup with systemd timers, S3/NAS/local destinations
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions: [jammy, noble]
+    - name: Debian
+      versions: [bookworm]
+  galaxy_tags: [backup, restic, systemd]
+dependencies: []

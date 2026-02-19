@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: qemu_agent
+  author: Server Helper
+  description: Install qemu-guest-agent for VM host visibility
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions: [jammy, noble]
+    - name: Debian
+      versions: [bookworm]
+  galaxy_tags: [system, qemu, virtualization]
+dependencies: []

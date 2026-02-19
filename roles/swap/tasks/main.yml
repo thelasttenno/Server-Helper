@@ -1,137 +1,58 @@
 ---
-# Swap role - Configure swap file
+# Role: swap — Create swap file and set swappiness
+# Auto-skipped on LXC containers via swap_skip flag
 
-- name: Display role info
+- name: Skip swap message
   ansible.builtin.debug:
-    msg: "Configuring swap on {{ inventory_hostname }}"
-
-- name: Skip swap for LXC containers
-  ansible.builtin.debug:
-    msg: "Skipping swap configuration (swap_skip is true - likely LXC container)"
+    msg: "Skipping swap configuration (swap_skip={{ swap_skip }})"
   when: swap_skip | bool
 
-- name: Configure swap
+- name: Check if swap file exists
+  ansible.builtin.stat:
+    path: /swapfile
+  register: swap_file_check
+  when: not (swap_skip | bool)
+
+- name: Create swap file
+  ansible.builtin.command: >
+    fallocate -l {{ swap_size_gb }}G /swapfile
   when:
-    - swap_enabled | bool
     - not (swap_skip | bool)
-  block:
-    # ==========================================================================
-    # CHECK EXISTING SWAP
-    # ==========================================================================
+    - not swap_file_check.stat.exists | default(false)
 
-    - name: Get current swap size
-      ansible.builtin.shell: |
-        free -b | grep Swap | awk '{print $2}'
-      register: current_swap_bytes
-      changed_when: false
+- name: Set swap file permissions
+  ansible.builtin.file:
+    path: /swapfile
+    owner: root
+    group: root
+    mode: "0600"
+  when: not (swap_skip | bool)
 
-    - name: Calculate required swap size
-      ansible.builtin.set_fact:
-        required_swap_bytes: "{{ (swap_size_gb | int) * 1024 * 1024 * 1024 }}"
+- name: Format swap file
+  ansible.builtin.command: mkswap /swapfile
+  when:
+    - not (swap_skip | bool)
+    - not swap_file_check.stat.exists | default(false)
 
-    - name: Check if sufficient swap exists
-      ansible.builtin.set_fact:
-        swap_sufficient: "{{ (current_swap_bytes.stdout | int) >= (required_swap_bytes | int) }}"
+- name: Enable swap file
+  ansible.builtin.command: swapon /swapfile
+  when:
+    - not (swap_skip | bool)
+    - not swap_file_check.stat.exists | default(false)
 
-    - name: Display current swap info
-      ansible.builtin.debug:
-        msg: "Current swap: {{ (current_swap_bytes.stdout | int / 1024 / 1024 / 1024) | round(2) }}GB, Required: {{ swap_size_gb }}GB"
+- name: Add swap to fstab
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^/swapfile'
+    line: '/swapfile none swap sw 0 0'
+    state: present
+  when: not (swap_skip | bool)
 
-    # ==========================================================================
-    # CREATE SWAP FILE (if needed)
-    # ==========================================================================
-
-    - name: Configure swap file
-      when: not swap_sufficient
-      block:
-        - name: Check if swap file exists
-          ansible.builtin.stat:
-            path: "{{ swap_file_path }}"
-          register: swap_file_stat
-
-        - name: Disable existing swap file
-          ansible.builtin.command: swapoff {{ swap_file_path }}
-          become: true
-          when: swap_file_stat.stat.exists
-          failed_when: false
-
-        - name: Remove existing swap file
-          ansible.builtin.file:
-            path: "{{ swap_file_path }}"
-            state: absent
-          become: true
-          when: swap_file_stat.stat.exists
-
-        - name: Create swap file with fallocate
-          ansible.builtin.command: fallocate -l {{ swap_size_gb }}G {{ swap_file_path }}
-          become: true
-          register: fallocate_result
-          failed_when: false
-
-        - name: Create swap file with dd (fallback)
-          ansible.builtin.command: >
-            dd if=/dev/zero of={{ swap_file_path }}
-            bs=1M count={{ swap_size_gb * 1024 }} status=none
-          become: true
-          when: fallocate_result.rc != 0
-
-        - name: Set swap file permissions
-          ansible.builtin.file:
-            path: "{{ swap_file_path }}"
-            mode: "0600"
-            owner: root
-            group: root
-          become: true
-
-        - name: Format swap file
-          ansible.builtin.command: mkswap {{ swap_file_path }}
-          become: true
-
-        - name: Enable swap file
-          ansible.builtin.command: swapon {{ swap_file_path }}
-          become: true
-
-        - name: Add swap to fstab
-          ansible.posix.mount:
-            path: none
-            src: "{{ swap_file_path }}"
-            fstype: swap
-            opts: sw
-            state: present
-          become: true
-
-    # ==========================================================================
-    # CONFIGURE SWAPPINESS
-    # ==========================================================================
-
-    - name: Set swappiness
-      ansible.posix.sysctl:
-        name: vm.swappiness
-        value: "{{ swap_swappiness }}"
-        sysctl_file: /etc/sysctl.d/99-swap.conf
-        reload: yes
-        state: present
-      become: true
-
-    - name: Set vfs_cache_pressure
-      ansible.posix.sysctl:
-        name: vm.vfs_cache_pressure
-        value: "{{ swap_vfs_cache_pressure }}"
-        sysctl_file: /etc/sysctl.d/99-swap.conf
-        reload: yes
-        state: present
-      become: true
-
-    # ==========================================================================
-    # VERIFY
-    # ==========================================================================
-
-    - name: Get final swap info
-      ansible.builtin.shell: |
-        free -h | grep Swap | awk '{print $2}'
-      register: final_swap
-      changed_when: false
-
-    - name: Display final swap info
-      ansible.builtin.debug:
-        msg: "Swap configured: {{ final_swap.stdout }}"
+- name: Set swappiness
+  ansible.posix.sysctl:
+    name: vm.swappiness
+    value: "10"
+    sysctl_set: true
+    state: present
+    reload: true
+  when: not (swap_skip | bool)

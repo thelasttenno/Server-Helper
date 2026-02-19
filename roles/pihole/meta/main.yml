@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: pihole
+  author: Server Helper
+  description: Deploy Pi-hole with Unbound recursive resolver and DNSSEC
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions: [jammy, noble]
+    - name: Debian
+      versions: [bookworm]
+  galaxy_tags: [dns, pihole, unbound, dnssec]
+dependencies: []

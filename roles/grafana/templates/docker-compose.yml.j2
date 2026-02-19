@@ -1,49 +1,36 @@
-# Grafana - Monitoring dashboard
-# Managed by Ansible - Server Helper
-# Dockge compatible: /opt/stacks/grafana/
-
+# {{ ansible_managed }}
 services:
   grafana:
-    image: {{ grafana_image }}:{{ grafana_image_tag }}
-    container_name: {{ grafana_container_name }}
+    image: grafana/grafana:{{ control_grafana.version }}
+    container_name: grafana
     restart: unless-stopped
-    user: "472:472"
     ports:
-      - "{{ grafana_port }}:3000"
+      - "{{ control_grafana.port }}:3000"
+    env_file:
+      - .env
     volumes:
+      - grafana-data:/var/lib/grafana
       - ./grafana.ini:/etc/grafana/grafana.ini:ro
       - ./provisioning:/etc/grafana/provisioning:ro
-      - ./data:/var/lib/grafana
-    environment:
-      - GF_SECURITY_ADMIN_USER={{ grafana_admin_user }}
-      - GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password }}
-      - GF_INSTALL_PLUGINS={{ grafana_plugins | join(',') }}
-    deploy:
-      resources:
-        limits:
-          memory: {{ grafana_memory_limit }}
-          cpus: "{{ grafana_cpu_limit }}"
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.{{ target_domain }}`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+      - "traefik.http.routers.grafana.middlewares=security-headers"
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
-    networks:
-      - {{ traefik_docker_network | default('traefik-public') }}
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-      - "traefik.enable=true"
-      - "traefik.http.routers.grafana.rule=Host(`grafana.{{ target_domain | default('local') }}`)"
-      - "traefik.http.routers.grafana.entrypoints=websecure"
-      - "traefik.http.routers.grafana.tls=true"
-      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+volumes:
+  grafana-data:
 
 networks:
-  {{ traefik_docker_network | default('traefik-public') }}:
+  traefik-public:
     external: true

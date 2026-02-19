@@ -1,0 +1,26 @@
+---
+# Role: notifications — Defaults
+notifications_enabled: true
+
+# Channels — each is optional; only configured channels will be used
+notifications_smtp:
+  enabled: false
+  host: "{{ vault_smtp_credentials.host | default('') }}"
+  port: "{{ vault_smtp_credentials.port | default(587) }}"
+  username: "{{ vault_smtp_credentials.username | default('') }}"
+  password: "{{ vault_smtp_credentials.password | default('') }}"
+  from: "{{ vault_smtp_credentials.from | default('') }}"
+  to: "{{ vault_smtp_credentials.to | default([]) }}"
+
+notifications_discord:
+  enabled: "{{ (vault_discord_webhook | default('') | length > 0) }}"
+  webhook: "{{ vault_discord_webhook | default('') }}"
+
+notifications_telegram:
+  enabled: "{{ (vault_telegram_credentials.bot_token | default('') | length > 0) }}"
+  bot_token: "{{ vault_telegram_credentials.bot_token | default('') }}"
+  chat_id: "{{ vault_telegram_credentials.chat_id | default('') }}"
+
+notifications_slack:
+  enabled: "{{ (vault_slack_webhook | default('') | length > 0) }}"
+  webhook: "{{ vault_slack_webhook | default('') }}"

@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Weekly Docker system cleanup
+Requires=docker-cleanup.service
+
+[Timer]
+OnCalendar=weekly
+RandomizedDelaySec=3600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

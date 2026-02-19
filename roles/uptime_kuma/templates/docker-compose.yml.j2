@@ -1,45 +1,33 @@
-# Uptime Kuma - Status monitoring
-# Managed by Ansible - Server Helper
-# Dockge compatible: /opt/stacks/uptime-kuma/
-
+# {{ ansible_managed }}
 services:
   uptime-kuma:
-    image: {{ uptime_kuma_image }}:{{ uptime_kuma_image_tag }}
-    container_name: {{ uptime_kuma_container_name }}
+    image: louislam/uptime-kuma:{{ control_uptime_kuma.version }}
+    container_name: uptime-kuma
     restart: unless-stopped
     ports:
-      - "{{ uptime_kuma_port }}:3001"
+      - "{{ control_uptime_kuma.port }}:3001"
     volumes:
-      - ./data:/app/data
+      - uptime-kuma-data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      - TZ={{ target_timezone | default('America/Vancouver') }}
-    deploy:
-      resources:
-        limits:
-          memory: {{ uptime_kuma_memory_limit }}
-          cpus: "{{ uptime_kuma_cpu_limit }}"
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.uptime-kuma.rule=Host(`status.{{ target_domain }}`)"
+      - "traefik.http.routers.uptime-kuma.entrypoints=websecure"
+      - "traefik.http.routers.uptime-kuma.tls.certresolver=letsencrypt"
+      - "traefik.http.services.uptime-kuma.loadbalancer.server.port=3001"
+      - "traefik.http.routers.uptime-kuma.middlewares=security-headers"
     healthcheck:
-      test: ["CMD-SHELL", "node /app/extra/healthcheck.js"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
-    networks:
-      - {{ traefik_docker_network | default('traefik-public') }}
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-      - "traefik.enable=true"
-      - "traefik.http.routers.uptime-kuma.rule=Host(`status.{{ target_domain | default('local') }}`)"
-      - "traefik.http.routers.uptime-kuma.entrypoints=websecure"
-      - "traefik.http.routers.uptime-kuma.tls=true"
-      - "traefik.http.services.uptime-kuma.loadbalancer.server.port=3001"
+
+volumes:
+  uptime-kuma-data:
 
 networks:
-  {{ traefik_docker_network | default('traefik-public') }}:
+  traefik-public:
     external: true

@@ -1,0 +1,33 @@
+---
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--allow-multiple-documents']
+      - id: check-added-large-files
+      - id: check-merge-conflict
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.33.0
+    hooks:
+      - id: yamllint
+        args: ['-c', '.yamllint']
+
+  - repo: https://github.com/ansible/ansible-lint
+    rev: v24.2.0
+    hooks:
+      - id: ansible-lint
+        files: \.(yml|yaml)$
+        exclude: (molecule/|.github/)
+
+  - repo: local
+    hooks:
+      - id: vault-encrypted
+        name: Check vault.yml is encrypted
+        entry: bash -c 'if git diff --cached --name-only | grep -qF group_vars/vault.yml; then head=$(git show :group_vars/vault.yml 2>/dev/null | head -1); echo "$head" | grep -q "^\$ANSIBLE_VAULT" || { echo "ERROR: vault.yml is NOT encrypted!"; exit 1; }; fi'
+        language: system
+        pass_filenames: false
+        always_run: true

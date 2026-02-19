@@ -1,45 +1,17 @@
-# Netdata configuration
-# Managed by Ansible - Server Helper
-# Mode: {{ netdata_mode }}
+# {{ ansible_managed }}
+# Netdata configuration — {{ netdata_mode }} mode
 
 [global]
-    hostname = {{ netdata_hostname }}
-    update every = 1
-    history = 3600
-
-{% if netdata_mode == "parent" %}
+    hostname = {{ inventory_hostname }}
+    history = {{ control_netdata.history_seconds if netdata_mode == 'parent' else 3600 }}
+{% if netdata_mode == 'parent' %}
     memory mode = dbengine
-    page cache size = {{ netdata_dbengine_page_cache_size }}
-    dbengine multihost disk space = {{ netdata_dbengine_multihost_disk_space }}
+    page cache size = 64
+    dbengine multihost disk space = {{ control_netdata.dbengine_multihost_disk_space }}
 {% else %}
-    memory mode = {{ netdata_child_memory_mode }}
+    memory mode = ram
 {% endif %}
 
 [web]
-{% if netdata_mode == "parent" %}
     bind to = *
-{% else %}
-    mode = none
-{% endif %}
-
-[plugins]
-    proc = yes
-    diskspace = yes
-    cgroups = yes
-    tc = no
-    idlejitter = no
-    apps = yes
-
-[plugin:proc]
-    /proc/net/dev = yes
-    /proc/diskstats = yes
-    /proc/net/snmp = yes
-    /proc/net/netstat = yes
-
-{% if netdata_mode == "parent" %}
-[health]
-    enabled = yes
-{% else %}
-[health]
-    enabled = {{ netdata_child_health_enabled }}
-{% endif %}
+    allow connections from = *

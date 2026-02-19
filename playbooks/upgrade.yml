@@ -1,0 +1,75 @@
+---
+# =============================================================================
+# upgrade.yml — Docker image upgrades
+# =============================================================================
+# Rolling Docker image pull + recreate with health checks.
+#
+# Usage:
+#   ansible-playbook playbooks/upgrade.yml
+#   ansible-playbook playbooks/upgrade.yml -e "target_service=grafana"
+#   ansible-playbook playbooks/upgrade.yml --tags cleanup
+
+- name: Rolling Docker image upgrades
+  hosts: all
+  serial: 1
+  gather_facts: true
+  tags: [upgrade]
+  vars:
+    target_service: ""
+  tasks:
+    - name: Discover deployed stacks
+      ansible.builtin.find:
+        paths: "{{ docker_stack_path }}"
+        patterns: "docker-compose.yml"
+        recurse: true
+        depth: 2
+      register: deployed_stacks
+
+    - name: Build list of deployed services
+      ansible.builtin.set_fact:
+        services_to_upgrade: >-
+          {{
+            deployed_stacks.files
+            | map(attribute='path')
+            | map('dirname')
+            | map('basename')
+            | list
+          }}
+
+    - name: Filter to specific service
+      ansible.builtin.set_fact:
+        services_to_upgrade: ["{{ target_service }}"]
+      when: target_service | length > 0
+
+    - name: Pull latest images for each service
+      community.docker.docker_compose_v2:
+        project_src: "{{ docker_stack_path }}/{{ item }}"
+        pull: always
+        state: present
+        recreate: always
+      loop: "{{ services_to_upgrade }}"
+      register: upgrade_results
+      ignore_errors: true
+
+    - name: Display upgrade results
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: {{ 'OK' if item is success else 'FAILED' }}"
+      loop: "{{ upgrade_results.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+- name: Cleanup unused Docker images
+  hosts: all
+  serial: 1
+  tags: [cleanup, never]
+  tasks:
+    - name: Prune unused Docker images
+      community.docker.docker_prune:
+        images: true
+        images_filters:
+          dangling: false
+      register: prune_result
+
+    - name: Display cleanup results
+      ansible.builtin.debug:
+        msg: "Reclaimed: {{ prune_result.images_space_reclaimed | default(0) | human_readable }}"

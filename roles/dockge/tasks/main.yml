@@ -1,79 +1,23 @@
 ---
-# Dockge deployment tasks
+# Role: dockge — Deploy Dockge stack manager (on both control and target)
 
-- name: Dockge deployment
-  when: dockge_enabled | bool
-  block:
-    # Create stacks directory
-    - name: Create stacks directory
-      ansible.builtin.file:
-        path: "{{ dockge_stacks_dir }}"
-        state: directory
-        owner: root
-        group: docker
-        mode: "0775"
-      become: true
+- name: Create Dockge stack directory
+  ansible.builtin.file:
+    path: "{{ docker_stack_path }}/dockge"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
-    # Create Dockge stack directory
-    - name: Create Dockge stack directory
-      ansible.builtin.file:
-        path: "{{ dockge_stack_dir }}"
-        state: directory
-        owner: root
-        group: docker
-        mode: "0755"
-      become: true
+- name: Deploy Dockge Docker Compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ docker_stack_path }}/dockge/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
 
-    # Create data directory
-    - name: Create Dockge data directory
-      ansible.builtin.file:
-        path: "{{ dockge_data_dir }}"
-        state: directory
-        owner: root
-        group: docker
-        mode: "0755"
-      become: true
-
-    # Deploy docker-compose file
-    - name: Deploy Dockge docker-compose
-      ansible.builtin.template:
-        src: docker-compose.yml.j2
-        dest: "{{ dockge_stack_dir }}/compose.yaml"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
-      register: dockge_compose
-
-    # Deploy the stack
-    - name: Deploy Dockge stack
-      community.docker.docker_compose_v2:
-        project_src: "{{ dockge_stack_dir }}"
-        state: present
-        pull: always
-      become: true
-      when:
-        - not dockge_skip_deploy | default(false)
-        - dockge_compose.changed
-
-    # Ensure Dockge is running
-    - name: Ensure Dockge is running
-      community.docker.docker_compose_v2:
-        project_src: "{{ dockge_stack_dir }}"
-        state: present
-      become: true
-      when:
-        - not dockge_skip_deploy | default(false)
-        - not dockge_compose.changed
-
-    # Wait for Dockge to be ready
-    - name: Wait for Dockge to be ready
-      ansible.builtin.uri:
-        url: "http://localhost:{{ dockge_port }}"
-        method: GET
-        status_code: [200, 302]
-      register: dockge_health
-      until: dockge_health.status in [200, 302]
-      retries: 30
-      delay: 2
-      when: not dockge_skip_deploy | default(false)
+- name: Start Dockge
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_stack_path }}/dockge"
+    state: present

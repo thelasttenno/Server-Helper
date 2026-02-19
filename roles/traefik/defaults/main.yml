@@ -1,98 +1,19 @@
 ---
-# Traefik role defaults (Control Node)
-
-# Master toggle (from control_traefik config)
-traefik_enabled: "{{ control_traefik.enabled | default(true) }}"
-
-# Skip actual Docker deployment (for molecule testing)
-traefik_skip_deploy: false
-
-# Container settings
-traefik_container_name: "traefik"
-traefik_image: "traefik"
-traefik_image_tag: "{{ control_traefik.version | default('v3.0') }}"
-
-# Stack directory (Dockge compatible)
-traefik_stack_dir: "/opt/stacks/traefik"
-
-# Network ports (from control_traefik config)
-traefik_http_port: "{{ control_traefik.http_port | default(80) }}"
-traefik_https_port: "{{ control_traefik.https_port | default(443) }}"
-traefik_dashboard_port: "{{ control_traefik.dashboard_port | default(8080) }}"
-
-# Dashboard settings (from control_traefik config)
-traefik_dashboard_enabled: "{{ control_traefik.dashboard_enabled | default(true) }}"
-traefik_dashboard_insecure: false  # Set true for local dev only
-
-# API settings
-traefik_api_enabled: true
-
-# Log level: DEBUG, INFO, WARN, ERROR
-traefik_log_level: "INFO"
-
-# Access logs
-traefik_access_log_enabled: true
-
-# Docker provider
-traefik_docker_provider_enabled: true
-traefik_docker_network: "traefik-public"
-traefik_docker_exposedbydefault: false
-
-# File provider for dynamic config
-traefik_file_provider_enabled: true
-
-# ACME/Let's Encrypt settings
-traefik_acme_enabled: true
-traefik_acme_email: "admin@{{ target_domain | default('example.local') }}"
-traefik_acme_storage: "/letsencrypt/acme.json"
-traefik_acme_ca_server: "https://acme-v02.api.letsencrypt.org/directory"
-# Use staging for testing: https://acme-staging-v02.api.letsencrypt.org/directory
-
-# DNS challenge for wildcard certs (optional)
-traefik_acme_dns_challenge_enabled: false
-traefik_acme_dns_provider: ""  # cloudflare, route53, etc.
-traefik_acme_dns_env_vars: {}
-
-# HTTP challenge (default)
-traefik_acme_http_challenge_enabled: true
-
-# Internal CA (Step-CA) settings
-traefik_step_ca_enabled: false
-traefik_step_ca_endpoint: "https://step-ca:9000"
-traefik_step_ca_root_ca: "/certs/root_ca.crt"
-
-# TLS settings
-traefik_tls_min_version: "VersionTLS12"
-traefik_tls_cipher_suites: []
-
-# Entrypoints
-traefik_entrypoints:
-  web:
-    address: ":80"
-    http:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
-  websecure:
-    address: ":443"
-    http:
-      tls:
-        certResolver: letsencrypt
-
-# Middlewares
-traefik_default_middlewares: []
-
-# Basic auth for dashboard (configure in vault.yml)
-traefik_dashboard_auth_enabled: true
-traefik_dashboard_username: "{{ vault_traefik_dashboard.username | default('admin') }}"
-traefik_dashboard_password: "{{ vault_traefik_dashboard.password | default('admin') }}"
-# Pre-computed htpasswd users array for templates (escapes $ for Docker Compose)
-# Uses a deterministic salt derived from the username so the hash is stable across runs (idempotent)
-traefik_dashboard_bcrypt_salt: "{{ traefik_dashboard_username | hash('md5') | truncate(22, end='') }}"
-traefik_dashboard_users:
-  - "{{ traefik_dashboard_username }}:{{ traefik_dashboard_password | password_hash('blowfish', traefik_dashboard_bcrypt_salt) | replace('$', '$$') }}"
-
-# Resource limits
-traefik_memory_limit: "256m"
-traefik_cpu_limit: "0.5"
+# Role: traefik — Defaults
+control_traefik:
+  enabled: true
+  version: "v3.0"
+  http_port: 80
+  https_port: 443
+  dashboard_port: 8080
+  acme_email: "admin@{{ target_domain }}"
+  acme_dns_provider: "cloudflare"
+  log_level: "INFO"
+  security_headers:
+    browser_xss_filter: true
+    content_type_nosniff: true
+    frame_deny: true
+    ssl_redirect: true
+    sts_seconds: 315360000
+    sts_include_subdomains: true
+    sts_preload: true

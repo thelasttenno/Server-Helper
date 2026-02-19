@@ -1,336 +1,37 @@
-ORDERING_ANALYSIS.md
-UPDATE_SUMMARY.md
-test_all_commands.sh
-validate_commands.sh
-CLAUDE.md
+# Server Helper v2.0 — .gitignore
 
-# Deprecated files (functionality now integrated or consolidated)
-# Kept for reference but not part of active codebase
-lib/emergency-unmount-nas.sh
-QUICK_START.md
-
-
-# Server Helper - Git Ignore Rules
-
-# =============================================================================
-# ANSIBLE VAULT - CRITICAL SECURITY
-# =============================================================================
-
-# Never commit vault password files!
-.vault_password
-.vault_password_*
-.vault_pass
-*.vault_pass
-vault_password.txt
-
-# Decrypted vault files (if accidentally created)
-*_decrypted.yml
-*_plain.yml
-group_vars/vault_plain.yml
-
-# =============================================================================
-# ANSIBLE
-# =============================================================================
-
-# Retry files
+# Ansible
 *.retry
-
-# Ansible cache
-.ansible/
+.vault_password
 .ansible_cache/
 
-# Ansible facts cache
-/tmp/ansible_facts/
+# Secrets (NEVER commit these)
+group_vars/vault.yml
+!group_vars/vault.example.yml
 
-# Dynamic inventory
-inventory/*.py
-inventory/*.sh
-
-# Actual inventory and config (contains sensitive data)
-inventory/hosts.yml
-group_vars/all.yml
-group_vars/*/main.yml
-!group_vars/*.example.yml
-
-# Host-specific vars (may contain sensitive data)
-host_vars/
-!host_vars/*.example.yml
-
-# =============================================================================
-# LOGS & TEMPORARY FILES
-# =============================================================================
-
-# Log files
-*.log
-logs/
-/var/log/
-
-# Backup files
-*.bak
-*.backup
-*.old
-*.orig
-*~
-
-# Temporary files
-*.tmp
-*.temp
-.tmp/
-.temp/
-
-# =============================================================================
-# PYTHON
-# =============================================================================
-
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
-.installed.cfg
+.eggs/
+venv/
+.venv/
 *.egg
 
-# Virtual environments
-venv/
-env/
-ENV/
-env.bak/
-venv.bak/
-.venv/
+# Molecule
+.molecule/
+.cache/
 
-# Pipenv
-Pipfile.lock
-
-# Poetry
-poetry.lock
-
-# =============================================================================
-# EDITORS & IDEs
-# =============================================================================
-
-# VSCode
+# IDE
 .vscode/
-.vscode-upload.json
-*.code-workspace
-
-# PyCharm / IntelliJ
 .idea/
-*.iml
-*.iws
-*.ipr
-
-# Vim
 *.swp
 *.swo
 *~
-.*.sw?
-.vim/
 
-# Emacs
-*~
-\#*\#
-/.emacs.desktop
-/.emacs.desktop.lock
-*.elc
-auto-save-list
-tramp
-.\#*
-
-# Sublime Text
-*.sublime-project
-*.sublime-workspace
-
-# Atom
-.atom/
-
-# =============================================================================
-# OPERATING SYSTEMS
-# =============================================================================
-
-# macOS
+# OS
 .DS_Store
-.AppleDouble
-.LSOverride
-._*
-.DocumentRevisions-V100
-.fseventsd
-.Spotlight-V100
-.TemporaryItems
-.Trashes
-.VolumeIcon.icns
-.com.apple.timemachine.donotpresent
-
-# Windows
 Thumbs.db
-Thumbs.db:encryptable
-ehthumbs.db
-ehthumbs_vista.db
-Desktop.ini
-$RECYCLE.BIN/
 
-# Linux
-.directory
-.Trash-*
-
-# =============================================================================
-# SSH & CERTIFICATES
-# =============================================================================
-
-# SSH keys (should never be in repo)
-*.pem
-*.key
-*.crt
-*.cer
-*.p12
-*.pfx
-id_rsa*
-id_ed25519*
-id_ecdsa*
-
-# Certificate files
-*.csr
-*.der
-
-# =============================================================================
-# DOCKER & CONTAINERS
-# =============================================================================
-
-# Docker compose overrides (may contain sensitive data)
-docker-compose.override.yml
-
-# =============================================================================
-# RESTIC BACKUPS
-# =============================================================================
-
-# Restic repository data (if stored locally)
-/opt/backups/
-*.restic/
-
-# =============================================================================
-# PROJECT SPECIFIC
-# =============================================================================
-
-# Test files
-test/
-tests/
-testing/
-
-# Local development
-local/
-.local/
-
-# Documentation builds
-docs/_build/
-site/
-
-# Coverage reports
-htmlcov/
-.coverage
-.coverage.*
-coverage.xml
-*.cover
-
-# =============================================================================
-# SECRETS & CREDENTIALS (Extra Safety)
-# =============================================================================
-
-# Anything with "secret" or "credential" in name
-*secret*
-*credential*
-*password*
-!*password*.example*
-!*example*password*
-
-# Anything with "private" in name
-*private*
-!*private*.example*
-
-# Common secret file names
-.env
-.env.*
-!.env.example
-secrets.yml
-secrets.yaml
-credentials.yml
-credentials.yaml
-
-# =============================================================================
-# MISC
-# =============================================================================
-
-# Compiled Python files
-*.pyc
-
-# Package files
-*.tar.gz
-*.zip
-*.7z
-
-# Database files
-*.db
-*.sqlite
-*.sqlite3
-
-# =============================================================================
-# ALLOWED EXCEPTIONS (Important!)
-# =============================================================================
-
-# Explicitly allow example files
-!*.example
-!*.example.*
-!example.*
-
-# Explicitly allow encrypted vault files
-!group_vars/vault.yml
-!group_vars/*/vault.yml
-
-# Explicitly allow templates
-!templates/
-!*.j2
-!*.template
-
-# Explicitly allow documentation
-!README.md
-!CHANGELOG.md
-!MIGRATION.md
-!*.md
-
-# =============================================================================
-# NOTES
-# =============================================================================
-
-# This .gitignore is designed for maximum security:
-# 1. Vault passwords are NEVER committed
-# 2. Actual config files are ignored (only .example versions are tracked)
-# 3. Encrypted vault.yml files ARE safe to commit
-# 4. SSH keys and certificates are excluded
-# 5. Log files and temporary files are excluded
-#
-# Always verify before committing:
-#   git status
-#   git diff --cached
-#
-# To check what would be committed:
-#   git add . --dry-run
-.claude/plan.md
-.claude/prompt-v2.md
-.claude/instructions.md
+# Logs
+*.log

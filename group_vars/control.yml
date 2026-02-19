@@ -1,76 +1,111 @@
 ---
-# Server Helper - Control Node Configuration
-# ===========================================
-# Variables specific to the control node group.
-# These override values from all.yml for the control node.
+# =============================================================================
+# Server Helper v2.0 — Control Node Variables
+# =============================================================================
+# Variables specific to the control node services (Tier 3).
 
 # -----------------------------------------------------------------------------
-# CONTROL NODE SERVICES
-# -----------------------------------------------------------------------------
-
-# Authentik (SSO/Identity Provider)
-control_authentik:
-  enabled: true
-  port: 9000
-  version: "latest"
-
 # Traefik (Reverse Proxy)
+# -----------------------------------------------------------------------------
 control_traefik:
   enabled: true
+  version: "v3.0"
   http_port: 80
   https_port: 443
   dashboard_port: 8080
-  version: "v3.0"
+  acme_email: "admin@{{ target_domain }}"
+  acme_dns_provider: "cloudflare"
+  log_level: "INFO"
+  security_headers:
+    browser_xss_filter: true
+    content_type_nosniff: true
+    frame_deny: true
+    ssl_redirect: true
+    sts_seconds: 315360000
+    sts_include_subdomains: true
+    sts_preload: true
 
-# Step-CA (Internal Certificate Authority)
-# Note: port is the external host port; container listens internally on 9000
+# -----------------------------------------------------------------------------
+# Authentik (SSO/OIDC)
+# -----------------------------------------------------------------------------
+control_authentik:
+  enabled: true
+  version: "2024.2"
+  port: 9000
+  postgres_version: "16-alpine"
+  redis_version: "7-alpine"
+
+# -----------------------------------------------------------------------------
+# Step-CA (Internal PKI)
+# -----------------------------------------------------------------------------
 control_step_ca:
   enabled: true
+  version: "latest"
   port: 9443
-  ca_name: "Server-Helper CA"
+  ca_name: "{{ target_domain }} Internal CA"
+  provisioner_name: "acme"
+  cert_duration: "24h"
+  max_cert_duration: "720h"
 
+# -----------------------------------------------------------------------------
 # Pi-hole + Unbound (DNS)
+# -----------------------------------------------------------------------------
 control_dns:
   enabled: true
+  pihole_version: "latest"
   pihole_port: 8053
   dns_port: 53
+  unbound_version: "latest"
+  dnssec: true
 
-# Uptime Kuma (Availability Monitoring)
-control_uptime_kuma:
-  enabled: true
-  port: 3001
-  version: "1"
+# Custom DNS records (A records)
+pihole_custom_dns_records:
+  - { ip: "{{ target_control_ip }}", hostname: "traefik.{{ target_domain }}" }
+  - { ip: "{{ target_control_ip }}", hostname: "grafana.{{ target_domain }}" }
+  - { ip: "{{ target_control_ip }}", hostname: "netdata.{{ target_domain }}" }
+  - { ip: "{{ target_control_ip }}", hostname: "status.{{ target_domain }}" }
+  - { ip: "{{ target_control_ip }}", hostname: "pihole.{{ target_domain }}" }
+  - { ip: "{{ target_control_ip }}", hostname: "auth.{{ target_domain }}" }
+  - { ip: "{{ target_control_ip }}", hostname: "step-ca.{{ target_domain }}" }
+  - { ip: "{{ target_control_ip }}", hostname: "dockge.{{ target_domain }}" }
 
-# Grafana (Centralized Dashboards)
-control_grafana:
-  enabled: true
-  port: 3000
-  version: "latest"
-  admin_user: "admin"
-  oidc_enabled: true
+# Custom CNAME records
+pihole_custom_cname_records: []
 
-# Loki (Centralized Log Aggregation)
+# -----------------------------------------------------------------------------
+# Loki (Log Aggregation)
+# -----------------------------------------------------------------------------
 control_loki:
   enabled: true
+  version: "2.9.4"
   port: 3100
-  version: "latest"
-  retention_period: "744h"
+  retention_period: "744h"  # 31 days
 
-# Netdata Parent (Centralized Metrics)
+# -----------------------------------------------------------------------------
+# Grafana (Dashboards)
+# -----------------------------------------------------------------------------
+control_grafana:
+  enabled: true
+  version: "latest"
+  port: 3000
+  plugins:
+    - grafana-clock-panel
+    - grafana-piechart-panel
+
+# -----------------------------------------------------------------------------
+# Uptime Kuma (Status Monitoring)
+# -----------------------------------------------------------------------------
+control_uptime_kuma:
+  enabled: true
+  version: "1"
+  port: 3001
+
+# -----------------------------------------------------------------------------
+# Netdata Parent Mode
+# -----------------------------------------------------------------------------
 control_netdata:
   enabled: true
-  port: 19999
   version: "latest"
-  mode: "parent"
-  stream_api_key: "{{ vault_netdata_stream_api_key }}"
-
-# Scanopy/Trivy (Container Security)
-control_scanopy:
-  enabled: false
-  port: 8080
-  trivy_version: "latest"
-
-# PruneMate (Docker Cleanup)
-control_prunemate:
-  enabled: false
-  schedule: "0 3 * * 0"
+  port: 19999
+  dbengine_multihost_disk_space: 2048  # MB
+  history_seconds: 3600

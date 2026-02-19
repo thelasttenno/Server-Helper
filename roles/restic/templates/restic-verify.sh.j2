@@ -1,0 +1,25 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Restic backup verification — proves backups are restorable
+
+set -euo pipefail
+
+LOG_FILE="/var/log/restic/verify-$(date +%Y%m%d_%H%M%S).log"
+
+source /etc/restic/restic.env
+
+echo "Starting backup verification at $(date)" | tee "${LOG_FILE}"
+
+# Check repository integrity
+if restic check --read-data-subset=5% 2>&1 | tee -a "${LOG_FILE}"; then
+    echo "Verification PASSED at $(date)" | tee -a "${LOG_FILE}"
+{% if vault_uptime_kuma_push_urls.backup | default('') | length > 0 %}
+    curl -fsS -m 10 "{{ vault_uptime_kuma_push_urls.backup }}?status=up&msg=verify-ok" >/dev/null 2>&1 || true
+{% endif %}
+else
+    echo "Verification FAILED at $(date)" | tee -a "${LOG_FILE}"
+    server-helper-notify "Backup Verify FAILED" "Backup verification failed on {{ inventory_hostname }}. Check: journalctl -u restic-verify.service" 2>/dev/null || true
+fi
+
+# Cleanup old logs (keep last 12)
+ls -t /var/log/restic/verify-*.log 2>/dev/null | tail -n +13 | xargs -r rm

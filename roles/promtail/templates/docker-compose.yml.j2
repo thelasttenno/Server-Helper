@@ -1,38 +1,24 @@
-# Promtail - Log shipping agent
-# Managed by Ansible - Server Helper
-# Dockge compatible: /opt/stacks/promtail/
-
+# {{ ansible_managed }}
 services:
   promtail:
-    image: {{ promtail_image }}:{{ promtail_image_tag }}
-    container_name: {{ promtail_container_name }}
+    image: grafana/promtail:{{ target_promtail.version }}
+    container_name: promtail
     restart: unless-stopped
+    env_file:
+      - .env
     volumes:
       - ./promtail-config.yml:/etc/promtail/config.yml:ro
       - /var/log:/var/log:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - promtail-positions:/tmp/positions
     command: -config.file=/etc/promtail/config.yml
-    ports:
-      - "{{ promtail_http_port }}:9080"
-    deploy:
-      resources:
-        limits:
-          memory: {{ promtail_memory_limit }}
-          cpus: "{{ promtail_cpu_limit }}"
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9080/ready || exit 1"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9080/ready"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
 volumes:
   promtail-positions:

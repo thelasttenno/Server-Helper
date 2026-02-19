@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: security
+  author: Server Helper
+  description: SSH hardening, UFW firewall, fail2ban, Lynis security audits
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions: [jammy, noble]
+    - name: Debian
+      versions: [bookworm]
+  galaxy_tags: [security, ssh, firewall, fail2ban, lynis]
+dependencies: []

@@ -1,76 +1,34 @@
 ---
-# UFW Firewall tasks
+# Security — UFW Firewall
 
-- name: UFW - Install UFW
+- name: Install UFW
   ansible.builtin.apt:
     name: ufw
     state: present
-  become: true
+  when: target_security.ufw.enabled | bool
 
-- name: UFW - Set default incoming policy
+- name: Set UFW default incoming policy
   community.general.ufw:
     direction: incoming
-    policy: "{{ security_ufw_default_incoming }}"
-  become: true
+    default: "{{ target_security.ufw.default_incoming }}"
+  when: target_security.ufw.enabled | bool
 
-- name: UFW - Set default outgoing policy
+- name: Set UFW default outgoing policy
   community.general.ufw:
     direction: outgoing
-    policy: "{{ security_ufw_default_outgoing }}"
-  become: true
+    default: "{{ target_security.ufw.default_outgoing }}"
+  when: target_security.ufw.enabled | bool
 
-- name: UFW - Allow SSH (always)
+- name: Allow configured ports
   community.general.ufw:
     rule: allow
-    port: "{{ security_ssh_port }}"
-    proto: tcp
-    comment: "SSH"
-  become: true
-
-- name: UFW - Apply default rules
-  community.general.ufw:
-    rule: "{{ item.rule }}"
-    port: "{{ item.port }}"
-    proto: "{{ item.proto | default('tcp') }}"
+    port: "{{ item.port | string }}"
+    proto: "{{ item.proto }}"
     comment: "{{ item.comment | default('') }}"
-  become: true
-  loop: "{{ security_ufw_rules }}"
-  when: item.port != security_ssh_port | string
+  loop: "{{ target_security.ufw.allowed_ports }}"
+  when: target_security.ufw.enabled | bool
 
-- name: UFW - Apply extra rules
-  community.general.ufw:
-    rule: "{{ item.rule }}"
-    port: "{{ item.port }}"
-    proto: "{{ item.proto | default('tcp') }}"
-    from_ip: "{{ item.from_ip | default('any') }}"
-    comment: "{{ item.comment | default('') }}"
-  become: true
-  loop: "{{ security_ufw_extra_rules }}"
-  when: security_ufw_extra_rules | length > 0
-
-- name: UFW - Allow common service ports
-  community.general.ufw:
-    rule: allow
-    port: "{{ item.port }}"
-    proto: "{{ item.proto | default('tcp') }}"
-    comment: "{{ item.comment }}"
-  become: true
-  loop:
-    - { port: "80", proto: "tcp", comment: "HTTP" }
-    - { port: "443", proto: "tcp", comment: "HTTPS" }
-  when: security_ufw_allow_web | default(true)
-
-- name: UFW - Enable firewall
+- name: Enable UFW
   community.general.ufw:
     state: enabled
-  become: true
-
-- name: UFW - Get status
-  ansible.builtin.command: ufw status verbose
-  register: ufw_status
-  changed_when: false
-  become: true
-
-- name: UFW - Display status
-  ansible.builtin.debug:
-    msg: "{{ ufw_status.stdout_lines }}"
+  when: target_security.ufw.enabled | bool

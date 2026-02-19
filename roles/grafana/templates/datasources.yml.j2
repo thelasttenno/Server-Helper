@@ -1,54 +1,16 @@
-# Grafana datasources provisioning
-# Managed by Ansible - Server Helper
-# Auto-configured: Loki, Netdata
-
+# {{ ansible_managed }}
 apiVersion: 1
 
-deleteDatasources: []
-
 datasources:
-{% for ds in grafana_datasources %}
-  - name: {{ ds.name }}
-    type: {{ ds.type }}
+  - name: Loki
+    type: loki
     access: proxy
-    url: {{ ds.url }}
-    isDefault: {{ ds.is_default | default(false) | lower }}
+    url: http://loki:3100
+    isDefault: true
     editable: false
-{% if ds.json_data is defined %}
-    jsonData:
-{% for key, value in ds.json_data.items() %}
-{% if value is mapping %}
-      {{ key }}:
-{% for subkey, subvalue in value.items() %}
-        {{ subkey }}: {{ subvalue }}
-{% endfor %}
-{% elif value is iterable and value is not string %}
-      {{ key }}:
-{% for item in value %}
-        - {{ item | to_json }}
-{% endfor %}
-{% else %}
-      {{ key }}: {{ value }}
-{% endif %}
-{% endfor %}
-{% elif ds.type == 'loki' %}
-    jsonData:
-      maxLines: 1000
-{% elif ds.type == 'prometheus' %}
-    jsonData:
-      timeInterval: "1s"
-      httpMethod: GET
-{% endif %}
 
-{% endfor %}
-
-  # Netdata Parent - Real-time metrics
-  - name: Netdata-Parent
+  - name: Netdata
     type: prometheus
     access: proxy
-    url: http://{{ control_node_ip | default('localhost') }}:19999/api/v1/allmetrics?format=prometheus
-    isDefault: false
+    url: http://{{ target_control_ip }}:19999/api/v1/allmetrics?format=prometheus
     editable: false
-    jsonData:
-      timeInterval: "1s"
-      httpMethod: GET

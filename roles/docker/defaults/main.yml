@@ -1,39 +1,8 @@
 ---
-# Docker role defaults
-
-# Master toggle
-docker_enabled: true
-
-# Docker version (empty = latest)
-docker_version: ""
-
-# Docker Compose plugin version (empty = latest)
-docker_compose_version: ""
-
-# User to add to docker group
-docker_users:
-  - "{{ ansible_user }}"
-
-# Docker daemon configuration
-docker_storage_driver: "overlay2"
-docker_log_driver: "json-file"
-docker_log_max_size: "10m"
-docker_log_max_file: "3"
-
-# Live restore (keep containers running during daemon downtime)
-docker_live_restore: true
-
-# Default address pools for networks
-docker_default_address_pools:
-  - base: "172.17.0.0/12"
-    size: 24
-
-# Stacks directory (Dockge compatible)
-# Uses target_dockge_stacks_dir from group_vars/all.yml for consistency
-docker_stacks_dir: "{{ target_dockge_stacks_dir | default('/opt/stacks') }}"
-
-# Skip service start (for molecule testing)
-docker_skip_start: false
-
-# Create stacks directory
-docker_create_stacks_dir: true
+# Role: docker — Defaults
+target_docker:
+  log_driver: "json-file"
+  log_max_size: "10m"
+  log_max_file: "3"
+  storage_driver: "overlay2"
+  live_restore: true

@@ -1,107 +1,67 @@
-# Server Helper Vault Example (Secrets)
-# ======================================
-# This file contains sensitive credentials that will be encrypted.
-# Copy this file and encrypt it using Ansible Vault.
-#
-# IMPORTANT: Never commit unencrypted secrets to version control!
-#
-# Usage:
-#   1. Copy this file:
-#      cp group_vars/vault.example.yml group_vars/vault.yml
-#
-#   2. Edit with real values:
-#      nano group_vars/vault.yml
-#
-#   3. Encrypt the file:
-#      ansible-vault encrypt group_vars/vault.yml
-#
-# Or use the setup.sh script which handles this automatically.
-
 ---
 # =============================================================================
-# NAS CREDENTIALS
+# Server Helper v2.0 — Vault Example
 # =============================================================================
+# Copy to vault.yml, fill in values, then encrypt:
+#   cp group_vars/vault.example.yml group_vars/vault.yml
+#   # Edit vault.yml with your secrets
+#   ansible-vault encrypt group_vars/vault.yml
+#
+# Generate secure passwords with:
+#   openssl rand -hex 32
+
+# TIER 1: Foundation
+vault_restic_credentials:
+  password: ""          # Restic repository encryption password
 
 vault_nas_credentials:
-  - username: "backup_user"
-    password: "CHANGE_ME_nas_password"
-
-# =============================================================================
-# BACKUP PASSWORDS (Restic)
-# =============================================================================
-
-vault_restic_passwords:
-  nas: "CHANGE_ME_restic_nas_password"
-  local: "CHANGE_ME_restic_local_password"
-  s3: "CHANGE_ME_restic_s3_password"
-  b2: "CHANGE_ME_restic_b2_password"
-
-# =============================================================================
-# CLOUD PROVIDER CREDENTIALS
-# =============================================================================
+  - username: ""        # NAS backup user
+    password: ""
 
 vault_aws_credentials:
-  access_key: ""
+  access_key: ""        # AWS S3 access key for backups
   secret_key: ""
 
-vault_b2_credentials:
-  account_id: ""
-  account_key: ""
-
-# =============================================================================
-# TARGET NODE SERVICE CREDENTIALS
-# =============================================================================
-
+# TIER 2: Target Agents
 vault_dockge_credentials:
   username: "admin"
-  password: "CHANGE_ME_dockge_password"
+  password: ""          # Dockge web UI password
 
-# =============================================================================
-# CONTROL NODE SERVICE CREDENTIALS
-# =============================================================================
+vault_netdata_credentials:
+  claim_token: ""       # From Netdata Cloud (optional)
+  claim_room: ""        # From Netdata Cloud (optional)
 
-# Authentik (SSO/Identity Provider)
+vault_netdata_stream_api_key: ""  # UUID: uuidgen or python -c "import uuid; print(uuid.uuid4())"
+
+# TIER 3: Control - Critical
 vault_authentik_credentials:
-  admin_password: "CHANGE_ME_authentik_password"
-  secret_key: "CHANGE_ME_long_random_hex_string_64_chars"
-  postgres_password: "CHANGE_ME_postgres_password"
+  secret_key: ""            # openssl rand -hex 32
+  bootstrap_password: ""    # Initial admin password
+  postgres_password: ""     # openssl rand -hex 16
+  redis_password: ""        # openssl rand -hex 16
 
-# Grafana OIDC (via Authentik)
-vault_grafana_oidc:
-  client_id: "grafana"
-  client_secret: "CHANGE_ME_grafana_oidc_secret"
+vault_grafana_credentials:
+  admin_password: ""        # Initial admin password
+  secret_key: ""            # openssl rand -hex 32
 
-# Grafana Admin (if not using Authentik SSO)
-vault_control_grafana_password: "CHANGE_ME_grafana_password"
+vault_step_ca_credentials:
+  password: ""              # CA key password
 
-# Uptime Kuma
-vault_uptime_kuma_credentials:
-  username: "admin"
-  password: "CHANGE_ME_uptime_kuma_password"
-
-# Step-CA (Certificate Authority)
-vault_step_ca_password: "CHANGE_ME_step_ca_password"
-
-# Pi-hole
-vault_pihole_password: "CHANGE_ME_pihole_password"
-
-# Traefik Dashboard
 vault_traefik_dashboard:
   username: "admin"
-  password: "CHANGE_ME_traefik_dashboard_password"
+  password: ""              # Dashboard password (htpasswd format)
 
-# =============================================================================
-# MONITORING & OBSERVABILITY
-# =============================================================================
+vault_pihole_password: ""   # Pi-hole admin password
 
-# Netdata Cloud claim token (optional - get from app.netdata.cloud)
-vault_netdata_claim_token: ""
+# TIER 3: Control - Integration
+vault_grafana_oidc:
+  client_id: ""             # From Authentik OIDC provider
+  client_secret: ""
 
-# Netdata streaming API key (for parent-child communication)
-# Generate with: uuidgen or openssl rand -hex 16
-vault_netdata_stream_api_key: "11111111-2222-3333-4444-555555555555"
+vault_uptime_kuma_credentials:
+  username: "admin"
+  password: ""
 
-# Uptime Kuma push URLs (for health check callbacks)
 vault_uptime_kuma_push_urls:
   nas: ""
   dockge: ""
@@ -110,30 +70,22 @@ vault_uptime_kuma_push_urls:
   security: ""
   update: ""
 
-# =============================================================================
-# NOTIFICATION SERVICES
-# =============================================================================
-
+# Notifications (all optional)
 vault_smtp_credentials:
-  host: "smtp.gmail.com"
+  host: ""
   port: 587
   username: ""
   password: ""
-  from_address: ""
-  to_addresses: []
+  from: ""
+  to: []
 
 vault_discord_webhook: ""
-
 vault_telegram_credentials:
   bot_token: ""
   chat_id: ""
-
 vault_slack_webhook: ""
 
-# =============================================================================
-# SYSTEM USERS
-# =============================================================================
-
+# System
 vault_system_users:
-  admin_password: "CHANGE_ME_admin_password"
-  admin_ssh_key: ""  # ssh-rsa AAAA... user@host
+  admin_password: ""        # System admin user password
+  admin_ssh_key: ""         # Public SSH key

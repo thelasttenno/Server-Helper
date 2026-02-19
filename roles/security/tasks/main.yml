@@ -1,38 +1,15 @@
 ---
-# Security role - SSH hardening, UFW, fail2ban, Lynis
+# Role: security — Main tasks
+# Split into subtask files for maintainability
 
-- name: Display role info
-  ansible.builtin.debug:
-    msg: "Configuring security on {{ inventory_hostname }}"
-
-# =============================================================================
-# SSH HARDENING
-# =============================================================================
-
-- name: Configure SSH hardening
+- name: Include SSH hardening tasks
   ansible.builtin.include_tasks: ssh.yml
-  when: security_ssh_enabled | bool
 
-# =============================================================================
-# UFW FIREWALL
-# =============================================================================
-
-- name: Configure UFW firewall
-  ansible.builtin.include_tasks: ufw.yml
-  when: security_ufw_enabled | bool
-
-# =============================================================================
-# FAIL2BAN
-# =============================================================================
-
-- name: Configure fail2ban
+- name: Include fail2ban tasks
   ansible.builtin.include_tasks: fail2ban.yml
-  when: security_fail2ban_enabled | bool
 
-# =============================================================================
-# LYNIS
-# =============================================================================
+- name: Include UFW firewall tasks
+  ansible.builtin.include_tasks: ufw.yml
 
-- name: Configure Lynis security auditing
+- name: Include Lynis audit tasks
   ansible.builtin.include_tasks: lynis.yml
-  when: security_lynis_enabled | bool

@@ -1,18 +1,9 @@
 {
-  "storage-driver": "{{ docker_storage_driver }}",
-  "log-driver": "{{ docker_log_driver }}",
+  "log-driver": "{{ target_docker.log_driver }}",
   "log-opts": {
-    "max-size": "{{ docker_log_max_size }}",
-    "max-file": "{{ docker_log_max_file }}"
+    "max-size": "{{ target_docker.log_max_size }}",
+    "max-file": "{{ target_docker.log_max_file }}"
   },
-  "live-restore": {{ docker_live_restore | lower }},
-  "default-address-pools": [
-{% for pool in docker_default_address_pools %}
-    {
-      "base": "{{ pool.base }}",
-      "size": {{ pool.size }}
-    }{% if not loop.last %},{% endif %}
-
-{% endfor %}
-  ]
+  "storage-driver": "{{ target_docker.storage_driver }}",
+  "live-restore": {{ target_docker.live_restore | lower }}
 }

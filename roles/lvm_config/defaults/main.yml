@@ -1,19 +1,5 @@
 ---
-# LVM Configuration role defaults
-
-# Enable/disable LVM expansion
-lvm_enabled: "{{ target_lvm_config.enabled | default(true) }}"
-
-# Skip LVM operations (set to true for LXC containers via host_vars/inventory)
+# Role: lvm_config — Defaults
+target_lvm_config:
+  auto_extend_ubuntu: true
 lvm_skip: false
-
-# Automatically extend Ubuntu's root LV to use all free space
-lvm_auto_extend_ubuntu: "{{ target_lvm_config.auto_extend_ubuntu | default(true) }}"
-
-# Custom logical volumes to extend (optional)
-# Format: { vg_name: "vgname", lv_name: "lvname", size: "+100%FREE" }
-lvm_custom_lvs: "{{ target_lvm_config.custom_lvs | default([]) }}"
-
-# Create new logical volumes (optional)
-# Format: { vg_name: "vgname", lv_name: "lvname", size: "10G", fs_type: "ext4", mount_point: "/data" }
-lvm_create_lvs: "{{ target_lvm_config.create_lvs | default([]) }}"

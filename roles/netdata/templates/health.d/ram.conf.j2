@@ -1,24 +1,11 @@
-# RAM health alarms
-# Managed by Ansible - Server Helper
+# {{ ansible_managed }}
+# RAM alarm thresholds
 
-alarm: ram_usage
-    on: system.ram
-lookup: average -3m percentage of used
- units: %
- every: 1m
-  warn: $this > {{ netdata_alarm_ram_threshold }}
-  crit: $this > 98
- delay: down 5m multiplier 1.5 max 1h
-  info: RAM utilization over the last 3 minutes
-    to: sysadmin
-
-alarm: ram_available
-    on: mem.available
-lookup: average -3m of avail
- units: MiB
- every: 1m
-  warn: $this < 256
-  crit: $this < 128
- delay: down 5m multiplier 1.5 max 1h
-  info: Available RAM memory
-    to: sysadmin
+alarm: ram_usage_warning
+   on: system.ram
+   lookup: average -5m percentage of used
+   units: %
+   every: 1m
+   warn: $this > {{ target_netdata.alarms.ram_warning }}
+   crit: $this > {{ target_netdata.alarms.ram_critical }}
+   info: RAM utilization alarm

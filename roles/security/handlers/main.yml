@@ -1,25 +1,10 @@
 ---
-# Security role handlers
-
-- name: Reload SSH
+- name: Restart sshd
   ansible.builtin.systemd:
-    name: "{{ 'ssh' if ansible_distribution == 'Ubuntu' else 'sshd' }}"
-    state: reloaded
-  become: true
-
-- name: Restart SSH
-  ansible.builtin.systemd:
-    name: "{{ 'ssh' if ansible_distribution == 'Ubuntu' else 'sshd' }}"
+    name: sshd
     state: restarted
-  become: true
 
 - name: Restart fail2ban
   ansible.builtin.systemd:
     name: fail2ban
     state: restarted
-  become: true
-
-- name: Reload systemd
-  ansible.builtin.systemd:
-    daemon_reload: yes
-  become: true

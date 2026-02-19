@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: loki
+  author: Server Helper
+  description: Deploy Loki for log aggregation with boltdb-shipper
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions: [jammy, noble]
+    - name: Debian
+      versions: [bookworm]
+  galaxy_tags: [logging, loki, observability]
+dependencies: []

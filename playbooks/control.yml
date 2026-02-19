@@ -1,154 +1,42 @@
 ---
-# Control playbook - Deploy all control node services
-# This is the central management node with monitoring, identity, and gateway services
+# =============================================================================
+# control.yml — Full control node deployment
+# =============================================================================
+# Deploys all foundation + control stack roles on the control node.
 #
 # Usage:
 #   ansible-playbook playbooks/control.yml
-#   ansible-playbook playbooks/control.yml --tags "monitoring"
-#   ansible-playbook playbooks/control.yml --tags "traefik,authentik"
 
-- name: Server Helper - Control Node Services
+- name: Control node — Foundation
   hosts: control
-  become: true
   gather_facts: true
-
+  tags: [foundation]
   pre_tasks:
-    - name: Display control node information
-      ansible.builtin.debug:
-        msg: |
-          ================================================
-          Configuring Control Node: {{ inventory_hostname }}
-          ================================================
-          Domain: {{ target_domain | default('local') }}
-          IP: {{ ansible_host | default(ansible_default_ipv4.address) }}
-          ================================================
-
-    - name: Verify required variables
-      ansible.builtin.assert:
-        that:
-          - target_domain is defined
-        fail_msg: "target_domain must be defined in group_vars/all.yml"
-        success_msg: "Domain configured: {{ target_domain }}"
-
+    - name: Auto-detect virtualization skip flags
+      ansible.builtin.set_fact:
+        lvm_skip: "{{ lvm_skip | default(ansible_virtualization_type == 'lxc') }}"
+        swap_skip: "{{ swap_skip | default(ansible_virtualization_type == 'lxc') }}"
+        qemu_agent_skip: "{{ qemu_agent_skip | default(ansible_virtualization_type not in ['kvm', 'qemu']) }}"
   roles:
-    # Base infrastructure
-    - role: common
-      tags: [common, base]
+    - { role: common, tags: [common] }
+    - { role: lvm_config, tags: [lvm_config] }
+    - { role: swap, tags: [swap] }
+    - { role: qemu_agent, tags: [qemu_agent] }
+    - { role: security, tags: [security] }
+    - { role: docker, tags: [docker] }
+    - { role: watchtower, tags: [watchtower] }
+    - { role: restic, tags: [restic] }
 
-    - role: security
-      tags: [security, hardening]
-
-    - role: docker
-      tags: [docker, containers]
-
-    # Gateway & Proxy
-    - role: traefik
-      tags: [traefik, proxy, gateway]
-
-    # Monitoring stack
-    - role: netdata
-      tags: [netdata, monitoring]
-      vars:
-        netdata_mode: "parent"
-
-    - role: loki
-      tags: [loki, logging, monitoring]
-
-    - role: grafana
-      tags: [grafana, dashboards, monitoring]
-
-    - role: uptime_kuma
-      tags: [uptime-kuma, status, monitoring]
-
-    # DNS
-    - role: pihole
-      tags: [pihole, dns]
-
-    # PKI / Certificates
-    - role: step_ca
-      tags: [step-ca, pki, certificates]
-
-    # Identity / SSO
-    - role: authentik
-      tags: [authentik, sso, identity]
-
-    # Auto-updates
-    - role: watchtower
-      tags: [watchtower, auto-update]
-
-    # Stack manager
-    - role: dockge
-      tags: [dockge, stacks]
-
-  post_tasks:
-    - name: Create Docker network for services
-      community.docker.docker_network:
-        name: "{{ traefik_docker_network | default('traefik-public') }}"
-        state: present
-      become: true
-
-    - name: Wait for all services to be healthy
-      ansible.builtin.pause:
-        seconds: 30
-        prompt: "Waiting for services to initialize..."
-
-    - name: Check service health
-      ansible.builtin.uri:
-        url: "{{ item.url }}"
-        method: GET
-        status_code: "{{ item.status }}"
-        validate_certs: false
-      loop:
-        - { name: "Traefik", url: "http://localhost:8080/ping", status: [200] }
-        - { name: "Grafana", url: "http://localhost:3000/api/health", status: [200] }
-        - { name: "Loki", url: "http://localhost:3100/ready", status: [200] }
-        - { name: "Netdata", url: "http://localhost:19999/api/v1/info", status: [200] }
-        - { name: "Uptime Kuma", url: "http://localhost:3001", status: [200, 302] }
-        - { name: "Pi-hole", url: "http://localhost:8053/admin/", status: [200, 302] }
-        - { name: "Authentik", url: "http://localhost:9000/-/health/ready/", status: [200] }
-        - { name: "Dockge", url: "http://localhost:5001", status: [200, 302] }
-      register: health_checks
-      failed_when: false
-
-    - name: Display deployment summary
-      ansible.builtin.debug:
-        msg: |
-          ================================================
-          Control Node Deployment Complete!
-          ================================================
-
-          Service Status:
-          {% for result in health_checks.results %}
-          - {{ result.item.name }}: {{ 'OK' if result.status | default(0) in result.item.status else 'STARTING' }}
-          {% endfor %}
-
-          ================================================
-          Access URLs:
-          ================================================
-          Traefik Dashboard: https://traefik.{{ target_domain }}
-          Grafana:           https://grafana.{{ target_domain }}
-          Netdata:           https://netdata.{{ target_domain }}
-          Uptime Kuma:       https://status.{{ target_domain }}
-          Pi-hole:           https://pihole.{{ target_domain }}
-          Authentik:         https://auth.{{ target_domain }}
-          Step-CA:           https://step-ca.{{ target_domain }}
-          Dockge:            https://dockge.{{ target_domain }}
-
-          ================================================
-          Setup Guides:
-          ================================================
-          Authentik:   /opt/stacks/authentik/SETUP-GUIDE.md
-          Step-CA:     /opt/stacks/step-ca/SETUP-GUIDE.md
-          Pi-hole:     /opt/stacks/pihole/SETUP-GUIDE.md
-          Uptime Kuma: /opt/stacks/uptime-kuma/SETUP-GUIDE.md
-
-          ================================================
-          Next Steps:
-          ================================================
-          1. Configure DNS to point *.{{ target_domain }} to this server
-          2. Access Authentik and complete initial setup
-          3. Configure OAuth for Grafana and other services
-          4. Set up monitors in Uptime Kuma
-          5. Install Step-CA root certificate on clients
-
-          ================================================
+- name: Control node — Stacks
+  hosts: control
+  tags: [stacks]
+  roles:
+    - { role: traefik, tags: [traefik] }
+    - { role: authentik, tags: [authentik] }
+    - { role: step_ca, tags: [step_ca] }
+    - { role: pihole, tags: [pihole] }
+    - { role: loki, tags: [loki] }
+    - { role: netdata, tags: [netdata], vars: { netdata_mode: "parent" } }
+    - { role: grafana, tags: [grafana] }
+    - { role: uptime_kuma, tags: [uptime_kuma] }
+    - { role: dockge, tags: [dockge] }

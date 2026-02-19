@@ -1,37 +1,21 @@
-# Netdata streaming configuration
-# Managed by Ansible - Server Helper
-# Mode: {{ netdata_mode }}
+# {{ ansible_managed }}
+# Netdata streaming configuration — {{ netdata_mode }} mode
 
-{% if netdata_mode == "child" %}
-# =============================================================================
-# CHILD NODE CONFIGURATION
-# Stream metrics to parent node
-# =============================================================================
-
+{% if netdata_mode == 'child' %}
 [stream]
     enabled = yes
-    destination = {{ netdata_parent_host }}:{{ netdata_parent_port }}
-    api key = {{ netdata_stream_api_key }}
+    destination = {{ target_control_ip }}:19999
+    api key = {{ vault_netdata_stream_api_key }}
     timeout seconds = 60
     buffer size bytes = 1048576
     reconnect delay seconds = 5
-    initial clock resync iterations = 60
+{% endif %}
 
-{% else %}
-# =============================================================================
-# PARENT NODE CONFIGURATION
-# Receive metrics from child nodes
-# =============================================================================
-
-[stream]
+{% if netdata_mode == 'parent' %}
+[{{ vault_netdata_stream_api_key }}]
     enabled = yes
-
-# API key for child nodes to authenticate
-[{{ netdata_stream_api_key }}]
-    enabled = yes
-    allow from = {{ netdata_parent_allow_from }}
-    default history = 3600
-    default memory mode = {{ netdata_parent_default_memory_mode }}
-    health enabled by default = {{ netdata_parent_health_enabled_by_default }}
-    default postpone alarms on connect seconds = 60
+    default history = {{ control_netdata.history_seconds }}
+    default memory mode = dbengine
+    health enabled by default = auto
+    allow from = *
 {% endif %}

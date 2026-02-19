@@ -1,111 +1,15 @@
 ---
-# Add Target playbook - Add a new target node to the infrastructure
-# This playbook is idempotent and safe to rerun
+# =============================================================================
+# add-target.yml — Add new server to fleet
+# =============================================================================
+# Bootstrap + deploy agents on a new server.
+# Assumes the host is already in inventory/hosts.yml.
 #
 # Usage:
-#   ansible-playbook playbooks/add-target.yml -e "new_host=192.168.1.100 new_hostname=server1"
-#   ansible-playbook playbooks/add-target.yml -e "new_host=192.168.1.100 new_hostname=server1 is_lxc=true"
+#   ansible-playbook playbooks/add-target.yml --limit new-server
 
-- name: Server Helper - Add New Target Node
-  hosts: localhost
-  gather_facts: false
-
-  vars:
-    new_host: ""
-    new_hostname: ""
-    is_lxc: false
-    ssh_user: "{{ lookup('env', 'USER') }}"
-
-  pre_tasks:
-    - name: Validate required variables
-      ansible.builtin.assert:
-        that:
-          - new_host | length > 0
-          - new_hostname | length > 0
-        fail_msg: |
-          Required variables:
-            -e "new_host=<IP_ADDRESS> new_hostname=<HOSTNAME>"
-          Optional:
-            -e "is_lxc=true" (for LXC containers)
-        success_msg: "Adding {{ new_hostname }} ({{ new_host }})"
-
-    - name: Test SSH connectivity to new host
-      ansible.builtin.wait_for:
-        host: "{{ new_host }}"
-        port: 22
-        timeout: 10
-      register: ssh_test
-
-    - name: Display connection status
-      ansible.builtin.debug:
-        msg: "SSH connection to {{ new_host }} successful"
-
-  tasks:
-    - name: Add host to in-memory inventory
-      ansible.builtin.add_host:
-        name: "{{ new_hostname }}"
-        ansible_host: "{{ new_host }}"
-        groups:
-          - targets
-        lvm_skip: "{{ is_lxc }}"
-        swap_skip: "{{ is_lxc }}"
-        qemu_agent_skip: "{{ is_lxc }}"
-
-# Bootstrap the new host
 - name: Bootstrap new target
-  hosts: "{{ hostvars['localhost']['new_hostname'] }}"
-  become: true
-  gather_facts: true
+  ansible.builtin.import_playbook: bootstrap.yml
 
-  roles:
-    - role: common
-    - role: lvm_config
-      when: not (lvm_skip | default(false) | bool)
-    - role: swap
-      when: not (swap_skip | default(false) | bool)
-    - role: qemu_agent
-      when: not (qemu_agent_skip | default(false) | bool)
-    - role: security
-    - role: docker
-
-# Deploy services to new host
-- name: Deploy services to new target
-  hosts: "{{ hostvars['localhost']['new_hostname'] }}"
-  become: true
-  gather_facts: true
-
-  roles:
-    - role: watchtower
-    - role: restic
-      when: restic_enabled | default(true) | bool
-    - role: netdata
-      vars:
-        netdata_mode: "child"
-    - role: promtail
-
-  post_tasks:
-    - name: Display completion message
-      ansible.builtin.debug:
-        msg: |
-          ================================================
-          New Target Added Successfully!
-          ================================================
-          Hostname: {{ hostvars['localhost']['new_hostname'] }}
-          IP: {{ hostvars['localhost']['new_host'] }}
-          Type: {{ 'LXC Container' if hostvars['localhost']['is_lxc'] else 'VM/Bare Metal' }}
-          ================================================
-
-          Don't forget to add this host to your inventory file:
-
-          # inventory/hosts.yml
-          targets:
-            hosts:
-              {{ hostvars['localhost']['new_hostname'] }}:
-                ansible_host: {{ hostvars['localhost']['new_host'] }}
-          {% if hostvars['localhost']['is_lxc'] %}
-                lvm_skip: true
-                swap_skip: true
-                qemu_agent_skip: true
-          {% endif %}
-
-          ================================================
+- name: Deploy target roles
+  ansible.builtin.import_playbook: target.yml

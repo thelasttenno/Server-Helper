@@ -1,68 +1,25 @@
 ---
-# QEMU Guest Agent role - Install and configure QEMU guest agent for VMs
+# Role: qemu_agent — Install qemu-guest-agent for VM host visibility
+# Only runs on KVM/QEMU virtual machines
 
-- name: Display role info
+- name: Skip QEMU agent message
   ansible.builtin.debug:
-    msg: "Configuring QEMU guest agent on {{ inventory_hostname }}"
-
-- name: Skip QEMU agent (explicitly disabled)
-  ansible.builtin.debug:
-    msg: "Skipping QEMU guest agent (qemu_agent_skip is true)"
+    msg: "Skipping QEMU agent (qemu_agent_skip={{ qemu_agent_skip }})"
   when: qemu_agent_skip | bool
 
-- name: Configure QEMU guest agent
+- name: Install qemu-guest-agent
+  ansible.builtin.apt:
+    name: qemu-guest-agent
+    state: present
   when:
-    - qemu_agent_enabled | bool
     - not (qemu_agent_skip | bool)
-  block:
-    # ==========================================================================
-    # DETECT VIRTUALIZATION
-    # ==========================================================================
+    - ansible_virtualization_type in ['kvm', 'qemu']
 
-    - name: Detect virtualization type
-      ansible.builtin.command: systemd-detect-virt
-      register: virt_type
-      changed_when: false
-      failed_when: false
-
-    - name: Display virtualization type
-      ansible.builtin.debug:
-        msg: "Virtualization type: {{ virt_type.stdout | default('none') }}"
-
-    - name: Check if running in supported VM environment
-      ansible.builtin.set_fact:
-        is_qemu_vm: "{{ virt_type.stdout in ['kvm', 'qemu'] }}"
-
-    # ==========================================================================
-    # INSTALL AND CONFIGURE (KVM/QEMU only)
-    # ==========================================================================
-
-    - name: Install and configure QEMU guest agent
-      when: is_qemu_vm
-      block:
-        - name: Install qemu-guest-agent
-          ansible.builtin.apt:
-            name: qemu-guest-agent
-            state: present
-          become: true
-
-        - name: Enable qemu-guest-agent service
-          ansible.builtin.systemd:
-            name: qemu-guest-agent
-            state: started
-            enabled: yes
-          become: true
-
-        - name: Verify qemu-guest-agent is running
-          ansible.builtin.command: systemctl is-active qemu-guest-agent
-          register: qemu_agent_status
-          changed_when: false
-
-        - name: Display QEMU agent status
-          ansible.builtin.debug:
-            msg: "QEMU guest agent status: {{ qemu_agent_status.stdout }}"
-
-    - name: Skip QEMU agent (not KVM/QEMU VM)
-      ansible.builtin.debug:
-        msg: "Skipping QEMU guest agent (virtualization type: {{ virt_type.stdout | default('none') }})"
-      when: not is_qemu_vm
+- name: Enable and start qemu-guest-agent
+  ansible.builtin.systemd:
+    name: qemu-guest-agent
+    enabled: true
+    state: started
+  when:
+    - not (qemu_agent_skip | bool)
+    - ansible_virtualization_type in ['kvm', 'qemu']

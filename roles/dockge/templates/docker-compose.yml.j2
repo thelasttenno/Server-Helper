@@ -1,39 +1,23 @@
-# Dockge - Docker Compose Stack Manager
-# Managed by Ansible - Server Helper
-# Dockge compatible: /opt/stacks/dockge/
-
+# {{ ansible_managed }}
 services:
   dockge:
-    image: {{ dockge_image }}:{{ dockge_image_tag }}
-    container_name: {{ dockge_container_name }}
+    image: louislam/dockge:{{ target_dockge.version }}
+    container_name: dockge
     restart: unless-stopped
     ports:
-      - "{{ dockge_port }}:5001"
+      - "{{ target_dockge.port }}:5001"
+    environment:
+      DOCKGE_STACKS_DIR: /opt/stacks
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./data:/app/data
-      - {{ dockge_stacks_dir }}:{{ dockge_stacks_dir }}
-    environment:
-      - DOCKGE_STACKS_DIR={{ dockge_stacks_dir }}
-    deploy:
-      resources:
-        limits:
-          memory: {{ dockge_memory_limit }}
-          cpus: "{{ dockge_cpu_limit }}"
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-      - "traefik.enable=true"
-      - "traefik.http.routers.dockge.rule=Host(`dockge.{{ target_domain | default('local') }}`)"
-      - "traefik.http.routers.dockge.entrypoints=websecure"
-      - "traefik.http.routers.dockge.tls=true"
-      - "traefik.http.services.dockge.loadbalancer.server.port=5001"
+      - dockge-data:/app/data
+      - {{ docker_stack_path }}:{{ docker_stack_path }}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5001"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
-networks:
-  default:
-    name: {{ traefik_docker_network | default('traefik-public') }}
-    external: true
+volumes:
+  dockge-data:

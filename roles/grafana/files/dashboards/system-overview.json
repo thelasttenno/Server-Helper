@@ -1,0 +1,66 @@
+{
+  "dashboard": {
+    "title": "System Overview",
+    "uid": "server-helper-system",
+    "tags": ["server-helper"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "panels": [
+      {
+        "title": "CPU Usage",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "datasource": {"type": "loki", "uid": "loki"},
+        "targets": [
+          {
+            "datasource": {"type": "prometheus", "uid": "netdata"},
+            "expr": "netdata_system_cpu_percentage_average{chart=\"system.cpu\"}",
+            "legendFormat": "{{instance}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {"unit": "percent", "max": 100, "min": 0, "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 70}, {"color": "red", "value": 90}]}}
+        }
+      },
+      {
+        "title": "Memory Usage",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "datasource": {"type": "prometheus", "uid": "netdata"},
+            "expr": "netdata_system_ram_MiB_average{dimension=\"used\"}",
+            "legendFormat": "{{instance}} used"
+          }
+        ],
+        "fieldConfig": {"defaults": {"unit": "MiB"}}
+      },
+      {
+        "title": "Disk Usage",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "datasource": {"type": "prometheus", "uid": "netdata"},
+            "expr": "netdata_disk_space_GiB_average{dimension=\"used\",family=\"/\"}",
+            "legendFormat": "{{instance}}"
+          }
+        ],
+        "fieldConfig": {"defaults": {"unit": "GiB", "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 50}, {"color": "red", "value": 80}]}}}
+      },
+      {
+        "title": "Network Traffic",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "datasource": {"type": "prometheus", "uid": "netdata"},
+            "expr": "netdata_system_net_kilobits_persec_average",
+            "legendFormat": "{{instance}} {{dimension}}"
+          }
+        ],
+        "fieldConfig": {"defaults": {"unit": "Kbits"}}
+      }
+    ]
+  }
+}

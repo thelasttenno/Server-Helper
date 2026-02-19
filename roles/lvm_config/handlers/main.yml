@@ -1,0 +1,12 @@
+---
+- name: Resize filesystem
+  ansible.builtin.shell: |
+    {% for vol in lvm_volumes.stdout_lines | default([]) %}
+    FS_TYPE=$(blkid -o value -s TYPE /dev/{{ vol.split()[1] }}/{{ vol.split()[0] }} 2>/dev/null)
+    if [ "$FS_TYPE" = "ext4" ]; then
+      resize2fs /dev/{{ vol.split()[1] }}/{{ vol.split()[0] }}
+    elif [ "$FS_TYPE" = "xfs" ]; then
+      xfs_growfs /dev/{{ vol.split()[1] }}/{{ vol.split()[0] }}
+    fi
+    {% endfor %}
+  when: lvm_volumes.stdout_lines | default([]) | length > 0

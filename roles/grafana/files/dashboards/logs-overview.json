@@ -1,0 +1,77 @@
+{
+    "dashboard": {
+        "title": "Logs Overview",
+        "uid": "server-helper-logs",
+        "tags": [
+            "server-helper",
+            "loki"
+        ],
+        "timezone": "browser",
+        "refresh": "30s",
+        "panels": [
+            {
+                "title": "Log Volume by Host",
+                "type": "timeseries",
+                "gridPos": {
+                    "h": 8,
+                    "w": 24,
+                    "x": 0,
+                    "y": 0
+                },
+                "targets": [
+                    {
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        },
+                        "expr": "sum(rate({job=~\".+\"} |= \"\" [5m])) by (host)",
+                        "legendFormat": "{{host}}"
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "unit": "logs/s"
+                    }
+                }
+            },
+            {
+                "title": "Error Logs",
+                "type": "logs",
+                "gridPos": {
+                    "h": 12,
+                    "w": 24,
+                    "x": 0,
+                    "y": 8
+                },
+                "targets": [
+                    {
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        },
+                        "expr": "{job=~\".+\"} |~ \"(?i)(error|fatal|panic|critical)\""
+                    }
+                ]
+            },
+            {
+                "title": "Authentication Events",
+                "type": "logs",
+                "gridPos": {
+                    "h": 8,
+                    "w": 24,
+                    "x": 0,
+                    "y": 20
+                },
+                "targets": [
+                    {
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        },
+                        "expr": "{job=\"auth\"}"
+                    }
+                ]
+            }
+        ]
+    }
+}

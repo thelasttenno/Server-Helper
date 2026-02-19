@@ -1,32 +1,20 @@
 ---
-# SSH Hardening tasks
+# Security — SSH Hardening
 
-- name: SSH - Display configuration
-  ansible.builtin.debug:
-    msg: "SSH hardening: Port={{ security_ssh_port }}, PermitRoot={{ security_ssh_permit_root_login }}, PasswordAuth={{ security_ssh_password_auth }}"
-
-- name: SSH - Create sshd config directory
-  ansible.builtin.file:
-    path: /etc/ssh/sshd_config.d
-    state: directory
-    mode: "0755"
-  become: true
-
-- name: SSH - Deploy hardening configuration
+- name: Deploy SSH hardening configuration
   ansible.builtin.template:
     src: sshd_hardening.conf.j2
-    dest: /etc/ssh/sshd_config.d/99-server-helper.conf
+    dest: /etc/ssh/sshd_config.d/99-hardening.conf
     owner: root
     group: root
-    mode: "0600"
-    backup: yes
+    mode: "0644"
     validate: "sshd -t -f %s"
-  become: true
-  notify: Reload SSH
+  notify: Restart sshd
 
-- name: SSH - Ensure sshd is enabled
-  ansible.builtin.systemd:
-    name: "{{ 'ssh' if ansible_distribution == 'Ubuntu' else 'sshd' }}"
-    enabled: yes
-    state: started
-  become: true
+- name: Ensure sshd_config.d include exists
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^Include /etc/ssh/sshd_config.d/\*\.conf'
+    line: 'Include /etc/ssh/sshd_config.d/*.conf'
+    insertbefore: BOF
+    state: present

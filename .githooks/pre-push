@@ -1,0 +1,32 @@
+#!/bin/bash
+# Server Helper — Git pre-push hook
+# Runs ansible-playbook --syntax-check before pushing
+
+echo "Running pre-push syntax check..."
+
+PLAYBOOKS=(
+    "playbooks/site.yml"
+    "playbooks/bootstrap.yml"
+    "playbooks/update.yml"
+    "playbooks/upgrade.yml"
+    "playbooks/backup.yml"
+)
+
+FAILED=0
+for pb in "${PLAYBOOKS[@]}"; do
+    if [[ -f "$pb" ]]; then
+        if ! ansible-playbook "$pb" --syntax-check >/dev/null 2>&1; then
+            echo "✗ Syntax error in $pb"
+            FAILED=1
+        fi
+    fi
+done
+
+if [[ $FAILED -eq 1 ]]; then
+    echo ""
+    echo "Pre-push check FAILED. Fix syntax errors before pushing."
+    exit 1
+fi
+
+echo "✓ All playbooks pass syntax check"
+exit 0

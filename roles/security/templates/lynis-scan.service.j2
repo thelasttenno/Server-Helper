@@ -1,11 +1,10 @@
+# {{ ansible_managed }}
 [Unit]
 Description=Lynis Security Audit
-Documentation=https://cisofy.com/lynis/
+After=network.target
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/lynis-scan.sh
-User=root
-
-[Install]
-WantedBy=multi-user.target
+StandardOutput=journal
+StandardError=journal

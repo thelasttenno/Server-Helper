@@ -1,38 +1,20 @@
 #!/bin/bash
-# Step-CA Initialization Script
-# Managed by Ansible - Server Helper
+# {{ ansible_managed }}
+# Step-CA initialization script
+# Run this manually on first deployment: docker exec step-ca /init-ca.sh
 
-set -e
-
-# Check if already initialized
-if [ -f /home/step/config/ca.json ]; then
-    echo "CA already initialized, skipping..."
-    exit 0
-fi
+set -euo pipefail
 
 echo "Initializing Step-CA..."
-
-# Initialize the CA
 step ca init \
-    --name="{{ step_ca_name }}" \
-    --dns="{{ step_ca_dns_names | join(',') }}" \
-    --address="{{ step_ca_address }}" \
-    --provisioner="{{ step_ca_provisioner_name }}" \
-    --password-file=/home/step/secrets/password \
-    --provisioner-password-file=/home/step/secrets/password
+  --name="{{ control_step_ca.ca_name }}" \
+  --dns="step-ca.{{ target_domain }},{{ target_control_ip }},localhost" \
+  --address=":9443" \
+  --provisioner="{{ control_step_ca.provisioner_name }}" \
+  --password-file=<(echo "{{ vault_step_ca_credentials.password }}")
 
-{% if step_ca_acme_enabled %}
 # Add ACME provisioner
-echo "Adding ACME provisioner..."
-step ca provisioner add {{ step_ca_acme_provisioner_name }} --type ACME
-{% endif %}
-
-# Set proper permissions
-chown -R 1000:1000 /home/step/config
-chown -R 1000:1000 /home/step/certs
-chown -R 1000:1000 /home/step/db
+step ca provisioner add acme --type ACME
 
 echo "Step-CA initialized successfully!"
-echo ""
-echo "Root CA fingerprint:"
-step certificate fingerprint /home/step/certs/root_ca.crt
+echo "Root CA cert: /home/step/certs/root_ca.crt"

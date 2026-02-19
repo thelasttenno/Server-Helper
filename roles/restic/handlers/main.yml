@@ -1,21 +1,22 @@
 ---
-# Restic role handlers
-
 - name: Reload systemd
   ansible.builtin.systemd:
     daemon_reload: true
-  become: true
 
-- name: Enable restic backup timer
+- name: Start backup timer
   ansible.builtin.systemd:
     name: restic-backup.timer
     enabled: true
     state: started
-  become: true
 
-- name: Enable restic check timer
+- name: Start check timer
   ansible.builtin.systemd:
     name: restic-check.timer
     enabled: true
     state: started
-  become: true
+
+- name: Start verify timer
+  ansible.builtin.systemd:
+    name: restic-verify.timer
+    enabled: true
+    state: started

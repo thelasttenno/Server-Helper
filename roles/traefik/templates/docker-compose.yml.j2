@@ -1,64 +1,35 @@
-# Traefik - Reverse Proxy & Load Balancer
-# Managed by Ansible - Server Helper
-# Dockge compatible: /opt/stacks/traefik/
-
+# {{ ansible_managed }}
 services:
   traefik:
-    image: {{ traefik_image }}:{{ traefik_image_tag }}
-    container_name: {{ traefik_container_name }}
+    image: traefik:{{ control_traefik.version }}
+    container_name: traefik
     restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
     ports:
-      - "{{ traefik_http_port }}:80"
-      - "{{ traefik_https_port }}:443"
-{% if traefik_dashboard_enabled and traefik_dashboard_insecure %}
-      - "{{ traefik_dashboard_port }}:8080"
-{% endif %}
+      - "{{ control_traefik.http_port }}:80"
+      - "{{ control_traefik.https_port }}:443"
+      - "{{ control_traefik.dashboard_port }}:8080"
     volumes:
-      - ./traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./config:/etc/traefik/config:ro
-      - ./letsencrypt:/letsencrypt
-      - ./certs:/certs:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-{% if traefik_acme_dns_challenge_enabled %}
-    environment:
-{% for key, value in traefik_acme_dns_env_vars.items() %}
-      - {{ key }}={{ value }}
-{% endfor %}
-{% endif %}
+      - ./traefik.yml:/traefik.yml:ro
+      - ./dynamic-config.yml:/dynamic-config.yml:ro
+      - ./acme:/acme
     networks:
-      - {{ traefik_docker_network }}
-    deploy:
-      resources:
-        limits:
-          memory: {{ traefik_memory_limit }}
-          cpus: "{{ traefik_cpu_limit }}"
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.{{ target_domain }}`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=auth,security-headers"
+      - "traefik.http.middlewares.auth.basicauth.users={{ _traefik_htpasswd }}"
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-{% if traefik_dashboard_enabled and not traefik_dashboard_insecure %}
-      - "traefik.enable=true"
-      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.{{ target_domain | default('local') }}`)"
-      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
-      - "traefik.http.routers.traefik-dashboard.tls=true"
-      - "traefik.http.routers.traefik-dashboard.service=api@internal"
-{% if traefik_dashboard_auth_enabled %}
-      - "traefik.http.routers.traefik-dashboard.middlewares=traefik-auth"
-      - "traefik.http.middlewares.traefik-auth.basicauth.users={{ traefik_dashboard_users | join(',') }}"
-{% endif %}
-{% endif %}
+      start_period: 30s
 
 networks:
-  {{ traefik_docker_network }}:
+  traefik-public:
     external: true

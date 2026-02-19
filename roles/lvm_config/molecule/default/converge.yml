@@ -1,8 +1,0 @@
----
-- name: Converge
-  hosts: all
-  become: true
-  vars:
-    lvm_skip: true  # Skip in container - no LVM available
-  roles:
-    - role: ../../../lvm_config

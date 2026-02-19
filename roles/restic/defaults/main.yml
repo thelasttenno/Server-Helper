@@ -1,83 +1,38 @@
 ---
-# Restic backup role defaults
+# Role: restic — Defaults
+restic_version: "0.18.1"
 
-# Master toggle
-restic_enabled: "{{ target_restic.enabled | default(true) }}"
-
-# Restic binary installation
-restic_version: "0.16.4"
-restic_install_method: "package"  # package or binary
-
-# Repository configuration (REQUIRED - set in host_vars or targets.yml)
-# Priority: NAS > Local (defaults to local if nothing explicitly enabled)
-# If neither destination is enabled, local backup is used as fallback
-restic_repository: "{{ restic_nas_path if restic_nas_enabled else restic_local_path }}"
-restic_password: "{{ restic_nas_password if restic_nas_enabled else restic_local_password }}"
-
-# At least one destination must be enabled (local is the default fallback)
-restic_has_valid_destination: "{{ restic_nas_enabled or restic_local_enabled }}"
-
-# AWS/S3/B2 credentials (optional - for cloud backends)
-restic_aws_access_key_id: "{{ vault_aws_credentials.access_key | default('') }}"
-restic_aws_secret_access_key: "{{ vault_aws_credentials.secret_key | default('') }}"
-
-# Passwords are stored per-destination in vault_restic_passwords
-restic_nas_password: "{{ vault_restic_passwords.nas | default('') }}"
-restic_local_password: "{{ vault_restic_passwords.local | default('') }}"
-
-# Backup destinations (configured via target_restic in targets.yml)
-restic_nas_enabled: "{{ target_restic.destinations.nas.enabled | default(false) }}"
-restic_nas_path: "{{ target_restic.destinations.nas.path | default('') }}"
-# Local backup is enabled by default if no destination is explicitly configured
-restic_local_enabled: "{{ target_restic.destinations.local.enabled | default(true) }}"
-restic_local_path: "{{ target_restic.destinations.local.path | default(target_base_dir | default('/opt/server-helper') + '/backups/restic') }}"
-
-# Backup paths (uses target_dockge_stacks_dir for consistency)
-restic_backup_paths: "{{ target_restic.include_paths | default([target_dockge_stacks_dir | default('/opt/stacks'), '/etc']) }}"
-
-# Exclude patterns
-restic_exclude_patterns:
-  - "*.tmp"
-  - "*.log"
-  - "*.cache"
-  - "**/node_modules/**"
-  - "**/.git/**"
-  - "**/venv/**"
-  - "**/__pycache__/**"
-
-# Additional exclude file (optional)
-restic_exclude_file: ""
-
-# Backup schedule (cron format) - default: 2 AM daily
-restic_backup_schedule: "{{ target_restic.schedule | default('0 2 * * *') }}"
-
-# Retention policy
-restic_retention_keep_last: "{{ target_restic.retention.keep_last | default(7) }}"
-restic_retention_keep_daily: "{{ target_restic.retention.keep_daily | default(7) }}"
-restic_retention_keep_weekly: "{{ target_restic.retention.keep_weekly | default(4) }}"
-restic_retention_keep_monthly: "{{ target_restic.retention.keep_monthly | default(6) }}"
-restic_retention_keep_yearly: "{{ target_restic.retention.keep_yearly | default(1) }}"
-
-# Prune after backup
-restic_prune_enabled: true
-
-# Check repository integrity (weekly)
-restic_check_enabled: true
-restic_check_schedule: "0 3 * * 0"  # Sunday 3 AM
-
-# Backup script location (configurable via target_restic)
-restic_script_dir: "{{ target_restic.script_dir | default('/opt/restic') }}"
-restic_log_dir: "{{ target_restic.log_dir | default('/var/log/restic') }}"
-
-# Notification on failure (optional)
-restic_notify_on_failure: false
-restic_notify_url: ""  # webhook URL for notifications
-
-# Pre/post backup hooks (optional)
-restic_pre_backup_script: ""
-restic_post_backup_script: ""
-
-# Nice/ionice for lower priority
-restic_nice_level: 10
-restic_ionice_class: 2
-restic_ionice_level: 7
+target_restic:
+  schedule: "OnCalendar=*-*-* 02:00:00"
+  check_schedule: "OnCalendar=Sun *-*-* 03:00:00"
+  retention:
+    keep_daily: 7
+    keep_weekly: 4
+    keep_monthly: 6
+    keep_yearly: 1
+  destinations:
+    local:
+      enabled: false
+      path: "/backup/restic"
+    s3:
+      enabled: false
+      endpoint: ""
+      bucket: ""
+      region: "us-east-1"
+    nas:
+      enabled: false
+      path: ""
+      mount_point: "/mnt/nas/backup"
+  exclude_patterns:
+    - "/proc"
+    - "/sys"
+    - "/dev"
+    - "/run"
+    - "/tmp"
+    - "/var/cache"
+    - "/var/tmp"
+    - "*.log"
+    - "*.tmp"
+  backup_paths:
+    - "/opt/stacks"
+    - "/etc"

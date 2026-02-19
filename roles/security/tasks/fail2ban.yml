@@ -1,38 +1,25 @@
 ---
-# Fail2ban tasks
+# Security — fail2ban
 
-- name: Fail2ban - Install
+- name: Install fail2ban
   ansible.builtin.apt:
     name: fail2ban
     state: present
-  become: true
+  when: target_security.fail2ban.enabled | bool
 
-- name: Fail2ban - Deploy jail.local configuration
+- name: Deploy fail2ban jail configuration
   ansible.builtin.template:
     src: jail.local.j2
     dest: /etc/fail2ban/jail.local
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: true
   notify: Restart fail2ban
+  when: target_security.fail2ban.enabled | bool
 
-- name: Fail2ban - Enable and start service
+- name: Ensure fail2ban is enabled and running
   ansible.builtin.systemd:
     name: fail2ban
+    enabled: true
     state: started
-    enabled: yes
-  become: true
-
-- name: Fail2ban - Get status
-  ansible.builtin.command: fail2ban-client status
-  register: fail2ban_status
-  changed_when: false
-  become: true
-  failed_when: false
-
-- name: Fail2ban - Display status
-  ansible.builtin.debug:
-    msg: "{{ fail2ban_status.stdout_lines }}"
-  when: fail2ban_status.rc == 0
+  when: target_security.fail2ban.enabled | bool

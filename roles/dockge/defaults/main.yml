@@ -1,35 +1,5 @@
 ---
-# Dockge role defaults (Control Node)
-# Dockge is a Docker Compose stack manager with a web UI
-
-# Master toggle (from target_dockge config)
-dockge_enabled: "{{ target_dockge.enabled | default(true) }}"
-
-# Skip actual Docker deployment (for molecule testing)
-dockge_skip_deploy: false
-
-# Container settings
-dockge_container_name: "dockge"
-dockge_image: "louislam/dockge"
-dockge_image_tag: "{{ target_dockge.version | default('1') }}"
-
-# Stack directory (where Dockge manages other stacks)
-# Uses target_dockge_stacks_dir from group_vars/all.yml for consistency
-dockge_stacks_dir: "{{ target_dockge_stacks_dir | default('/opt/stacks') }}"
-
-# Dockge's own stack directory
-dockge_stack_dir: "{{ dockge_stacks_dir }}/dockge"
-
-# Network port (from target_dockge config)
-dockge_port: "{{ target_dockge.port | default(5001) }}"
-
-# Data directory
-dockge_data_dir: "{{ dockge_stack_dir }}/data"
-
-# Admin credentials (set on first run only - configure in vault.yml)
-dockge_admin_username: "{{ vault_dockge_credentials.username | default('admin') }}"
-dockge_admin_password: "{{ vault_dockge_credentials.password | default('admin') }}"
-
-# Resource limits
-dockge_memory_limit: "256m"
-dockge_cpu_limit: "0.5"
+# Role: dockge — Defaults
+target_dockge:
+  port: 5001
+  version: "latest"

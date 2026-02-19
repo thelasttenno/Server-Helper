@@ -1,0 +1,23 @@
+---
+# Example host-specific variables for a physical or VM server.
+# Copy to host_vars/{your-hostname}.yml
+
+# Override timezone
+target_timezone: "America/New_York"
+
+# Custom backup paths
+target_restic:
+  backup_paths:
+    - "/opt/stacks"
+    - "/etc"
+    - "/home/admin/important-data"
+
+# Custom Netdata alarm thresholds
+target_netdata:
+  alarms:
+    cpu_warning: 90
+    cpu_critical: 98
+    ram_warning: 90
+    ram_critical: 98
+    disk_warning: 85
+    disk_critical: 95

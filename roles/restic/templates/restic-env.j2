@@ -1,12 +1,15 @@
+# {{ ansible_managed }}
 # Restic environment variables
-# Managed by Ansible - Server Helper
-# WARNING: Contains sensitive credentials - mode 0600
 
-export RESTIC_REPOSITORY="{{ restic_repository }}"
-export RESTIC_PASSWORD="{{ restic_password }}"
-{% if restic_aws_access_key_id %}
-export AWS_ACCESS_KEY_ID="{{ restic_aws_access_key_id }}"
-{% endif %}
-{% if restic_aws_secret_access_key %}
-export AWS_SECRET_ACCESS_KEY="{{ restic_aws_secret_access_key }}"
+RESTIC_PASSWORD="{{ vault_restic_credentials.password }}"
+
+{% if target_restic.destinations.local.enabled %}
+RESTIC_REPOSITORY="{{ target_restic.destinations.local.path }}"
+{% elif target_restic.destinations.s3.enabled %}
+RESTIC_REPOSITORY="s3:{{ target_restic.destinations.s3.endpoint }}/{{ target_restic.destinations.s3.bucket }}"
+AWS_ACCESS_KEY_ID="{{ vault_aws_credentials.access_key }}"
+AWS_SECRET_ACCESS_KEY="{{ vault_aws_credentials.secret_key }}"
+AWS_DEFAULT_REGION="{{ target_restic.destinations.s3.region }}"
+{% elif target_restic.destinations.nas.enabled %}
+RESTIC_REPOSITORY="{{ target_restic.destinations.nas.mount_point }}/{{ inventory_hostname }}"
 {% endif %}

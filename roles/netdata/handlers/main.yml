@@ -1,17 +1,6 @@
 ---
-# Netdata role handlers
-
-- name: Restart netdata container
+- name: Restart Netdata
   community.docker.docker_compose_v2:
     project_src: "{{ netdata_stack_dir }}"
     state: present
     recreate: always
-  become: true
-  when: not netdata_skip_deploy | default(false)
-
-- name: Reload netdata
-  community.docker.docker_container_exec:
-    container: "{{ netdata_container_name }}"
-    command: "kill -SIGHUP 1"
-  become: true
-  failed_when: false

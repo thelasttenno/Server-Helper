@@ -1,12 +1,11 @@
-# Docker container logs rotation
-# Managed by Ansible - Server Helper
-
+# {{ ansible_managed }}
+# Docker container log rotation
 /var/lib/docker/containers/*/*.log {
-    rotate {{ common_docker_logrotate_rotate }}
-    size {{ common_docker_logrotate_size }}
-    copytruncate
-    missingok
-    notifempty
+    rotate 7
+    daily
     compress
+    missingok
     delaycompress
+    copytruncate
+    maxsize 50M
 }

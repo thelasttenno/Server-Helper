@@ -1,13 +1,9 @@
-# Netdata - Real-time monitoring
-# Managed by Ansible - Server Helper
-# Mode: {{ netdata_mode }}
-# Dockge compatible: /opt/stacks/netdata/
-
+# {{ ansible_managed }}
 services:
   netdata:
-    image: {{ netdata_image }}:{{ netdata_image_tag }}
-    container_name: {{ netdata_container_name }}
-    hostname: {{ netdata_hostname }}
+    image: netdata/netdata:{{ target_netdata.version if netdata_mode == 'child' else control_netdata.version }}
+    container_name: netdata
+    hostname: "{{ inventory_hostname }}"
     restart: unless-stopped
     pid: host
     network_mode: host
@@ -16,17 +12,12 @@ services:
       - SYS_ADMIN
     security_opt:
       - apparmor:unconfined
+    env_file:
+      - .env
     volumes:
-      - netdataconfig:/etc/netdata
-      - netdatalib:/var/lib/netdata
-      - netdatacache:/var/cache/netdata
-      - ./config/netdata.conf:/etc/netdata/netdata.conf:ro
-{% if netdata_streaming_enabled %}
-      - ./config/stream.conf:/etc/netdata/stream.conf:ro
-{% endif %}
-{% if netdata_mode == "parent" %}
-      - ./config/health.d:/etc/netdata/health.d:ro
-{% endif %}
+      - netdata-config:/etc/netdata
+      - netdata-lib:/var/lib/netdata
+      - netdata-cache:/var/cache/netdata
       - /etc/passwd:/host/etc/passwd:ro
       - /etc/group:/host/etc/group:ro
       - /etc/localtime:/etc/localtime:ro
@@ -35,30 +26,17 @@ services:
       - /etc/os-release:/host/etc/os-release:ro
       - /var/log:/host/var/log:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      - NETDATA_CLAIM_TOKEN={{ netdata_claim_token }}
-      - NETDATA_CLAIM_ROOMS={{ netdata_claim_rooms }}
-      - NETDATA_CLAIM_URL={{ netdata_claim_url }}
-{% if netdata_mode == "parent" %}
-    ports:
-      - "{{ netdata_web_port }}:19999"
-{% endif %}
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-{% if netdata_mode == "parent" %}
-      - "traefik.enable=true"
-      - "traefik.http.routers.netdata.rule=Host(`netdata.{{ target_domain | default('local') }}`)"
-      - "traefik.http.routers.netdata.entrypoints=websecure"
-      - "traefik.http.routers.netdata.tls=true"
-      - "traefik.http.services.netdata.loadbalancer.server.port=19999"
-{% endif %}
+      - ./config/netdata.conf:/etc/netdata/netdata.conf:ro
+      - ./config/stream.conf:/etc/netdata/stream.conf:ro
+      - ./config/health.d:/etc/netdata/health.d:ro
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:19999/api/v1/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 volumes:
-  netdataconfig:
-  netdatalib:
-  netdatacache:
+  netdata-config:
+  netdata-lib:
+  netdata-cache:

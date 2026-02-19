@@ -1,12 +1,12 @@
+# {{ ansible_managed }}
 [Unit]
 Description=Restic Backup Timer
-Documentation=https://restic.readthedocs.io/
+Requires=restic-backup.service
 
 [Timer]
-# Schedule: {{ restic_backup_schedule }}
-OnCalendar={{ restic_backup_schedule | regex_replace('^([0-9]+) ([0-9]+) \\* \\* \\*$', '*-*-* \\2:\\1:00') }}
-Persistent=true
+{{ target_restic.schedule }}
 RandomizedDelaySec=1800
+Persistent=true
 
 [Install]
 WantedBy=timers.target

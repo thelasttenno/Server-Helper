@@ -1,89 +1,76 @@
 ---
-# Bootstrap playbook - Day 0 target preparation
-# Prepares fresh servers with base configuration
+# =============================================================================
+# bootstrap.yml — Day-0 target node preparation
+# =============================================================================
+# Prepares new servers with Python, SSH keys, and base packages.
+# Run this before site.yml on fresh servers.
 #
 # Usage:
 #   ansible-playbook playbooks/bootstrap.yml
-#   ansible-playbook playbooks/bootstrap.yml --limit "new-server"
-#
-# This playbook is idempotent and can be run multiple times safely.
+#   ansible-playbook playbooks/bootstrap.yml --limit new-server
 
-- name: Server Helper - Bootstrap Target Nodes
-  hosts: targets
+- name: Bootstrap target nodes
+  hosts: all
+  gather_facts: false
   become: true
-  gather_facts: true
+  tags: [bootstrap]
 
   pre_tasks:
-    - name: Display bootstrap information
-      ansible.builtin.debug:
-        msg: |
-          ================================================
-          Bootstrapping: {{ inventory_hostname }}
-          ================================================
-          IP: {{ ansible_host | default(ansible_default_ipv4.address) }}
-          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
-          Virtualization: {{ ansible_virtualization_type | default('unknown') }}
-          ================================================
+    - name: Wait for SSH
+      ansible.builtin.wait_for_connection:
+        timeout: 60
 
-    - name: Detect if running in LXC container
-      ansible.builtin.set_fact:
-        is_lxc: "{{ ansible_virtualization_type == 'lxc' }}"
-
-    - name: Set skip flags for LXC containers
-      ansible.builtin.set_fact:
-        lvm_skip: "{{ is_lxc or (lvm_skip | default(false)) }}"
-        swap_skip: "{{ is_lxc or (swap_skip | default(false)) }}"
-        qemu_agent_skip: "{{ is_lxc or (qemu_agent_skip | default(false)) }}"
-      when: is_lxc | bool
-
-    - name: Display LXC detection result
-      ansible.builtin.debug:
-        msg: "LXC container detected - skipping LVM, swap, and QEMU agent"
-      when: is_lxc | bool
-
-  roles:
-    - role: common
-      tags: [common, base]
-
-    - role: lvm_config
-      tags: [lvm, storage]
-      when: not (lvm_skip | default(false) | bool)
-
-    - role: swap
-      tags: [swap, memory]
-      when: not (swap_skip | default(false) | bool)
-
-    - role: qemu_agent
-      tags: [qemu, virtualization]
-      when: not (qemu_agent_skip | default(false) | bool)
-
-    - role: security
-      tags: [security, hardening]
-
-    - role: docker
-      tags: [docker, containers]
-
-  post_tasks:
-    - name: Verify Docker installation
-      ansible.builtin.command: docker --version
-      register: docker_check
+    - name: Install Python (required for Ansible)
+      ansible.builtin.raw: |
+        test -e /usr/bin/python3 || (apt-get update && apt-get install -y python3 python3-apt)
       changed_when: false
 
-    - name: Display bootstrap completion
+    - name: Gather facts after Python install
+      ansible.builtin.setup:
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install base packages
+      ansible.builtin.apt:
+        name:
+          - python3
+          - python3-apt
+          - python3-pip
+          - sudo
+          - curl
+          - wget
+          - openssh-server
+          - ca-certificates
+        state: present
+
+    - name: Ensure admin user exists
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: sudo
+        append: true
+        shell: /bin/bash
+
+    - name: Set authorized SSH key
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user }}"
+        state: present
+        key: "{{ vault_system_users.admin_ssh_key }}"
+      when: vault_system_users.admin_ssh_key | default('') | length > 0
+
+    - name: Ensure sudo without password for admin
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers.d/90-admin-nopasswd
+        line: "{{ ansible_user }} ALL=(ALL) NOPASSWD:ALL"
+        create: true
+        validate: "visudo -cf %s"
+        owner: root
+        group: root
+        mode: "0440"
+
+    - name: Display bootstrap complete message
       ansible.builtin.debug:
-        msg: |
-          ================================================
-          Bootstrap Complete: {{ inventory_hostname }}
-          ================================================
-          Docker: {{ docker_check.stdout }}
-          LVM Extended: {{ 'Skipped' if (lvm_skip | default(false)) else 'Yes' }}
-          Swap Created: {{ 'Skipped' if (swap_skip | default(false)) else 'Yes' }}
-          QEMU Agent: {{ 'Skipped' if (qemu_agent_skip | default(false)) else 'Installed' }}
-          Security Hardened: Yes
-          ================================================
-
-          Next steps:
-          - Run 'ansible-playbook playbooks/target.yml' to deploy services
-          - Or run 'ansible-playbook playbooks/site.yml' for full deployment
-
-          ================================================
+        msg: "Bootstrap complete for {{ inventory_hostname }}. Ready for site.yml deployment."

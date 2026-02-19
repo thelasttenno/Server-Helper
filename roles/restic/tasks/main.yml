@@ -1,199 +1,164 @@
 ---
-# Restic backup automation tasks
+# Role: restic — Install Restic, deploy backup/check scripts, set up systemd timers
 
-- name: Restic backup setup
-  when: restic_enabled | bool
+- name: Set restic architecture
+  ansible.builtin.set_fact:
+    _restic_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' if ansible_architecture == 'aarch64' else ansible_architecture }}"
+
+- name: Check current restic version
+  ansible.builtin.command: restic version
+  register: _restic_current
+  changed_when: false
+  failed_when: false
+
+- name: Install restic from GitHub releases
+  when: _restic_current.rc != 0 or ('restic ' + restic_version) not in (_restic_current.stdout | default(''))
   block:
-    # Validate backup destination is configured
-    - name: Validate restic repository is configured
-      ansible.builtin.assert:
-        that:
-          - restic_repository is defined
-          - restic_repository | length > 0
-        fail_msg: |
-          restic_repository must be configured for backups.
-          Enable at least one destination in target_restic.destinations (NAS or local).
-          Current config: NAS={{ restic_nas_enabled }}, Local={{ restic_local_enabled }}
-        success_msg: "Restic repository configured: {{ restic_repository }}"
-
-    - name: Validate restic password is configured
-      ansible.builtin.assert:
-        that:
-          - restic_password is defined
-          - restic_password | length > 0
-        fail_msg: |
-          restic_password must be set for the backup repository.
-          Set vault_restic_passwords.local or vault_restic_passwords.nas in group_vars/vault.yml
-        success_msg: "Restic password is configured"
-      no_log: true
-
-    # Install restic
-    - name: Install restic from package manager
+    - name: Ensure bzip2 is installed
       ansible.builtin.apt:
-        name: restic
+        name: bzip2
         state: present
-        update_cache: true
-      become: true
-      when: restic_install_method == "package"
 
-    - name: Install restic from binary
-      when: restic_install_method == "binary"
-      block:
-        - name: Download restic binary
-          ansible.builtin.get_url:
-            url: "https://github.com/restic/restic/releases/download/v{{ restic_version }}/restic_{{ restic_version }}_linux_amd64.bz2"
-            dest: "/tmp/restic_{{ restic_version }}.bz2"
-            mode: "0644"
-
-        - name: Extract restic binary
-          ansible.builtin.shell: |
-            bunzip2 -c /tmp/restic_{{ restic_version }}.bz2 > /usr/local/bin/restic
-            chmod 755 /usr/local/bin/restic
-          args:
-            creates: /usr/local/bin/restic
-          become: true
-
-    # Update restic to latest version
-    - name: Update restic self
-      ansible.builtin.command: restic self-update
-      register: restic_update
-      changed_when: "'successfully updated' in restic_update.stdout"
-      failed_when: false
-      become: true
-
-    # Create directories
-    - name: Create restic directories
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        owner: root
-        group: root
-        mode: "0750"
-      loop:
-        - "{{ restic_script_dir }}"
-        - "{{ restic_log_dir }}"
-      become: true
-
-    # Deploy environment file with credentials
-    - name: Deploy restic environment file
-      ansible.builtin.template:
-        src: restic-env.j2
-        dest: "{{ restic_script_dir }}/restic.env"
-        owner: root
-        group: root
-        mode: "0600"
-      become: true
-      no_log: true
-
-    # Deploy exclude file
-    - name: Deploy restic exclude file
-      ansible.builtin.template:
-        src: restic-excludes.j2
-        dest: "{{ restic_script_dir }}/excludes.txt"
-        owner: root
-        group: root
+    - name: Download restic binary
+      ansible.builtin.get_url:
+        url: "https://github.com/restic/restic/releases/download/v{{ restic_version }}/restic_{{ restic_version }}_linux_{{ _restic_arch }}.bz2"
+        dest: "/tmp/restic_{{ restic_version }}.bz2"
         mode: "0644"
-      become: true
 
-    # Deploy backup script
-    - name: Deploy restic backup script
-      ansible.builtin.template:
-        src: restic-backup.sh.j2
-        dest: "{{ restic_script_dir }}/backup.sh"
-        owner: root
-        group: root
-        mode: "0750"
-      become: true
-
-    # Deploy check script
-    - name: Deploy restic check script
-      ansible.builtin.template:
-        src: restic-check.sh.j2
-        dest: "{{ restic_script_dir }}/check.sh"
-        owner: root
-        group: root
-        mode: "0750"
-      become: true
-
-    # Initialize repository if needed
-    - name: Check if repository is initialized
+    - name: Extract and install restic binary
       ansible.builtin.shell: |
-        source {{ restic_script_dir }}/restic.env
-        restic snapshots --json 2>/dev/null | head -1
-      args:
-        executable: /bin/bash
-      register: restic_repo_check
+        bunzip2 -f /tmp/restic_{{ restic_version }}.bz2
+        mv -f /tmp/restic_{{ restic_version }} /usr/local/bin/restic
+        chmod 0755 /usr/local/bin/restic
+
+    - name: Verify restic installation
+      ansible.builtin.command: restic version
       changed_when: false
-      failed_when: false
-      become: true
-      no_log: true
 
-    - name: Initialize restic repository
-      ansible.builtin.shell: |
-        source {{ restic_script_dir }}/restic.env
-        restic init
-      args:
-        executable: /bin/bash
-      become: true
-      no_log: true
-      when: restic_repo_check.rc != 0 and restic_repository != ""
+- name: Create Restic config directory
+  ansible.builtin.file:
+    path: /etc/restic
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
 
-    # Deploy systemd units
-    - name: Deploy restic backup service
-      ansible.builtin.template:
-        src: restic-backup.service.j2
-        dest: /etc/systemd/system/restic-backup.service
-        owner: root
-        group: root
-        mode: "0644"
-      become: true
-      notify: Reload systemd
+- name: Create Restic log directory
+  ansible.builtin.file:
+    path: /var/log/restic
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
 
-    - name: Deploy restic backup timer
-      ansible.builtin.template:
-        src: restic-backup.timer.j2
-        dest: /etc/systemd/system/restic-backup.timer
-        owner: root
-        group: root
-        mode: "0644"
-      become: true
-      notify:
-        - Reload systemd
-        - Enable restic backup timer
+- name: Deploy Restic environment file
+  ansible.builtin.template:
+    src: restic-env.j2
+    dest: /etc/restic/restic.env
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
 
-    # Deploy check service and timer
-    - name: Deploy restic check service
-      ansible.builtin.template:
-        src: restic-check.service.j2
-        dest: /etc/systemd/system/restic-check.service
-        owner: root
-        group: root
-        mode: "0644"
-      become: true
-      when: restic_check_enabled | bool
-      notify: Reload systemd
+- name: Deploy Restic excludes file
+  ansible.builtin.template:
+    src: restic-excludes.j2
+    dest: /etc/restic/excludes.txt
+    owner: root
+    group: root
+    mode: "0644"
 
-    - name: Deploy restic check timer
-      ansible.builtin.template:
-        src: restic-check.timer.j2
-        dest: /etc/systemd/system/restic-check.timer
-        owner: root
-        group: root
-        mode: "0644"
-      become: true
-      when: restic_check_enabled | bool
-      notify:
-        - Reload systemd
-        - Enable restic check timer
+- name: Deploy Restic backup script
+  ansible.builtin.template:
+    src: restic-backup.sh.j2
+    dest: /usr/local/bin/restic-backup.sh
+    owner: root
+    group: root
+    mode: "0755"
 
-    # Flush handlers to ensure systemd is reloaded
-    - name: Flush handlers
-      ansible.builtin.meta: flush_handlers
+- name: Deploy Restic check script
+  ansible.builtin.template:
+    src: restic-check.sh.j2
+    dest: /usr/local/bin/restic-check.sh
+    owner: root
+    group: root
+    mode: "0755"
 
-    # Run initial backup if repository was just initialized
-    - name: Run initial backup
-      ansible.builtin.command: systemctl start restic-backup.service
-      become: true
-      when: restic_repo_check.rc != 0 and restic_repository != ""
-      async: 3600
-      poll: 0
+- name: Deploy Restic backup systemd service
+  ansible.builtin.template:
+    src: restic-backup.service.j2
+    dest: /etc/systemd/system/restic-backup.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Deploy Restic backup systemd timer
+  ansible.builtin.template:
+    src: restic-backup.timer.j2
+    dest: /etc/systemd/system/restic-backup.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Start backup timer
+
+- name: Deploy Restic check systemd service
+  ansible.builtin.template:
+    src: restic-check.service.j2
+    dest: /etc/systemd/system/restic-check.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Deploy Restic check systemd timer
+  ansible.builtin.template:
+    src: restic-check.timer.j2
+    dest: /etc/systemd/system/restic-check.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Start check timer
+
+- name: Deploy Restic verify script
+  ansible.builtin.template:
+    src: restic-verify.sh.j2
+    dest: /usr/local/bin/restic-verify.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy Restic verify systemd service
+  ansible.builtin.template:
+    src: restic-verify.service.j2
+    dest: /etc/systemd/system/restic-verify.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Deploy Restic verify systemd timer (monthly)
+  ansible.builtin.template:
+    src: restic-verify.timer.j2
+    dest: /etc/systemd/system/restic-verify.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Start verify timer
+
+- name: Enable Restic timers
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop:
+    - restic-backup.timer
+    - restic-check.timer
+    - restic-verify.timer

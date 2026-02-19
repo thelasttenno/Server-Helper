@@ -1,6 +1,7 @@
-# Custom CNAME records for Pi-hole
-# Managed by Ansible - Server Helper
+# {{ ansible_managed }}
+# Pi-hole custom CNAME records
 
-{% for record in pihole_custom_cname_records %}
-cname={{ record.hostname }},{{ record.target }}
+# --- Manual CNAME overrides ---
+{% for record in pihole_custom_cname_records | default([]) %}
+cname={{ record.cname }},{{ record.target }}
 {% endfor %}

@@ -1,118 +1,92 @@
 ---
-# Server Helper - Target Nodes Configuration
-# ==========================================
-# Variables specific to target (worker) nodes.
-# These override values from all.yml for target nodes.
-# Individual hosts can further override in host_vars/{hostname}.yml
+# =============================================================================
+# Server Helper v2.0 — Target Node Variables
+# =============================================================================
+# Variables specific to target (non-control) nodes.
 
 # -----------------------------------------------------------------------------
-# TARGET NODE SERVICES
+# Watchtower (Auto-updates)
 # -----------------------------------------------------------------------------
+target_watchtower:
+  schedule: "0 0 4 * * *"  # 4:00 AM daily
+  cleanup: true
+  include_stopped: false
+  include_restarting: false
+  notifications: false
 
-# Netdata (System Monitoring - Child Mode)
+# -----------------------------------------------------------------------------
+# Netdata Child Mode
+# -----------------------------------------------------------------------------
 target_netdata:
-  enabled: true
-  port: 19999
   version: "latest"
-  mode: "child"  # Streams to control node parent
-  claim_token: ""
-  claim_rooms: ""
+  port: 19999
+  claim_enabled: false
   alarms:
-    enabled: true
-    cpu_warning: 80
+    cpu_warning: 85
     cpu_critical: 95
-    ram_warning: 80
+    ram_warning: 85
     ram_critical: 95
     disk_warning: 80
     disk_critical: 90
-    check_interval_minutes: 5
-  uptime_kuma_push_urls:
-    cpu: ""
-    ram: ""
-    disk: ""
-    system: ""
 
-# Promtail (Log Shipping to Loki)
-target_logging:
-  promtail:
-    enabled: true
-    additional_jobs: []
+# -----------------------------------------------------------------------------
+# Promtail (Log Shipping)
+# -----------------------------------------------------------------------------
+target_promtail:
+  version: "2.9.4"
+  loki_url: "http://{{ target_control_ip }}:3100/loki/api/v1/push"
 
-# Restic (Encrypted Backups)
+# Promtail Loki URL (used in templates)
+promtail_loki_url: "{{ target_promtail.loki_url }}"
+
+# -----------------------------------------------------------------------------
+# Docker Socket Proxy
+# -----------------------------------------------------------------------------
+target_docker_socket_proxy:
+  port: 2375
+  version: "latest"
+
+# -----------------------------------------------------------------------------
+# Dockge (Stack Manager)
+# -----------------------------------------------------------------------------
+target_dockge:
+  port: 5001
+  version: "latest"
+
+# -----------------------------------------------------------------------------
+# Restic (Backups)
+# -----------------------------------------------------------------------------
 target_restic:
-  enabled: true
-  schedule: "0 2 * * *"
+  schedule: "OnCalendar=*-*-* 02:00:00"  # 2:00 AM daily
+  check_schedule: "OnCalendar=Sun *-*-* 03:00:00"  # Sunday 3:00 AM
   retention:
-    keep_last: 7      # Keep at least N most recent snapshots
     keep_daily: 7
     keep_weekly: 4
     keep_monthly: 6
-    keep_yearly: 2
+    keep_yearly: 1
   destinations:
-    nas:
-      enabled: false
-      path: "/mnt/nas/backup/restic"
     local:
-      enabled: true
-      path: "/opt/backups/restic"
+      enabled: false
+      path: "/backup/restic"
     s3:
       enabled: false
+      endpoint: ""
       bucket: ""
-      endpoint: "s3.amazonaws.com"
       region: "us-east-1"
-    b2:
+    nas:
       enabled: false
-      bucket: ""
-  include_paths:
-    - "{{ target_dockge_stacks_dir }}"
-    - "/etc"
-    - "/root"
-    - "/home"
+      path: ""
+      mount_point: "/mnt/nas/backup"
   exclude_patterns:
-    - "*.tmp"
+    - "/proc"
+    - "/sys"
+    - "/dev"
+    - "/run"
+    - "/tmp"
+    - "/var/cache"
+    - "/var/tmp"
     - "*.log"
-    - "cache"
-    - "*.cache"
-
-# Watchtower (Container Auto-Updates)
-target_watchtower:
-  enabled: true
-  schedule: "0 4 * * *"
-  cleanup: true
-
-# Dockge (Container Management UI)
-target_dockge:
-  enabled: true
-  port: 5001
-  version: "1"
-
-# Docker Socket Proxy
-target_docker_socket_proxy:
-  enabled: true
-
-# -----------------------------------------------------------------------------
-# TARGET SYSTEM CONFIGURATION
-# -----------------------------------------------------------------------------
-
-# LVM Configuration
-target_lvm_config:
-  enabled: true
-  auto_extend_ubuntu: true
-  custom_lvs: []
-  create_lvs: []
-
-# Virtualization
-target_virtualization:
-  qemu_guest_agent: true
-
-# System Maintenance
-target_maintenance:
-  auto_cleanup:
-    enabled: true
-    disk_threshold: 80
-    schedule: "0 5 * * 0"
-  auto_updates:
-    enabled: false
-    schedule: "0 6 * * 0"
-    auto_reboot: false
-    reboot_time: "03:00"
+    - "*.tmp"
+  backup_paths:
+    - "/opt/stacks"
+    - "/etc"

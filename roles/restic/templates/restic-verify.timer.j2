@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Restic monthly backup verification
+Requires=restic-verify.service
+
+[Timer]
+OnCalendar=monthly
+RandomizedDelaySec=86400
+Persistent=true
+
+[Install]
+WantedBy=timers.target

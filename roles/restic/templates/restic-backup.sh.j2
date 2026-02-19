@@ -1,84 +1,91 @@
 #!/bin/bash
-# Restic backup script
-# Managed by Ansible - Server Helper
+# {{ ansible_managed }}
+# Restic backup script with metrics, notifications, and stale lock cleanup
 
 set -euo pipefail
 
-# Load environment
-source {{ restic_script_dir }}/restic.env
+LOG_FILE="/var/log/restic/backup-$(date +%Y%m%d_%H%M%S).log"
+METRICS_FILE="/var/log/restic/metrics.json"
+BACKUP_STATUS="success"
+BACKUP_MSG=""
+START_TS=$(date +%s)
 
-# Logging
-LOG_FILE="{{ restic_log_dir }}/backup-$(date +%Y%m%d-%H%M%S).log"
-exec > >(tee -a "$LOG_FILE") 2>&1
+# Source environment
+source /etc/restic/restic.env
 
-echo "========================================="
-echo "Restic Backup Started: $(date)"
-echo "Host: $(hostname)"
-echo "========================================="
+echo "Starting backup at $(date)" | tee "${LOG_FILE}"
 
-{% if restic_pre_backup_script %}
-# Pre-backup hook
-echo "Running pre-backup script..."
-{{ restic_pre_backup_script }}
-{% endif %}
+# Clear stale locks from previous crashed runs
+restic unlock --remove-all 2>/dev/null || true
 
-# Run backup with nice/ionice for lower priority
-echo "Starting backup..."
-nice -n {{ restic_nice_level }} ionice -c {{ restic_ionice_class }} -n {{ restic_ionice_level }} \
-    restic backup \
-    --verbose \
-    --exclude-file={{ restic_script_dir }}/excludes.txt \
-    --tag "scheduled" \
-    --tag "$(hostname)" \
-{% for path in restic_backup_paths %}
-    "{{ path }}"{% if not loop.last %} \{% endif %}
+# Initialize repository if needed
+restic snapshots &>/dev/null || restic init 2>&1 | tee -a "${LOG_FILE}"
 
+# Run backup
+if restic backup \
+{% for path in target_restic.backup_paths %}
+  {{ path }} \
 {% endfor %}
-
-BACKUP_EXIT=$?
-
-if [ $BACKUP_EXIT -ne 0 ]; then
-    echo "ERROR: Backup failed with exit code $BACKUP_EXIT"
-{% if restic_notify_on_failure and restic_notify_url %}
-    curl -s -X POST "{{ restic_notify_url }}" \
-        -H "Content-Type: application/json" \
-        -d "{\"text\": \"Restic backup FAILED on $(hostname) at $(date)\"}" || true
-{% endif %}
-    exit $BACKUP_EXIT
+  --exclude-file=/etc/restic/excludes.txt \
+  --hostname "{{ inventory_hostname }}" \
+  --compression auto \
+  --verbose 2>&1 | tee -a "${LOG_FILE}"; then
+    BACKUP_MSG="Backup completed successfully"
+else
+    BACKUP_STATUS="fail"
+    BACKUP_MSG="Backup FAILED"
 fi
 
-echo "Backup completed successfully"
-
-{% if restic_prune_enabled %}
 # Apply retention policy
-echo "Applying retention policy..."
-restic forget \
-    --verbose \
-    --keep-last {{ restic_retention_keep_last }} \
-    --keep-daily {{ restic_retention_keep_daily }} \
-    --keep-weekly {{ restic_retention_keep_weekly }} \
-    --keep-monthly {{ restic_retention_keep_monthly }} \
-    --keep-yearly {{ restic_retention_keep_yearly }} \
-    --prune
+if [[ "$BACKUP_STATUS" == "success" ]]; then
+    restic forget \
+      --keep-daily {{ target_restic.retention.keep_daily }} \
+      --keep-weekly {{ target_restic.retention.keep_weekly }} \
+      --keep-monthly {{ target_restic.retention.keep_monthly }} \
+      --keep-yearly {{ target_restic.retention.keep_yearly }} \
+      --prune 2>&1 | tee -a "${LOG_FILE}" || true
+fi
 
-echo "Retention policy applied"
+echo "${BACKUP_MSG} at $(date)" | tee -a "${LOG_FILE}"
+
+# Collect metrics
+END_TS=$(date +%s)
+DURATION=$((END_TS - START_TS))
+TOTAL_SIZE=0
+SNAPSHOT_COUNT=0
+
+if [[ "$BACKUP_STATUS" == "success" ]]; then
+    TOTAL_SIZE=$(restic stats --json latest 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('total_size',0))" 2>/dev/null || echo 0)
+    SNAPSHOT_COUNT=$(restic snapshots --json 2>/dev/null | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo 0)
+fi
+
+# Write metrics (JSONL — one line per run)
+python3 -c "
+import json, sys
+print(json.dumps({
+    'hostname': '{{ inventory_hostname }}',
+    'timestamp': '$(date -Iseconds)',
+    'duration_seconds': $DURATION,
+    'total_size_bytes': $TOTAL_SIZE,
+    'snapshot_count': $SNAPSHOT_COUNT,
+    'status': '$BACKUP_STATUS'
+}))
+" >> "${METRICS_FILE}" 2>/dev/null || true
+
+# Push to Uptime Kuma (health check heartbeat)
+{% if vault_uptime_kuma_push_urls.backup | default('') | length > 0 %}
+PUSH_URL="{{ vault_uptime_kuma_push_urls.backup }}"
+if [[ "$BACKUP_STATUS" == "success" ]]; then
+    curl -fsS -m 10 "${PUSH_URL}?status=up&msg=OK&ping=" >/dev/null 2>&1 || true
+else
+    curl -fsS -m 10 "${PUSH_URL}?status=down&msg=FAIL&ping=" >/dev/null 2>&1 || true
+fi
 {% endif %}
 
-{% if restic_post_backup_script %}
-# Post-backup hook
-echo "Running post-backup script..."
-{{ restic_post_backup_script }}
-{% endif %}
+# Send notification on failure
+if [[ "$BACKUP_STATUS" == "fail" ]]; then
+    server-helper-notify "Backup FAILED" "Backup failed on {{ inventory_hostname }} after ${DURATION}s. Check: journalctl -u restic-backup.service" 2>/dev/null || true
+fi
 
-# Show latest snapshots
-echo ""
-echo "Latest snapshots:"
-restic snapshots --last 5
-
-echo ""
-echo "========================================="
-echo "Restic Backup Completed: $(date)"
-echo "========================================="
-
-# Cleanup old logs (keep last 30 days)
-find {{ restic_log_dir }} -name "backup-*.log" -mtime +30 -delete 2>/dev/null || true
+# Cleanup old logs (keep last 30)
+ls -t /var/log/restic/backup-*.log 2>/dev/null | tail -n +31 | xargs -r rm

@@ -1,72 +1,39 @@
 ---
-# Promtail deployment tasks
+# Role: promtail — Deploy Promtail to ship logs to Loki
 
-- name: Promtail deployment
-  when: promtail_enabled | bool
-  block:
-    # Validate required variables
-    - name: Validate control_node_ip is set
-      ansible.builtin.assert:
-        that:
-          - control_node_ip is defined
-          - control_node_ip | length > 0
-          - control_node_ip != 'localhost'
-        fail_msg: |
-          control_node_ip must be set for Promtail to connect to Loki.
-          Current value: '{{ control_node_ip | default("not defined") }}'
+- name: Create Promtail stack directory
+  ansible.builtin.file:
+    path: "{{ docker_stack_path }}/promtail"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
-          Set this in group_vars/all.yml or run: ./setup.sh -> Configure
-        success_msg: "control_node_ip is set to {{ control_node_ip }}"
+- name: Deploy Promtail Docker Compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ docker_stack_path }}/promtail/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
 
-    # Create stack directory
-    - name: Create Promtail stack directory
-      ansible.builtin.file:
-        path: "{{ promtail_stack_dir }}"
-        state: directory
-        owner: root
-        group: docker
-        mode: "0755"
-      become: true
+- name: Deploy Promtail environment file
+  ansible.builtin.template:
+    src: promtail.env.j2
+    dest: "{{ docker_stack_path }}/promtail/.env"
+    owner: root
+    group: root
+    mode: "0600"
 
-    # Deploy Promtail config
-    - name: Deploy Promtail configuration
-      ansible.builtin.template:
-        src: promtail-config.yml.j2
-        dest: "{{ promtail_stack_dir }}/promtail-config.yml"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
-      register: promtail_config
+- name: Deploy Promtail configuration
+  ansible.builtin.template:
+    src: promtail-config.yml.j2
+    dest: "{{ docker_stack_path }}/promtail/promtail-config.yml"
+    owner: root
+    group: root
+    mode: "0644"
 
-    # Deploy docker-compose file
-    - name: Deploy Promtail docker-compose
-      ansible.builtin.template:
-        src: docker-compose.yml.j2
-        dest: "{{ promtail_stack_dir }}/compose.yaml"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
-      register: promtail_compose
-
-    # Deploy the stack
-    - name: Deploy Promtail stack
-      community.docker.docker_compose_v2:
-        project_src: "{{ promtail_stack_dir }}"
-        state: present
-        pull: always
-      become: true
-      when:
-        - not promtail_skip_deploy | default(false)
-        - promtail_compose.changed or promtail_config.changed
-
-    # Ensure Promtail is running
-    - name: Ensure Promtail is running
-      community.docker.docker_compose_v2:
-        project_src: "{{ promtail_stack_dir }}"
-        state: present
-      become: true
-      when:
-        - not promtail_skip_deploy | default(false)
-        - not (promtail_compose.changed or promtail_config.changed)
+- name: Start Promtail
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_stack_path }}/promtail"
+    state: present

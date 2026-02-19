@@ -1,157 +1,68 @@
 ---
-# Pi-hole deployment tasks (Control Node)
+- name: Create Pi-hole stack directory
+  ansible.builtin.file:
+    path: "{{ docker_stack_path }}/pihole/config"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
-- name: Pi-hole deployment
-  when: pihole_enabled | bool
-  block:
-    # Create stack directory
-    - name: Create Pi-hole stack directory
-      ansible.builtin.file:
-        path: "{{ pihole_stack_dir }}"
-        state: directory
-        owner: root
-        group: docker
-        mode: "0755"
-      become: true
+- name: Create Unbound config directory
+  ansible.builtin.file:
+    path: "{{ docker_stack_path }}/pihole/unbound"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
-    # Create subdirectories
-    - name: Create Pi-hole subdirectories
-      ansible.builtin.file:
-        path: "{{ pihole_stack_dir }}/{{ item }}"
-        state: directory
-        owner: root
-        group: docker
-        mode: "0755"
-      loop:
-        - pihole
-        - dnsmasq.d
-        - unbound
-      become: true
+- name: Deploy Pi-hole Docker Compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ docker_stack_path }}/pihole/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0640"
+  no_log: true
 
-    # Disable systemd-resolved if it's running (conflicts with port 53)
-    - name: Check if systemd-resolved is running
-      ansible.builtin.systemd:
-        name: systemd-resolved
-      register: resolved_status
-      failed_when: false
-      become: true
+- name: Deploy Unbound configuration
+  ansible.builtin.template:
+    src: unbound.conf.j2
+    dest: "{{ docker_stack_path }}/pihole/unbound/unbound.conf"
+    owner: root
+    group: root
+    mode: "0644"
 
-    - name: Stop and disable systemd-resolved
-      ansible.builtin.systemd:
-        name: systemd-resolved
-        state: stopped
-        enabled: false
-      become: true
-      when: resolved_status.status.ActiveState == "active"
+- name: Deploy custom DNS records
+  ansible.builtin.template:
+    src: custom.list.j2
+    dest: "{{ docker_stack_path }}/pihole/config/custom.list"
+    owner: root
+    group: root
+    mode: "0644"
 
-    - name: Update resolv.conf for Pi-hole
-      ansible.builtin.copy:
-        content: |
-          # Managed by Ansible - Server Helper
-          nameserver 127.0.0.1
-          nameserver 1.1.1.1
-        dest: /etc/resolv.conf
-        owner: root
-        group: root
-        mode: "0644"
-      become: true
-      when: resolved_status.status.ActiveState == "active"
+- name: Deploy custom CNAME records
+  ansible.builtin.template:
+    src: 05-custom-cname.conf.j2
+    dest: "{{ docker_stack_path }}/pihole/config/05-custom-cname.conf"
+    owner: root
+    group: root
+    mode: "0644"
 
-    # Deploy Unbound configuration
-    - name: Deploy Unbound configuration
-      ansible.builtin.template:
-        src: unbound.conf.j2
-        dest: "{{ pihole_stack_dir }}/unbound/unbound.conf"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
-      when: pihole_unbound_enabled | bool
+- name: Deploy Pi-hole setup guide
+  ansible.builtin.template:
+    src: setup-guide.md.j2
+    dest: "{{ docker_stack_path }}/pihole/SETUP-GUIDE.md"
+    owner: root
+    group: root
+    mode: "0644"
 
-    # Deploy custom DNS records
-    - name: Deploy custom DNS records
-      ansible.builtin.template:
-        src: custom.list.j2
-        dest: "{{ pihole_stack_dir }}/pihole/custom.list"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
-      when: pihole_custom_dns_records | length > 0
+- name: Allow DNS port
+  community.general.ufw:
+    rule: allow
+    port: "{{ control_dns.dns_port | string }}"
+    comment: "Pi-hole DNS"
 
-    # Deploy custom CNAME records
-    - name: Deploy custom CNAME records
-      ansible.builtin.template:
-        src: 05-custom-cname.conf.j2
-        dest: "{{ pihole_stack_dir }}/dnsmasq.d/05-custom-cname.conf"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
-      when: pihole_custom_cname_records | length > 0
-
-    # Deploy docker-compose file
-    - name: Deploy Pi-hole docker-compose
-      ansible.builtin.template:
-        src: docker-compose.yml.j2
-        dest: "{{ pihole_stack_dir }}/compose.yaml"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
-      register: pihole_compose
-
-    # Deploy the stack
-    - name: Deploy Pi-hole stack
-      community.docker.docker_compose_v2:
-        project_src: "{{ pihole_stack_dir }}"
-        state: present
-        pull: always
-      become: true
-      when:
-        - not pihole_skip_deploy | default(false)
-        - pihole_compose.changed
-
-    # Ensure Pi-hole is running
-    - name: Ensure Pi-hole is running
-      community.docker.docker_compose_v2:
-        project_src: "{{ pihole_stack_dir }}"
-        state: present
-      become: true
-      when:
-        - not pihole_skip_deploy | default(false)
-        - not pihole_compose.changed
-
-    # Wait for Pi-hole to be ready
-    - name: Wait for Pi-hole web interface
-      ansible.builtin.uri:
-        url: "http://localhost:{{ pihole_web_port }}/admin/"
-        method: GET
-        status_code: [200, 302]
-      register: pihole_health
-      until: pihole_health.status in [200, 302]
-      retries: 30
-      delay: 2
-      when: not pihole_skip_deploy | default(false)
-
-    # Set up gravity (blocklists)
-    - name: Update Pi-hole gravity
-      community.docker.docker_container_exec:
-        container: "{{ pihole_container_name }}"
-        command: pihole -g
-      become: true
-      when:
-        - not pihole_skip_deploy | default(false)
-        - pihole_compose.changed
-      async: 300
-      poll: 0
-
-    # Deploy setup guide
-    - name: Deploy Pi-hole setup guide
-      ansible.builtin.template:
-        src: setup-guide.md.j2
-        dest: "{{ pihole_stack_dir }}/SETUP-GUIDE.md"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
+- name: Start Pi-hole
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_stack_path }}/pihole"
+    state: present

@@ -1,85 +1,23 @@
-# Grafana configuration
-# Managed by Ansible - Server Helper
-
+# {{ ansible_managed }}
 [server]
-root_url = {{ grafana_root_url }}
-serve_from_sub_path = {{ grafana_serve_from_sub_path | lower }}
+root_url = https://grafana.{{ target_domain }}
+domain = grafana.{{ target_domain }}
 
 [security]
-admin_user = {{ grafana_admin_user }}
-admin_password = {{ grafana_admin_password }}
-disable_initial_admin_creation = false
+admin_user = admin
+cookie_secure = true
+strict_transport_security = true
 
 [users]
-allow_sign_up = {{ (not grafana_disable_signup) | lower }}
-allow_org_create = {{ grafana_allow_org_create | lower }}
-auto_assign_org = true
-auto_assign_org_role = Viewer
+allow_sign_up = false
 
 [auth]
-disable_login_form = {{ grafana_oauth_auto_login | default(false) | lower }}
-
-[auth.anonymous]
-enabled = {{ grafana_anonymous_enabled | lower }}
-org_role = {{ grafana_anonymous_org_role }}
-
-{% if grafana_oauth_enabled %}
-# =============================================================================
-# AUTHENTIK SSO INTEGRATION
-# =============================================================================
-# Configure in Authentik:
-# 1. Create OAuth2/OpenID Provider for Grafana
-# 2. Set redirect URI: {{ grafana_root_url }}/login/generic_oauth
-# 3. Copy Client ID and Secret to vault
-# 4. Create groups: "Grafana Admins", "Grafana Editors"
-
-[auth.generic_oauth]
-enabled = true
-name = {{ grafana_oauth_name }}
-allow_sign_up = {{ grafana_oauth_allow_sign_up | lower }}
-auto_login = {{ grafana_oauth_auto_login | default(false) | lower }}
-client_id = {{ grafana_oauth_client_id }}
-client_secret = {{ grafana_oauth_client_secret }}
-scopes = {{ grafana_oauth_scopes }}
-auth_url = {{ grafana_oauth_auth_url }}
-token_url = {{ grafana_oauth_token_url }}
-api_url = {{ grafana_oauth_api_url }}
-# Role mapping from Authentik groups
-role_attribute_path = {{ grafana_oauth_role_attribute_path }}
-# Use email as login
-email_attribute_path = email
-login_attribute_path = preferred_username
-name_attribute_path = name
-# TLS verification (disable if using self-signed certs)
-tls_skip_verify_insecure = false
-{% endif %}
-
-{% if grafana_smtp_enabled %}
-[smtp]
-enabled = true
-host = {{ grafana_smtp_host }}:{{ grafana_smtp_port }}
-user = {{ grafana_smtp_user }}
-password = {{ grafana_smtp_password }}
-from_address = {{ grafana_smtp_from_address }}
-from_name = {{ grafana_smtp_from_name }}
-{% endif %}
-
-[log]
-mode = console
-level = info
+disable_login_form = false
 
 [analytics]
 reporting_enabled = false
 check_for_updates = false
 
-[alerting]
-enabled = true
-
-[unified_alerting]
-enabled = true
-
-[feature_toggles]
-enable = publicDashboards
-
-[dashboards]
-default_home_dashboard_path = /var/lib/grafana/dashboards/home.json
+[log]
+mode = console
+level = info

@@ -1,211 +1,66 @@
-# Server Helper - Global Configuration Example
-# =============================================
-# Copy this file to all.yml and customize for your environment.
-# The setup.sh script will generate this file automatically.
-#
-# VARIABLE HIERARCHY (lowest to highest precedence):
-# ──────────────────────────────────────────────────
-#   1. group_vars/all.yml        ← Global defaults (this file)
-#   2. group_vars/control.yml    ← Control node group settings
-#   3. group_vars/targets.yml    ← Target nodes group settings
-#   4. host_vars/{hostname}.yml  ← Per-host overrides
-#   5. inventory host_vars       ← Inline vars in hosts.yml
-#
-# FILE STRUCTURE:
-# ───────────────
-#   group_vars/
-#   ├── all.yml           ← Truly global settings (domain, IPs, security)
-#   ├── all.example.yml   ← This documentation file
-#   ├── control.yml       ← Control node services (Traefik, Grafana, etc.)
-#   ├── targets.yml       ← Target node services (Netdata child, Promtail)
-#   ├── vault.yml         ← Encrypted secrets
-#   └── vault.example.yml ← Secrets template
-#
-#   host_vars/
-#   ├── server1.yml       ← Per-host overrides for server1
-#   ├── server2.yml       ← Per-host overrides for server2
-#   └── *.example.yml     ← Example templates
-#
-# USAGE:
-# ──────
-#   cp group_vars/all.example.yml group_vars/all.yml
-#   # Edit all.yml with your settings
-#   # Optionally create host_vars/{hostname}.yml for per-host overrides
-
 ---
 # =============================================================================
-# INFRASTRUCTURE SETTINGS (Truly Global)
+# Server Helper v2.0 — Global Variables (Example)
 # =============================================================================
-# These apply to ALL hosts and define your infrastructure topology.
+# Copy this file to all.yml and customize for your environment.
+# See docs/wiki/03-configuration.md for detailed documentation.
 
-# Primary domain for all services (*.example.com)
+# Domain & Network — REQUIRED: Change these for your environment
 target_domain: "example.com"
+target_control_ip: "192.168.1.10"
+target_timezone: "America/Los_Angeles"
 
-# Control node IP address
-# Targets use this to connect for monitoring/logging aggregation
-control_node_ip: "192.168.1.10"
+# DNS — upstream resolvers used before Pi-hole is active
+target_dns:
+  upstream_servers:
+    - "1.1.1.1"
+    - "8.8.8.8"
+  search_domain: "{{ target_domain }}"
 
-# SSH user for Ansible connections (must exist on all hosts)
-ansible_user: "ansible"
+# Common packages — set to false to skip apt upgrade during deployment
+common_upgrade_packages: true
+common_microcode_enabled: true
+common_sysctl_tuning: true
 
-# =============================================================================
-# SYSTEM DEFAULTS
-# =============================================================================
-# Default values that can be overridden per-host in host_vars/
-
-# Default timezone (override per-host: host_vars/server1.yml → target_timezone)
-target_timezone: "America/Vancouver"
-
-# Default locale
-target_locale: "en_US.UTF-8"
-
-# =============================================================================
-# DIRECTORY STRUCTURE
-# =============================================================================
-# Base paths used across all nodes (Dockge-compatible)
-
-target_base_dir: "/opt/server-helper"
-target_dockge_base_dir: "/opt/stacks"
-target_dockge_stacks_dir: "{{ target_dockge_base_dir }}"
-target_dockge_data_dir: "{{ target_dockge_base_dir }}/dockge/data"
-
-# =============================================================================
-# DOCKER CONFIGURATION
-# =============================================================================
-# Applied to all nodes, can be overridden per-host
-
+# Docker — logging and storage defaults
 target_docker:
-  version: "latest"
-  compose_version: "v2"
-  storage_driver: "overlay2"
   log_driver: "json-file"
   log_max_size: "10m"
   log_max_file: "3"
+  storage_driver: "overlay2"
+  live_restore: true
 
-# =============================================================================
-# SECURITY SETTINGS
-# =============================================================================
-# Applied uniformly to all nodes for consistent security posture
+# Docker stack path (must match Dockge config)
+docker_stack_path: "/opt/stacks"
 
+# Security — SSH, firewall, and intrusion prevention
 target_security:
-  basic_hardening: true
-  lynis:
-    enabled: true
-    schedule: "0 3 * * 0"  # Weekly Sunday 3 AM
+  ssh_hardening:
+    permit_root_login: "no"
+    password_authentication: "no"
+    max_auth_tries: 3
+    x11_forwarding: "no"
+    allow_tcp_forwarding: "no"
+    client_alive_interval: 300
+    client_alive_count_max: 2
   fail2ban:
     enabled: true
-    sshd_maxretry: 3
-    sshd_bantime: 86400    # 24 hours
+    max_retry: 3
+    ban_time: 86400
+    find_time: 600
   ufw:
     enabled: true
-    default_incoming: deny
-    default_outgoing: allow
-  ssh_hardening:
-    enabled: true
-    permit_root_login: false
-    password_authentication: false
-    pubkey_authentication: true
-    max_auth_tries: 3
+    default_incoming: "deny"
+    default_outgoing: "allow"
+    allowed_ports:
+      - { port: 22, proto: "tcp", comment: "SSH" }
 
-# =============================================================================
-# SERVICE DISCOVERY
-# =============================================================================
-# How target nodes find and connect to control node services
+# LVM — auto-extend logical volumes to use all free space
+target_lvm_config:
+  auto_extend_ubuntu: true
 
-service_discovery:
-  enabled: true
-  control_node_ip: "{{ control_node_ip }}"
-  netdata_streaming:
-    enabled: true
-    parent_host: "{{ control_node_ip }}"
-    parent_port: 19999
-    api_key: "{{ vault_netdata_stream_api_key }}"
-  log_aggregation:
-    enabled: true
-    loki_url: "http://{{ control_node_ip }}:3100/loki/api/v1/push"
+# Swap — size in GB (skipped on LXC containers)
+swap_size_gb: 2
 
-# =============================================================================
-# NETWORK SETTINGS
-# =============================================================================
-
-# Traefik Docker network (control node services)
-traefik_docker_network: "traefik-public"
-
-# Let's Encrypt ACME email
-traefik_acme_email: "admin@{{ target_domain }}"
-
-# DNS configuration for Pi-hole upstream servers
-target_dns:
-  upstream_servers:
-    - "1.1.1.1"    # Cloudflare primary
-    - "1.0.0.1"    # Cloudflare secondary
-  # Alternative DNS providers:
-  # Google: 8.8.8.8, 8.8.4.4
-  # Quad9: 9.9.9.9, 149.112.112.112
-
-# Notification email for security alerts (fail2ban, lynis, etc.)
-target_notification_email: "admin@{{ target_domain }}"
-
-# Pi-hole custom DNS records
-pihole_custom_dns_records:
-  - hostname: "control.{{ target_domain }}"
-    ip: "{{ control_node_ip }}"
-  # Add more:
-  # - hostname: "nas.{{ target_domain }}"
-  #   ip: "192.168.1.5"
-
-# =============================================================================
-# NAS MOUNTS (Optional)
-# =============================================================================
-
-target_nas_mounts:
-  enabled: false
-  shares: []
-  # Example:
-  # shares:
-  #   - name: "backup"
-  #     ip: "192.168.1.100"
-  #     share_name: "backup"
-  #     mount_point: "/mnt/nas/backup"
-  #     username: "{{ vault_nas_credentials[0].username }}"
-  #     password: "{{ vault_nas_credentials[0].password }}"
-
-# =============================================================================
-# DEBUG & FEATURE FLAGS
-# =============================================================================
-
-debug_mode: false
-
-# =============================================================================
-# GROUP-SPECIFIC SETTINGS (See separate files)
-# =============================================================================
-#
-# CONTROL NODE SERVICES → group_vars/control.yml
-# ──────────────────────────────────────────────
-#   control_authentik:     SSO/Identity Provider
-#   control_traefik:       Reverse Proxy
-#   control_step_ca:       Internal Certificate Authority
-#   control_dns:           Pi-hole + Unbound
-#   control_uptime_kuma:   Availability Monitoring
-#   control_grafana:       Dashboards
-#   control_loki:          Log Aggregation
-#   control_netdata:       Metrics (Parent Mode)
-#
-# TARGET NODE SERVICES → group_vars/targets.yml
-# ─────────────────────────────────────────────
-#   target_netdata:        System Monitoring (Child Mode)
-#   target_logging:        Promtail Log Shipping
-#   target_restic:         Encrypted Backups
-#   target_watchtower:     Container Auto-Updates
-#   target_dockge:         Container Management UI
-#   target_lvm_config:     LVM Expansion
-#   target_maintenance:    System Maintenance
-#
-# PER-HOST OVERRIDES → host_vars/{hostname}.yml
-# ─────────────────────────────────────────────
-#   target_timezone:       Different timezone per host
-#   target_restic:         Different backup config per host
-#   target_netdata:        Different thresholds per host
-#   lvm_skip/swap_skip:    LXC container flags
-#
-# See host_vars/server1.example.yml for examples
+# Admin user — defaults to the SSH user
+target_admin_user: "{{ ansible_user }}"

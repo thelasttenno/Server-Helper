@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: dockge
+  author: Server Helper
+  description: Deploy Dockge visual Docker Compose manager
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions: [jammy, noble]
+    - name: Debian
+      versions: [bookworm]
+  galaxy_tags: [docker, dockge, management]
+dependencies: []

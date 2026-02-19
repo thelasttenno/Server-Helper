@@ -1,116 +1,63 @@
-# Pi-hole - DNS Sinkhole with Ad Blocking
-# Managed by Ansible - Server Helper
-# Dockge compatible: /opt/stacks/pihole/
-
+# {{ ansible_managed }}
 services:
-{% if pihole_unbound_enabled %}
+  pihole:
+    image: pihole/pihole:{{ control_dns.pihole_version }}
+    container_name: pihole
+    restart: unless-stopped
+    ports:
+      - "{{ control_dns.dns_port }}:53/tcp"
+      - "{{ control_dns.dns_port }}:53/udp"
+      - "{{ control_dns.pihole_port }}:80/tcp"
+    environment:
+      TZ: "{{ target_timezone }}"
+      WEBPASSWORD: "{{ vault_pihole_password }}"
+      PIHOLE_DNS_: "unbound#5335"
+      DNSSEC: "{{ control_dns.dnssec | lower }}"
+    volumes:
+      - pihole-data:/etc/pihole
+      - pihole-dnsmasq:/etc/dnsmasq.d
+      - ./config/custom.list:/etc/pihole/custom.list:ro
+      - ./config/05-custom-cname.conf:/etc/dnsmasq.d/05-custom-cname.conf:ro
+    networks:
+      - traefik-public
+      - pihole-internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pihole.rule=Host(`pihole.{{ target_domain }}`)"
+      - "traefik.http.routers.pihole.entrypoints=websecure"
+      - "traefik.http.routers.pihole.tls.certresolver=letsencrypt"
+      - "traefik.http.services.pihole.loadbalancer.server.port=80"
+      - "traefik.http.routers.pihole.middlewares=security-headers"
+    depends_on:
+      unbound:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "dig", "+short", "+norecurse", "+retry=0", "@127.0.0.1", "pi.hole"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   unbound:
-    image: {{ pihole_unbound_image }}:{{ pihole_unbound_image_tag }}
+    image: mvance/unbound:{{ control_dns.unbound_version }}
     container_name: unbound
     restart: unless-stopped
     volumes:
       - ./unbound/unbound.conf:/opt/unbound/etc/unbound/unbound.conf:ro
     networks:
-      pihole_network:
-        ipv4_address: 172.20.0.2
-    deploy:
-      resources:
-        limits:
-          memory: {{ pihole_unbound_memory_limit }}
+      - pihole-internal
     healthcheck:
       test: ["CMD", "drill", "@127.0.0.1", "cloudflare.com"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-{% endif %}
+      start_period: 15s
 
-  pihole:
-    image: {{ pihole_image }}:{{ pihole_image_tag }}
-    container_name: {{ pihole_container_name }}
-    restart: unless-stopped
-    ports:
-      - "{{ pihole_dns_port }}:53/tcp"
-      - "{{ pihole_dns_port }}:53/udp"
-      - "{{ pihole_web_port }}:80/tcp"
-    environment:
-      - TZ={{ target_timezone | default('America/Vancouver') }}
-      - WEBPASSWORD={{ pihole_web_password }}
-{% if pihole_unbound_enabled %}
-      - PIHOLE_DNS_=172.20.0.2#5053
-{% else %}
-      - PIHOLE_DNS_={{ pihole_upstream_dns | join(';') }}
-{% endif %}
-      - DNSSEC={{ pihole_dnssec | lower }}
-      - DNS_BOGUS_PRIV={{ pihole_dns_bogus_priv | lower }}
-      - DNS_FQDN_REQUIRED={{ pihole_dns_fqdn_required | lower }}
-      - QUERY_LOGGING={{ pihole_query_logging | lower }}
-      - WEBTHEME={{ pihole_web_theme }}
-      - TEMPERATUREUNIT={{ pihole_temperature_unit }}
-{% if pihole_admin_email %}
-      - ADMIN_EMAIL={{ pihole_admin_email }}
-{% endif %}
-{% if pihole_dhcp_enabled %}
-      - DHCP_ACTIVE=true
-      - DHCP_START={{ pihole_dhcp_start }}
-      - DHCP_END={{ pihole_dhcp_end }}
-      - DHCP_ROUTER={{ pihole_dhcp_router }}
-      - DHCP_LEASETIME={{ pihole_dhcp_leasetime }}
-{% endif %}
-    volumes:
-      - ./pihole:/etc/pihole
-      - ./dnsmasq.d:/etc/dnsmasq.d
-{% if pihole_unbound_enabled %}
-    depends_on:
-      - unbound
-    networks:
-      pihole_network:
-        ipv4_address: 172.20.0.3
-      default:
-{% else %}
-    networks:
-      - default
-{% endif %}
-    deploy:
-      resources:
-        limits:
-          memory: {{ pihole_memory_limit }}
-    cap_add:
-      - NET_ADMIN
-    healthcheck:
-      test: ["CMD", "dig", "+norecurse", "+retry=0", "@127.0.0.1", "pi.hole"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-      - "traefik.enable=true"
-      - "traefik.http.routers.pihole.rule=Host(`pihole.{{ target_domain | default('local') }}`)"
-      - "traefik.http.routers.pihole.entrypoints=websecure"
-      - "traefik.http.routers.pihole.tls=true"
-      - "traefik.http.services.pihole.loadbalancer.server.port=80"
+volumes:
+  pihole-data:
+  pihole-dnsmasq:
 
 networks:
-{% if pihole_unbound_enabled %}
-  pihole_network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/24
-{% endif %}
-  default:
-    name: {{ traefik_docker_network | default('traefik-public') }}
+  traefik-public:
     external: true
+  pihole-internal:

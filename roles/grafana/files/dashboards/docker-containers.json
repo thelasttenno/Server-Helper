@@ -1,0 +1,84 @@
+{
+    "dashboard": {
+        "title": "Docker Containers",
+        "uid": "server-helper-docker",
+        "tags": [
+            "server-helper",
+            "docker"
+        ],
+        "timezone": "browser",
+        "refresh": "30s",
+        "panels": [
+            {
+                "title": "Container Status",
+                "type": "table",
+                "gridPos": {
+                    "h": 10,
+                    "w": 24,
+                    "x": 0,
+                    "y": 0
+                },
+                "targets": [
+                    {
+                        "datasource": {
+                            "type": "prometheus",
+                            "uid": "netdata"
+                        },
+                        "expr": "netdata_docker_engine_engine_daemon_container_states_containers_average",
+                        "legendFormat": "{{dimension}}"
+                    }
+                ]
+            },
+            {
+                "title": "Container CPU Usage",
+                "type": "timeseries",
+                "gridPos": {
+                    "h": 8,
+                    "w": 12,
+                    "x": 0,
+                    "y": 10
+                },
+                "targets": [
+                    {
+                        "datasource": {
+                            "type": "prometheus",
+                            "uid": "netdata"
+                        },
+                        "expr": "netdata_cgroup_cpu_limit_percentage_average",
+                        "legendFormat": "{{chart}}"
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "unit": "percent"
+                    }
+                }
+            },
+            {
+                "title": "Container Memory Usage",
+                "type": "timeseries",
+                "gridPos": {
+                    "h": 8,
+                    "w": 12,
+                    "x": 12,
+                    "y": 10
+                },
+                "targets": [
+                    {
+                        "datasource": {
+                            "type": "prometheus",
+                            "uid": "netdata"
+                        },
+                        "expr": "netdata_cgroup_mem_usage_MiB_average",
+                        "legendFormat": "{{chart}}"
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "unit": "MiB"
+                    }
+                }
+            }
+        ]
+    }
+}

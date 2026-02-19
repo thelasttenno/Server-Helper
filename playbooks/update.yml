@@ -1,108 +1,66 @@
 ---
-# Update playbook - System updates and maintenance
-# Performs safe rolling updates across all nodes
+# =============================================================================
+# update.yml — Rolling system updates
+# =============================================================================
+# Performs rolling apt upgrade and Watchtower one-shot on all nodes.
 #
 # Usage:
 #   ansible-playbook playbooks/update.yml
-#   ansible-playbook playbooks/update.yml --tags "packages"
-#   ansible-playbook playbooks/update.yml --tags "containers"
+#   ansible-playbook playbooks/update.yml --tags reboot
 
-- name: Server Helper - System Updates
+- name: Rolling system updates
   hosts: all
-  become: true
+  serial: 1
   gather_facts: true
-  serial: 1  # Rolling updates, one host at a time
-
-  pre_tasks:
-    - name: Display update information
-      ansible.builtin.debug:
-        msg: |
-          ================================================
-          Updating: {{ inventory_hostname }}
-          ================================================
-
+  tags: [update]
   tasks:
-    # Package updates
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: true
-        cache_valid_time: 3600
-      tags: [packages]
 
-    - name: Upgrade all packages
+    - name: Perform safe apt upgrade
       ansible.builtin.apt:
         upgrade: safe
-        autoremove: true
-        autoclean: true
-      register: apt_upgrade
-      tags: [packages]
+      register: apt_result
 
-    - name: Display upgraded packages
+    - name: Display upgrade results
       ansible.builtin.debug:
-        msg: "{{ apt_upgrade.stdout_lines | default(['No packages upgraded']) }}"
-      when: apt_upgrade.changed
-      tags: [packages]
+        msg: "Packages upgraded: {{ apt_result.stdout_lines | default([]) | length }}"
 
-    # Container updates via Watchtower
-    - name: Trigger Watchtower update check
-      community.docker.docker_container_exec:
-        container: watchtower
-        command: /watchtower --run-once
-      register: watchtower_update
-      failed_when: false
-      tags: [containers]
+    - name: Trigger Watchtower one-shot update
+      community.docker.docker_container:
+        name: watchtower
+        command: "--run-once"
+        restart: true
+      ignore_errors: true
 
-    - name: Display Watchtower output
-      ansible.builtin.debug:
-        msg: "{{ watchtower_update.stdout | default('Watchtower update triggered') }}"
-      tags: [containers]
-
-    # Check if reboot is required
-    - name: Check if reboot is required
-      ansible.builtin.stat:
-        path: /var/run/reboot-required
-      register: reboot_required
-      tags: [packages]
-
-    - name: Notify if reboot is required
-      ansible.builtin.debug:
-        msg: "NOTICE: {{ inventory_hostname }} requires a reboot to complete updates"
-      when: reboot_required.stat.exists
-      tags: [packages]
-
-  post_tasks:
-    - name: Display update summary
-      ansible.builtin.debug:
-        msg: |
-          ================================================
-          Update Complete: {{ inventory_hostname }}
-          ================================================
-          Packages upgraded: {{ apt_upgrade.changed | default(false) }}
-          Reboot required: {{ reboot_required.stat.exists | default(false) }}
-          ================================================
-
-# Optional: Reboot nodes that require it
-- name: Reboot nodes if required (optional)
-  hosts: all
-  become: true
-  gather_facts: false
-  serial: 1
-  tags: [reboot, never]  # Only runs when explicitly tagged
-
-  tasks:
     - name: Check if reboot is required
       ansible.builtin.stat:
         path: /var/run/reboot-required
       register: reboot_check
 
-    - name: Reboot the server
+    - name: Display reboot status
+      ansible.builtin.debug:
+        msg: "{{ 'REBOOT REQUIRED' if reboot_check.stat.exists else 'No reboot needed' }}"
+
+- name: Reboot if required
+  hosts: all
+  serial: 1
+  tags: [reboot, never]
+  tasks:
+    - name: Check if reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: Reboot server
       ansible.builtin.reboot:
         reboot_timeout: 300
         msg: "Rebooting for system updates"
-      when: reboot_check.stat.exists
+      when: reboot_required.stat.exists
 
     - name: Wait for server to come back
       ansible.builtin.wait_for_connection:
         delay: 30
         timeout: 300
-      when: reboot_check.stat.exists
+      when: reboot_required.stat.exists

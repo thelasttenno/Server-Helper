@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: traefik
+  author: Server Helper
+  description: Traefik v3 reverse proxy with Let's Encrypt and security headers
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions: [jammy, noble]
+    - name: Debian
+      versions: [bookworm]
+  galaxy_tags: [proxy, traefik, ssl, letsencrypt]
+dependencies: []

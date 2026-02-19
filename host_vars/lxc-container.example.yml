@@ -1,0 +1,11 @@
+---
+# Example host-specific variables for LXC containers.
+# Copy to host_vars/{your-lxc-hostname}.yml
+#
+# LXC containers don't support LVM, swap, or QEMU agent.
+# These flags are auto-detected in site.yml pre-flight,
+# but can also be set manually here for explicit control.
+
+lvm_skip: true
+swap_skip: true
+qemu_agent_skip: true

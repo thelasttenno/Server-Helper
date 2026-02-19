@@ -1,0 +1,22 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Email notification via SMTP — injection-safe
+SUBJECT="${1:-Server Helper Alert}"
+BODY="${2:-No details}"
+python3 - "$SUBJECT" "$BODY" <<'PYEOF'
+import smtplib, sys
+from email.mime.text import MIMEText
+subject = sys.argv[1]
+body = sys.argv[2]
+msg = MIMEText(body)
+msg['Subject'] = subject
+msg['From'] = '{{ notifications_smtp.from }}'
+msg['To'] = '{{ notifications_smtp.to | join(",") }}'
+try:
+    with smtplib.SMTP('{{ notifications_smtp.host }}', {{ notifications_smtp.port }}) as s:
+        s.starttls()
+        s.login('{{ notifications_smtp.username }}', '{{ notifications_smtp.password }}')
+        s.send_message(msg)
+except Exception:
+    pass
+PYEOF

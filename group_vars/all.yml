@@ -1,0 +1,98 @@
+---
+# =============================================================================
+# Server Helper v2.0 — Global Variables
+# =============================================================================
+# These variables apply to ALL nodes (control + targets).
+# Override per-host in host_vars/{hostname}.yml
+
+# -----------------------------------------------------------------------------
+# Domain & Network
+# -----------------------------------------------------------------------------
+target_domain: "example.com"
+target_control_ip: "192.168.1.10"
+target_timezone: "America/Los_Angeles"
+
+# DNS configuration
+target_dns:
+  upstream_servers:
+    - "1.1.1.1"
+    - "8.8.8.8"
+  search_domain: "{{ target_domain }}"
+
+# -----------------------------------------------------------------------------
+# Common Packages & System
+# -----------------------------------------------------------------------------
+common_upgrade_packages: true
+common_microcode_enabled: true
+common_sysctl_tuning: true
+
+common_packages:
+  - curl
+  - wget
+  - htop
+  - vim
+  - git
+  - jq
+  - unzip
+  - net-tools
+  - dnsutils
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - software-properties-common
+  - python3-pip
+  - python3-docker
+
+# -----------------------------------------------------------------------------
+# Docker Configuration
+# -----------------------------------------------------------------------------
+target_docker:
+  log_driver: "json-file"
+  log_max_size: "10m"
+  log_max_file: "3"
+  storage_driver: "overlay2"
+  live_restore: true
+
+# Docker stack base path (Dockge-compatible)
+docker_stack_path: "/opt/stacks"
+
+# -----------------------------------------------------------------------------
+# Security Configuration
+# -----------------------------------------------------------------------------
+target_security:
+  ssh_hardening:
+    permit_root_login: "no"
+    password_authentication: "no"
+    max_auth_tries: 3
+    x11_forwarding: "no"
+    allow_tcp_forwarding: "no"
+    client_alive_interval: 300
+    client_alive_count_max: 2
+  fail2ban:
+    enabled: true
+    max_retry: 3
+    ban_time: 86400  # 24 hours
+    find_time: 600   # 10 minutes
+  ufw:
+    enabled: true
+    default_incoming: "deny"
+    default_outgoing: "allow"
+    allowed_ports:
+      - { port: 22, proto: "tcp", comment: "SSH" }
+
+# -----------------------------------------------------------------------------
+# LVM Configuration
+# -----------------------------------------------------------------------------
+target_lvm_config:
+  auto_extend_ubuntu: true
+
+# -----------------------------------------------------------------------------
+# Swap Configuration
+# -----------------------------------------------------------------------------
+swap_size_gb: 2
+
+# -----------------------------------------------------------------------------
+# Admin User
+# -----------------------------------------------------------------------------
+target_admin_user: "{{ ansible_user }}"

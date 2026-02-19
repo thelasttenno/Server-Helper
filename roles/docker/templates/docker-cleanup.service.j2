@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Docker system cleanup (prune unused images, volumes, networks)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker system prune -af --volumes --filter "until=168h"

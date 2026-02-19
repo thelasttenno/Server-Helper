@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: step_ca
+  author: Server Helper
+  description: Deploy Smallstep Step-CA as internal certificate authority
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions: [jammy, noble]
+    - name: Debian
+      versions: [bookworm]
+  galaxy_tags: [pki, certificates, step-ca, security]
+dependencies: []

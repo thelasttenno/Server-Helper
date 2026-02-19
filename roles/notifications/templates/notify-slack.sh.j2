@@ -1,0 +1,9 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Slack notification — JSON-safe
+MSG="${1:-Alert}"
+PAYLOAD=$(python3 -c "import json,sys; print(json.dumps({'text': sys.argv[1]}))" "$MSG" 2>/dev/null) || \
+PAYLOAD="{\"text\": \"notification (encoding error)\"}"
+curl -fsS -m 10 -X POST -H "Content-Type: application/json" \
+  -d "$PAYLOAD" \
+  "{{ notifications_slack.webhook }}" >/dev/null 2>&1 || true

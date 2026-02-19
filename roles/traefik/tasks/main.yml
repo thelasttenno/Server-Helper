@@ -1,127 +1,86 @@
 ---
-# Traefik deployment tasks (Control Node)
+# Role: traefik — Deploy Traefik v3 reverse proxy
 
-- name: Traefik deployment
-  when: traefik_enabled | bool
-  block:
-    # Create stack directory
-    - name: Create Traefik stack directory
-      ansible.builtin.file:
-        path: "{{ traefik_stack_dir }}"
-        state: directory
-        owner: root
-        group: docker
-        mode: "0755"
-      become: true
+- name: Create traefik-public Docker network
+  community.docker.docker_network:
+    name: traefik-public
+    driver: bridge
+    state: present
 
-    # Create subdirectories
-    - name: Create Traefik subdirectories
-      ansible.builtin.file:
-        path: "{{ traefik_stack_dir }}/{{ item }}"
-        state: directory
-        owner: root
-        group: docker
-        mode: "0755"
-      loop:
-        - config
-        - letsencrypt
-        - certs
-      become: true
+- name: Create Traefik stack directory
+  ansible.builtin.file:
+    path: "{{ docker_stack_path }}/traefik"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
-    # Create Docker network for Traefik
-    - name: Create Traefik Docker network
-      community.docker.docker_network:
-        name: "{{ traefik_docker_network }}"
-        state: present
-      become: true
-      when: not traefik_skip_deploy | default(false)
+- name: Create Traefik ACME directory
+  ansible.builtin.file:
+    path: "{{ docker_stack_path }}/traefik/acme"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
 
-    # Deploy static configuration
-    - name: Deploy Traefik static configuration
-      ansible.builtin.template:
-        src: traefik.yml.j2
-        dest: "{{ traefik_stack_dir }}/traefik.yml"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
-      register: traefik_static_config
-      notify: Restart traefik
+- name: Create ACME storage file
+  ansible.builtin.file:
+    path: "{{ docker_stack_path }}/traefik/acme/acme.json"
+    state: touch
+    owner: root
+    group: root
+    mode: "0600"
+    modification_time: preserve
+    access_time: preserve
 
-    # Deploy dynamic configuration
-    - name: Deploy Traefik dynamic configuration
-      ansible.builtin.template:
-        src: dynamic-config.yml.j2
-        dest: "{{ traefik_stack_dir }}/config/dynamic.yml"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
+- name: Generate Traefik dashboard htpasswd hash
+  ansible.builtin.set_fact:
+    _traefik_htpasswd: >-
+      {{ vault_traefik_dashboard.username }}:{{ vault_traefik_dashboard.password | password_hash('bcrypt') }}
+  no_log: true
 
-    # Check if acme.json exists
-    - name: Check if ACME storage file exists
-      ansible.builtin.stat:
-        path: "{{ traefik_stack_dir }}/letsencrypt/acme.json"
-      register: acme_file
-      when: traefik_acme_enabled | bool
+- name: Deploy Traefik Docker Compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ docker_stack_path }}/traefik/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0640"
+  no_log: true
 
-    # Create acme.json with proper permissions (only if it doesn't exist)
-    - name: Create ACME storage file
-      ansible.builtin.file:
-        path: "{{ traefik_stack_dir }}/letsencrypt/acme.json"
-        state: touch
-        owner: root
-        group: root
-        mode: "0600"
-        modification_time: preserve
-        access_time: preserve
-      become: true
-      when:
-        - traefik_acme_enabled | bool
-        - not acme_file.stat.exists | default(true)
+- name: Deploy Traefik static configuration
+  ansible.builtin.template:
+    src: traefik.yml.j2
+    dest: "{{ docker_stack_path }}/traefik/traefik.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Traefik
 
-    # Deploy docker-compose file
-    - name: Deploy Traefik docker-compose
-      ansible.builtin.template:
-        src: docker-compose.yml.j2
-        dest: "{{ traefik_stack_dir }}/compose.yaml"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
-      register: traefik_compose
+- name: Deploy Traefik dynamic configuration
+  ansible.builtin.template:
+    src: dynamic-config.yml.j2
+    dest: "{{ docker_stack_path }}/traefik/dynamic-config.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Traefik
 
-    # Deploy the stack
-    - name: Deploy Traefik stack
-      community.docker.docker_compose_v2:
-        project_src: "{{ traefik_stack_dir }}"
-        state: present
-        pull: always
-      become: true
-      when:
-        - not traefik_skip_deploy | default(false)
-        - traefik_compose.changed or traefik_static_config.changed
+- name: Allow HTTP port
+  community.general.ufw:
+    rule: allow
+    port: "{{ control_traefik.http_port | string }}"
+    proto: tcp
+    comment: "Traefik HTTP"
 
-    # Ensure Traefik is running
-    - name: Ensure Traefik is running
-      community.docker.docker_compose_v2:
-        project_src: "{{ traefik_stack_dir }}"
-        state: present
-      become: true
-      when:
-        - not traefik_skip_deploy | default(false)
-        - not (traefik_compose.changed or traefik_static_config.changed)
+- name: Allow HTTPS port
+  community.general.ufw:
+    rule: allow
+    port: "{{ control_traefik.https_port | string }}"
+    proto: tcp
+    comment: "Traefik HTTPS"
 
-    # Wait for Traefik to be ready
-    - name: Wait for Traefik to be ready
-      ansible.builtin.uri:
-        url: "http://localhost:{{ traefik_dashboard_port }}/ping"
-        method: GET
-        status_code: 200
-      register: traefik_health
-      until: traefik_health.status == 200
-      retries: 30
-      delay: 2
-      when:
-        - not traefik_skip_deploy | default(false)
-        - traefik_api_enabled | bool
+- name: Start Traefik
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_stack_path }}/traefik"
+    state: present

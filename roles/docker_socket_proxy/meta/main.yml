@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: docker_socket_proxy
+  author: Server Helper
+  description: Read-only Docker socket proxy with UFW firewall rules
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions: [jammy, noble]
+    - name: Debian
+      versions: [bookworm]
+  galaxy_tags: [docker, security, proxy]
+dependencies: []

@@ -1,45 +1,21 @@
 #!/bin/bash
+# {{ ansible_managed }}
 # Restic repository check script
-# Managed by Ansible - Server Helper
 
 set -euo pipefail
 
-# Load environment
-source {{ restic_script_dir }}/restic.env
+LOG_FILE="/var/log/restic/check-$(date +%Y%m%d_%H%M%S).log"
 
-# Logging
-LOG_FILE="{{ restic_log_dir }}/check-$(date +%Y%m%d-%H%M%S).log"
-exec > >(tee -a "$LOG_FILE") 2>&1
+source /etc/restic/restic.env
 
-echo "========================================="
-echo "Restic Check Started: $(date)"
-echo "Host: $(hostname)"
-echo "========================================="
+echo "Starting repository check at $(date)" | tee "${LOG_FILE}"
 
-# Check repository integrity
-echo "Checking repository integrity..."
-restic check --verbose
-
-CHECK_EXIT=$?
-
-if [ $CHECK_EXIT -ne 0 ]; then
-    echo "ERROR: Repository check failed with exit code $CHECK_EXIT"
-{% if restic_notify_on_failure and restic_notify_url %}
-    curl -s -X POST "{{ restic_notify_url }}" \
-        -H "Content-Type: application/json" \
-        -d "{\"text\": \"Restic check FAILED on $(hostname) at $(date)\"}" || true
-{% endif %}
-    exit $CHECK_EXIT
+if restic check --verbose 2>&1 | tee -a "${LOG_FILE}"; then
+    echo "Repository check completed at $(date)" | tee -a "${LOG_FILE}"
+else
+    echo "Repository check FAILED at $(date)" | tee -a "${LOG_FILE}"
+    server-helper-notify "Restic Check FAILED" "Repository integrity check failed on {{ inventory_hostname }}. Check: journalctl -u restic-check.service" 2>/dev/null || true
 fi
 
-echo ""
-echo "Repository statistics:"
-restic stats
-
-echo ""
-echo "========================================="
-echo "Restic Check Completed: $(date)"
-echo "========================================="
-
-# Cleanup old logs (keep last 30 days)
-find {{ restic_log_dir }} -name "check-*.log" -mtime +30 -delete 2>/dev/null || true
+# Cleanup old logs (keep last 10)
+ls -t /var/log/restic/check-*.log 2>/dev/null | tail -n +11 | xargs -r rm

@@ -1,97 +1,68 @@
 ---
-# Server Helper - Vault Secrets
-# ENCRYPT THIS FILE: ansible-vault encrypt group_vars/vault.yml
+# =============================================================================
+# Server Helper v2.0 — Vault (Encrypted Secrets)
+# =============================================================================
+# This file should be encrypted with: ansible-vault encrypt group_vars/vault.yml
+# Edit with: ansible-vault edit group_vars/vault.yml
 #
-# Commands:
-#   Encrypt: ansible-vault encrypt group_vars/vault.yml
-#   Edit:    ansible-vault edit group_vars/vault.yml
-#   View:    ansible-vault view group_vars/vault.yml
-#   Decrypt: ansible-vault decrypt group_vars/vault.yml
+# To create your vault password:
+#   echo "your-secure-password" > .vault_password
+#   chmod 600 .vault_password
+#
+# Structure mirrors the 3-tier role model.
 
-# =============================================================================
-# NAS CREDENTIALS
-# =============================================================================
+# TIER 1: Foundation
+vault_restic_credentials:
+  password: "CHANGE_ME_restic_repo_password"
 
 vault_nas_credentials:
   - username: "backup_user"
     password: "CHANGE_ME_nas_password"
 
-# =============================================================================
-# BACKUP PASSWORDS (Restic)
-# =============================================================================
-
-vault_restic_passwords:
-  nas: "CHANGE_ME_restic_nas_password"
-  local: "CHANGE_ME_restic_local_password"
-  s3: "CHANGE_ME_restic_s3_password"
-  b2: "CHANGE_ME_restic_b2_password"
-
-# =============================================================================
-# CLOUD PROVIDER CREDENTIALS
-# =============================================================================
-
 vault_aws_credentials:
   access_key: "CHANGE_ME_aws_access_key"
   secret_key: "CHANGE_ME_aws_secret_key"
 
-vault_b2_credentials:
-  account_id: ""
-  account_key: ""
-
-# =============================================================================
-# TARGET NODE SERVICE CREDENTIALS
-# =============================================================================
-
+# TIER 2: Target Agents
 vault_dockge_credentials:
   username: "admin"
   password: "CHANGE_ME_dockge_password"
 
-# =============================================================================
-# CONTROL NODE SERVICE CREDENTIALS
-# =============================================================================
+vault_netdata_credentials:
+  claim_token: ""
+  claim_room: ""
 
-# Authentik (SSO/Identity Provider)
+vault_netdata_stream_api_key: "CHANGE_ME_generate_uuid"
+
+# TIER 3: Control - Critical
 vault_authentik_credentials:
-  admin_password: "CHANGE_ME_authentik_admin_password"
-  secret_key: "CHANGE_ME_authentik_secret_key_64_chars"
+  secret_key: "CHANGE_ME_authentik_secret_key"
+  bootstrap_password: "CHANGE_ME_authentik_admin_password"
   postgres_password: "CHANGE_ME_authentik_postgres_password"
+  redis_password: "CHANGE_ME_authentik_redis_password"
 
-# Grafana OIDC (via Authentik)
-vault_grafana_oidc:
-  client_id: "grafana"
-  client_secret: "CHANGE_ME_grafana_oidc_secret"
+vault_grafana_credentials:
+  admin_password: "CHANGE_ME_grafana_admin_password"
+  secret_key: "CHANGE_ME_grafana_secret_key"
 
-# Grafana Admin (if not using Authentik SSO)
-vault_control_grafana_password: "CHANGE_ME_grafana_admin_password"
+vault_step_ca_credentials:
+  password: "CHANGE_ME_step_ca_password"
 
-# Uptime Kuma
-vault_uptime_kuma_credentials:
-  username: "admin"
-  password: "CHANGE_ME_uptime_kuma_password"
-
-# Step-CA (Certificate Authority)
-vault_step_ca_password: "CHANGE_ME_step_ca_password"
-
-# Pi-hole
-vault_pihole_password: "CHANGE_ME_pihole_password"
-
-# Traefik Dashboard
 vault_traefik_dashboard:
   username: "admin"
   password: "CHANGE_ME_traefik_dashboard_password"
 
-# =============================================================================
-# MONITORING & OBSERVABILITY
-# =============================================================================
+vault_pihole_password: "CHANGE_ME_pihole_password"
 
-# Netdata Cloud claim token (optional - get from app.netdata.cloud)
-vault_netdata_claim_token: ""
+# TIER 3: Control - Integration
+vault_grafana_oidc:
+  client_id: "CHANGE_ME_grafana_oidc_client_id"
+  client_secret: "CHANGE_ME_grafana_oidc_client_secret"
 
-# Netdata streaming API key (for parent-child communication)
-# Generate with: uuidgen or openssl rand -hex 16
-vault_netdata_stream_api_key: "CHANGE_ME_netdata_stream_key"
+vault_uptime_kuma_credentials:
+  username: "admin"
+  password: "CHANGE_ME_uptime_kuma_password"
 
-# Uptime Kuma push URLs (for health check callbacks)
 vault_uptime_kuma_push_urls:
   nas: ""
   dockge: ""
@@ -100,30 +71,22 @@ vault_uptime_kuma_push_urls:
   security: ""
   update: ""
 
-# =============================================================================
-# NOTIFICATION SERVICES
-# =============================================================================
-
+# Notifications (optional — leave empty to disable)
 vault_smtp_credentials:
-  host: ""              # e.g., smtp.gmail.com, smtp.sendgrid.net
+  host: ""
   port: 587
   username: ""
   password: ""
-  from_address: ""
-  to_addresses: []
+  from: ""
+  to: []
 
 vault_discord_webhook: ""
-
 vault_telegram_credentials:
   bot_token: ""
   chat_id: ""
-
 vault_slack_webhook: ""
 
-# =============================================================================
-# SYSTEM USERS
-# =============================================================================
-
+# System
 vault_system_users:
-  admin_password: "CHANGE_ME_admin_password"
-  admin_ssh_key: ""  # ssh-rsa AAAA... user@host
+  admin_password: "CHANGE_ME_system_admin_password"
+  admin_ssh_key: ""

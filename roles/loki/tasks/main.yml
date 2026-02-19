@@ -1,80 +1,44 @@
 ---
-# Loki deployment tasks (Control Node only)
+- name: Create Loki stack directory
+  ansible.builtin.file:
+    path: "{{ docker_stack_path }}/loki"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
-- name: Loki deployment
-  when: loki_enabled | bool
-  block:
-    # Create stack directory
-    - name: Create Loki stack directory
-      ansible.builtin.file:
-        path: "{{ loki_stack_dir }}"
-        state: directory
-        owner: root
-        group: docker
-        mode: "0755"
-      become: true
+- name: Deploy Loki Docker Compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ docker_stack_path }}/loki/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
 
-    # Create data directory
-    - name: Create Loki data directory
-      ansible.builtin.file:
-        path: "{{ loki_stack_dir }}/data"
-        state: directory
-        owner: "10001"  # Loki user inside container
-        group: "10001"
-        mode: "0755"
-      become: true
+- name: Deploy Loki configuration
+  ansible.builtin.template:
+    src: loki-config.yml.j2
+    dest: "{{ docker_stack_path }}/loki/loki-config.yml"
+    owner: root
+    group: root
+    mode: "0644"
 
-    # Deploy Loki config
-    - name: Deploy Loki configuration
-      ansible.builtin.template:
-        src: loki-config.yml.j2
-        dest: "{{ loki_stack_dir }}/loki-config.yml"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
-      register: loki_config
+- name: Deploy Loki environment file
+  ansible.builtin.template:
+    src: loki.env.j2
+    dest: "{{ docker_stack_path }}/loki/.env"
+    owner: root
+    group: root
+    mode: "0600"
 
-    # Deploy docker-compose file
-    - name: Deploy Loki docker-compose
-      ansible.builtin.template:
-        src: docker-compose.yml.j2
-        dest: "{{ loki_stack_dir }}/compose.yaml"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
-      register: loki_compose
+- name: Allow Loki port from targets
+  community.general.ufw:
+    rule: allow
+    port: "{{ control_loki.port | string }}"
+    proto: tcp
+    comment: "Loki log ingestion"
 
-    # Deploy the stack
-    - name: Deploy Loki stack
-      community.docker.docker_compose_v2:
-        project_src: "{{ loki_stack_dir }}"
-        state: present
-        pull: always
-      become: true
-      when:
-        - not loki_skip_deploy | default(false)
-        - loki_compose.changed or loki_config.changed
-
-    # Ensure Loki is running
-    - name: Ensure Loki is running
-      community.docker.docker_compose_v2:
-        project_src: "{{ loki_stack_dir }}"
-        state: present
-      become: true
-      when:
-        - not loki_skip_deploy | default(false)
-        - not (loki_compose.changed or loki_config.changed)
-
-    # Wait for Loki to be ready
-    - name: Wait for Loki to be ready
-      ansible.builtin.uri:
-        url: "http://localhost:{{ loki_http_port }}/ready"
-        method: GET
-        status_code: 200
-      register: loki_health
-      until: loki_health.status == 200
-      retries: 30
-      delay: 2
-      when: not loki_skip_deploy | default(false)
+- name: Start Loki
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_stack_path }}/loki"
+    state: present

@@ -1,140 +1,93 @@
 ---
-# Netdata deployment tasks
+# Role: netdata — Deploy Netdata as Docker container (child or parent mode)
 
-- name: Netdata deployment
-  when: netdata_enabled | bool
-  block:
-    # Validate required variables for child mode
-    - name: Validate control_node_ip is set (child mode)
-      ansible.builtin.assert:
-        that:
-          - control_node_ip is defined
-          - control_node_ip | length > 0
-        fail_msg: |
-          control_node_ip must be set for Netdata child nodes to stream to parent.
-          Current value: '{{ control_node_ip | default("not defined") }}'
+- name: Set Netdata stack directory
+  ansible.builtin.set_fact:
+    netdata_stack_dir: "{{ docker_stack_path }}/netdata"
 
-          Set this in group_vars/all.yml or run: ./setup.sh -> Configure
-        success_msg: "control_node_ip is set to {{ control_node_ip }}"
-      when: netdata_mode == "child"
+- name: Create Netdata stack directory
+  ansible.builtin.file:
+    path: "{{ netdata_stack_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
-    # Validate streaming API key is set
-    - name: Validate streaming API key is set
-      ansible.builtin.assert:
-        that:
-          - vault_netdata_stream_api_key is defined
-          - vault_netdata_stream_api_key | length > 0
-        fail_msg: |
-          vault_netdata_stream_api_key must be set for Netdata streaming.
-          Set this in group_vars/vault.yml and encrypt with ./scripts/vault.sh
-        success_msg: "Netdata stream API key is configured"
-      when: netdata_streaming_enabled | bool
+- name: Create Netdata config directories
+  ansible.builtin.file:
+    path: "{{ netdata_stack_dir }}/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - config
+    - config/health.d
 
-    # Create stack directory
-    - name: Create Netdata stack directory
-      ansible.builtin.file:
-        path: "{{ netdata_stack_dir }}"
-        state: directory
-        owner: root
-        group: docker
-        mode: "0755"
-      become: true
+- name: Deploy Netdata Docker Compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ netdata_stack_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
 
-    # Create config directories
-    - name: Create Netdata config directories
-      ansible.builtin.file:
-        path: "{{ netdata_stack_dir }}/{{ item }}"
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-      loop:
-        - config
-        - config/health.d
-      become: true
+- name: Deploy Netdata environment file
+  ansible.builtin.template:
+    src: netdata.env.j2
+    dest: "{{ netdata_stack_dir }}/.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
 
-    # Deploy stream.conf for parent/child streaming
-    - name: Deploy stream.conf
-      ansible.builtin.template:
-        src: stream.conf.j2
-        dest: "{{ netdata_stack_dir }}/config/stream.conf"
-        owner: root
-        group: root
-        mode: "0644"
-      become: true
-      when: netdata_streaming_enabled | bool
-      notify: Restart netdata container
+- name: Deploy Netdata configuration
+  ansible.builtin.template:
+    src: netdata.conf.j2
+    dest: "{{ netdata_stack_dir }}/config/netdata.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Netdata
 
-    # Deploy netdata.conf
-    - name: Deploy netdata.conf
-      ansible.builtin.template:
-        src: netdata.conf.j2
-        dest: "{{ netdata_stack_dir }}/config/netdata.conf"
-        owner: root
-        group: root
-        mode: "0644"
-      become: true
-      notify: Restart netdata container
+- name: Deploy Netdata streaming configuration
+  ansible.builtin.template:
+    src: stream.conf.j2
+    dest: "{{ netdata_stack_dir }}/config/stream.conf"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart Netdata
 
-    # Deploy health alarm config (parent only)
-    - name: Deploy health alarm configs
-      ansible.builtin.template:
-        src: "health.d/{{ item }}.j2"
-        dest: "{{ netdata_stack_dir }}/config/health.d/{{ item }}"
-        owner: root
-        group: root
-        mode: "0644"
-      loop:
-        - cpu.conf
-        - ram.conf
-        - disk.conf
-      become: true
-      when: netdata_mode == "parent"
-      notify: Restart netdata container
+- name: Deploy CPU alarm configuration
+  ansible.builtin.template:
+    src: health.d/cpu.conf.j2
+    dest: "{{ netdata_stack_dir }}/config/health.d/cpu.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Netdata
 
-    # Deploy docker-compose file
-    - name: Deploy Netdata docker-compose
-      ansible.builtin.template:
-        src: docker-compose.yml.j2
-        dest: "{{ netdata_stack_dir }}/compose.yaml"
-        owner: root
-        group: docker
-        mode: "0644"
-      become: true
-      register: netdata_compose
+- name: Deploy RAM alarm configuration
+  ansible.builtin.template:
+    src: health.d/ram.conf.j2
+    dest: "{{ netdata_stack_dir }}/config/health.d/ram.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Netdata
 
-    # Deploy the stack
-    - name: Deploy Netdata stack
-      community.docker.docker_compose_v2:
-        project_src: "{{ netdata_stack_dir }}"
-        state: present
-        pull: always
-      become: true
-      when:
-        - not netdata_skip_deploy | default(false)
-        - netdata_compose.changed
+- name: Deploy Disk alarm configuration
+  ansible.builtin.template:
+    src: health.d/disk.conf.j2
+    dest: "{{ netdata_stack_dir }}/config/health.d/disk.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Netdata
 
-    # Ensure Netdata is running
-    - name: Ensure Netdata is running
-      community.docker.docker_compose_v2:
-        project_src: "{{ netdata_stack_dir }}"
-        state: present
-      become: true
-      when:
-        - not netdata_skip_deploy | default(false)
-        - not netdata_compose.changed
-
-    # Claim to Netdata Cloud (optional)
-    - name: Claim to Netdata Cloud
-      community.docker.docker_container_exec:
-        container: "{{ netdata_container_name }}"
-        command: >
-          netdata-claim.sh -token={{ netdata_claim_token }}
-          -rooms={{ netdata_claim_rooms }}
-          -url={{ netdata_claim_url }}
-      become: true
-      when:
-        - not netdata_skip_deploy | default(false)
-        - netdata_claim_token != ""
-        - netdata_claim_rooms != ""
-      failed_when: false
+- name: Start Netdata
+  community.docker.docker_compose_v2:
+    project_src: "{{ netdata_stack_dir }}"
+    state: present

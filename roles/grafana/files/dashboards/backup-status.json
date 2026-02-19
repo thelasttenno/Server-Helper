@@ -1,0 +1,122 @@
+{
+    "dashboard": {
+        "title": "Backup Status",
+        "uid": "server-helper-backup",
+        "tags": [
+            "server-helper",
+            "backup"
+        ],
+        "timezone": "browser",
+        "refresh": "5m",
+        "panels": [
+            {
+                "title": "Backup Logs",
+                "type": "logs",
+                "gridPos": {
+                    "h": 12,
+                    "w": 24,
+                    "x": 0,
+                    "y": 0
+                },
+                "targets": [
+                    {
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        },
+                        "expr": "{job=\"syslog\"} |~ \"restic\""
+                    }
+                ]
+            },
+            {
+                "title": "Backup Failures",
+                "type": "stat",
+                "gridPos": {
+                    "h": 6,
+                    "w": 8,
+                    "x": 0,
+                    "y": 12
+                },
+                "targets": [
+                    {
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        },
+                        "expr": "count_over_time({job=\"syslog\"} |~ \"Backup FAILED\" [24h])"
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "thresholds": {
+                            "steps": [
+                                {
+                                    "color": "green",
+                                    "value": 0
+                                },
+                                {
+                                    "color": "red",
+                                    "value": 1
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                "title": "Backup Successes (24h)",
+                "type": "stat",
+                "gridPos": {
+                    "h": 6,
+                    "w": 8,
+                    "x": 8,
+                    "y": 12
+                },
+                "targets": [
+                    {
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        },
+                        "expr": "count_over_time({job=\"syslog\"} |~ \"Backup completed successfully\" [24h])"
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "thresholds": {
+                            "steps": [
+                                {
+                                    "color": "red",
+                                    "value": 0
+                                },
+                                {
+                                    "color": "green",
+                                    "value": 1
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                "title": "Verification Status",
+                "type": "logs",
+                "gridPos": {
+                    "h": 6,
+                    "w": 8,
+                    "x": 16,
+                    "y": 12
+                },
+                "targets": [
+                    {
+                        "datasource": {
+                            "type": "loki",
+                            "uid": "loki"
+                        },
+                        "expr": "{job=\"syslog\"} |~ \"Verification (PASSED|FAILED)\""
+                    }
+                ]
+            }
+        ]
+    }
+}

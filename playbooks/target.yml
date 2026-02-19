@@ -1,92 +1,38 @@
 ---
-# Target playbook - Deploy services to target nodes
-# Run after bootstrap.yml to deploy monitoring and backup services
+# =============================================================================
+# target.yml — Full target node deployment
+# =============================================================================
+# Deploys all foundation + agent roles on target nodes.
 #
 # Usage:
 #   ansible-playbook playbooks/target.yml
-#   ansible-playbook playbooks/target.yml --tags "netdata,promtail"
-#   ansible-playbook playbooks/target.yml --limit "server1,server2"
+#   ansible-playbook playbooks/target.yml --limit server1
 
-- name: Server Helper - Target Node Services
+- name: Target nodes — Foundation
   hosts: targets
-  become: true
   gather_facts: true
-
+  tags: [foundation]
   pre_tasks:
-    - name: Verify Docker is installed
-      ansible.builtin.command: docker --version
-      register: docker_check
-      changed_when: false
-      failed_when: docker_check.rc != 0
-
-    - name: Verify control node IP is configured
-      ansible.builtin.assert:
-        that:
-          - control_node_ip is defined
-          - control_node_ip | length > 0
-        fail_msg: "control_node_ip must be defined in group_vars/all.yml"
-        success_msg: "Control node IP: {{ control_node_ip }}"
-
-    - name: Display target configuration
-      ansible.builtin.debug:
-        msg: |
-          ================================================
-          Configuring Target: {{ inventory_hostname }}
-          ================================================
-          Control Node: {{ control_node_ip }}
-          Netdata Parent: {{ control_node_ip }}:19999
-          Loki Endpoint: {{ control_node_ip }}:3100
-          ================================================
-
+    - name: Auto-detect virtualization skip flags
+      ansible.builtin.set_fact:
+        lvm_skip: "{{ lvm_skip | default(ansible_virtualization_type == 'lxc') }}"
+        swap_skip: "{{ swap_skip | default(ansible_virtualization_type == 'lxc') }}"
+        qemu_agent_skip: "{{ qemu_agent_skip | default(ansible_virtualization_type not in ['kvm', 'qemu']) }}"
   roles:
-    - role: watchtower
-      tags: [watchtower, auto-update]
+    - { role: common, tags: [common] }
+    - { role: lvm_config, tags: [lvm_config] }
+    - { role: swap, tags: [swap] }
+    - { role: qemu_agent, tags: [qemu_agent] }
+    - { role: security, tags: [security] }
+    - { role: docker, tags: [docker] }
+    - { role: watchtower, tags: [watchtower] }
+    - { role: restic, tags: [restic] }
 
-    - role: restic
-      tags: [restic, backup]
-      when: restic_enabled | default(true) | bool
-
-    - role: netdata
-      tags: [netdata, monitoring]
-      vars:
-        netdata_mode: "child"
-        netdata_parent_host: "{{ control_node_ip }}"
-
-    - role: promtail
-      tags: [promtail, logging]
-      vars:
-        promtail_loki_url: "http://{{ control_node_ip }}:3100/loki/api/v1/push"
-
-  post_tasks:
-    - name: Verify Netdata is streaming
-      ansible.builtin.uri:
-        url: "http://localhost:19999/api/v1/info"
-        method: GET
-        status_code: [200, 404]  # 404 is OK if web is disabled for child
-      register: netdata_check
-      failed_when: false
-
-    - name: Verify Promtail is running
-      ansible.builtin.uri:
-        url: "http://localhost:9080/ready"
-        method: GET
-        status_code: 200
-      register: promtail_check
-      failed_when: false
-
-    - name: Display service status
-      ansible.builtin.debug:
-        msg: |
-          ================================================
-          Target Services Deployed: {{ inventory_hostname }}
-          ================================================
-          Watchtower: Running (auto-updates enabled)
-          Netdata Child: {{ 'OK' if netdata_check.status | default(0) in [200, 404] else 'Check logs' }}
-          Promtail: {{ 'OK' if promtail_check.status | default(0) == 200 else 'Check logs' }}
-          Restic Backup: {{ 'Enabled' if restic_enabled | default(true) else 'Disabled' }}
-          ================================================
-
-          Metrics streaming to: {{ control_node_ip }}:19999
-          Logs shipping to: {{ control_node_ip }}:3100
-
-          ================================================
+- name: Target nodes — Agents
+  hosts: targets
+  tags: [agents]
+  roles:
+    - { role: netdata, tags: [netdata], vars: { netdata_mode: "child" } }
+    - { role: promtail, tags: [promtail] }
+    - { role: docker_socket_proxy, tags: [docker_socket_proxy] }
+    - { role: dockge, tags: [dockge] }

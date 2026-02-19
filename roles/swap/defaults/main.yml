@@ -1,20 +1,4 @@
 ---
-# Swap role defaults
-
-# Enable/disable swap configuration
-swap_enabled: true
-
-# Skip swap operations (set to true for LXC containers via host_vars/inventory)
-swap_skip: false
-
-# Swap file path
-swap_file_path: "/swapfile"
-
-# Swap file size in GB
+# Role: swap — Defaults
 swap_size_gb: 2
-
-# Swappiness value (0-100, lower = less swap usage)
-swap_swappiness: 10
-
-# VFS cache pressure (lower = prefer keeping inode/dentry caches)
-swap_vfs_cache_pressure: 50
+swap_skip: false

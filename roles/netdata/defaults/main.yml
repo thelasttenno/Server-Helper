@@ -1,61 +1,19 @@
 ---
-# Netdata role defaults
-
-# Master toggle (from target_netdata config for targets, control_netdata for control)
-netdata_enabled: "{{ target_netdata.enabled | default(control_netdata.enabled | default(true)) }}"
-
-# Skip actual Docker deployment (for molecule testing)
-netdata_skip_deploy: false
-
-# Deployment mode: "parent" (control node) or "child" (target nodes)
-netdata_mode: "{{ control_netdata.mode | default('child') }}"
-
-# Container settings
-netdata_container_name: "netdata"
-netdata_image: "netdata/netdata"
-netdata_image_tag: "{{ target_netdata.version | default(control_netdata.version | default('stable')) }}"
-
-# Stack directory (Dockge compatible)
-netdata_stack_dir: "/opt/stacks/netdata"
-
-# Web interface port (parent only)
-netdata_web_port: "{{ target_netdata.port | default(19999) }}"
-
-# Streaming configuration
-netdata_streaming_enabled: true
-netdata_stream_api_key: "{{ vault_netdata_stream_api_key | default('') }}"
-
-# Parent node configuration (for child nodes to connect to)
-netdata_parent_host: "{{ control_node_ip | default('') }}"
-netdata_parent_port: 19999
-
-# Parent mode settings
-netdata_parent_allow_from: "*"
-netdata_parent_default_memory_mode: "dbengine"
-netdata_parent_health_enabled_by_default: "auto"
-
-# Child mode settings
-netdata_child_memory_mode: "none"  # Don't store locally, stream to parent
-netdata_child_health_enabled: "no"  # Parent handles alerts
-
-# Data retention (parent only)
-netdata_dbengine_multihost_disk_space: 2048  # MB
-netdata_dbengine_page_cache_size: 64  # MB
-
-# Claim token for Netdata Cloud (optional)
-netdata_claim_token: "{{ vault_netdata_claim_token | default(target_netdata.claim_token | default('')) }}"
-netdata_claim_rooms: "{{ target_netdata.claim_rooms | default('') }}"
-netdata_claim_url: "https://app.netdata.cloud"
-
-# Health notifications
-netdata_notifications_enabled: false
-netdata_discord_webhook: ""
-netdata_slack_webhook: ""
-
-# Alarm thresholds (from target_netdata.alarms config)
-netdata_alarm_cpu_threshold: "{{ target_netdata.alarms.cpu_warning | default(85) }}"
-netdata_alarm_ram_threshold: "{{ target_netdata.alarms.ram_warning | default(90) }}"
-netdata_alarm_disk_threshold: "{{ target_netdata.alarms.disk_warning | default(90) }}"
-
-# Hostname override
-netdata_hostname: "{{ inventory_hostname }}"
+# Role: netdata — Defaults
+netdata_mode: "child"  # "child" or "parent"
+target_netdata:
+  version: "latest"
+  port: 19999
+  claim_enabled: false
+  alarms:
+    cpu_warning: 85
+    cpu_critical: 95
+    ram_warning: 85
+    ram_critical: 95
+    disk_warning: 80
+    disk_critical: 90
+control_netdata:
+  version: "latest"
+  port: 19999
+  dbengine_multihost_disk_space: 2048
+  history_seconds: 3600

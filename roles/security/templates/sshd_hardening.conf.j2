@@ -1,32 +1,22 @@
-# SSH Hardening Configuration
-# Managed by Ansible - Server Helper
+# {{ ansible_managed }}
+# SSH Hardening — drop-in config at /etc/ssh/sshd_config.d/99-hardening.conf
 
-# Listen port
-Port {{ security_ssh_port }}
+PermitRootLogin {{ target_security.ssh_hardening.permit_root_login }}
+PasswordAuthentication {{ target_security.ssh_hardening.password_authentication }}
+MaxAuthTries {{ target_security.ssh_hardening.max_auth_tries }}
+X11Forwarding {{ target_security.ssh_hardening.x11_forwarding }}
+AllowTcpForwarding {{ target_security.ssh_hardening.allow_tcp_forwarding }}
+ClientAliveInterval {{ target_security.ssh_hardening.client_alive_interval }}
+ClientAliveCountMax {{ target_security.ssh_hardening.client_alive_count_max }}
 
-# Authentication
-PermitRootLogin {{ security_ssh_permit_root_login }}
-PubkeyAuthentication {{ security_ssh_pubkey_auth }}
-PasswordAuthentication {{ security_ssh_password_auth }}
+# Disable empty passwords
 PermitEmptyPasswords no
-MaxAuthTries {{ security_ssh_max_auth_tries }}
 
-# Security
-X11Forwarding {{ security_ssh_x11_forwarding }}
-AllowAgentForwarding {{ security_ssh_allow_agent_forwarding }}
-AllowTcpForwarding {{ security_ssh_tcp_forwarding }}
-StrictModes yes
+# Use strong key exchange algorithms
+KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512
 
-# Logging
-LogLevel VERBOSE
-SyslogFacility AUTH
-
-# Timeouts
-LoginGraceTime 60
-ClientAliveInterval 300
-ClientAliveCountMax 2
-
-# Ciphers and MACs (modern secure defaults)
-KexAlgorithms curve25519-sha256@libssh.org,diffie-hellman-group-exchange-sha256
+# Use strong ciphers
 Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
+
+# Use strong MACs
 MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
