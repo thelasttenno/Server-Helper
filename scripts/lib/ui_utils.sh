@@ -96,9 +96,9 @@ prompt_input() {
     local result
 
     if [[ -n "$default" ]]; then
-        echo -n "  $prompt [$default]: "
+        echo -n "  $prompt [$default]: " >&2
     else
-        echo -n "  $prompt: "
+        echo -n "  $prompt: " >&2
     fi
 
     read -r result
@@ -108,9 +108,9 @@ prompt_input() {
 prompt_secret() {
     local prompt="$1"
     local result
-    echo -n "  $prompt: "
+    echo -n "  $prompt: " >&2
     read -rs result
-    echo ""
+    echo "" >&2
     echo "$result"
 }
 
