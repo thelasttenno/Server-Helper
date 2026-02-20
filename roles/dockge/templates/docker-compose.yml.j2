@@ -12,6 +12,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - dockge-data:/app/data
       - {{ docker_stack_path }}:{{ docker_stack_path }}
+    labels:
       - "traefik.enable=true"
       - "traefik.http.routers.dockge.rule=Host(`dockge.{{ target_domain }}`)"
       - "traefik.http.routers.dockge.entrypoints=websecure"

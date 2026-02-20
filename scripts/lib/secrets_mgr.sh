@@ -97,6 +97,14 @@ generate_secrets() {
 vault_restic_credentials:
   password: "$restic_pw"
 
+vault_nas_credentials:
+  - username: "${SETUP_NAS_USER:-}"
+    password: "${SETUP_NAS_PASS:-}"
+
+vault_aws_credentials:
+  access_key: "${SETUP_S3_ACCESS:-}"
+  secret_key: "${SETUP_S3_SECRET:-}"
+
 # TIER 2: Target Agents
 vault_netdata_credentials:
   claim_token: "${netdata_claim_token}"
@@ -136,22 +144,23 @@ vault_uptime_kuma_push_urls:
 
 # Notifications (optional)
 vault_smtp_credentials:
-  host: ""
-  port: 587
-  username: ""
-  password: ""
-  from: ""
+  host: "${SETUP_SMTP_HOST:-}"
+  port: ${SETUP_SMTP_PORT:-587}
+  username: "${SETUP_SMTP_USER:-}"
+  password: "${SETUP_SMTP_PASS:-}"
+  from: "${SETUP_SMTP_FROM:-}"
   to: []
-vault_discord_webhook: ""
+vault_discord_webhook: "${SETUP_DISCORD_WEBHOOK:-}"
+vault_watchtower_notification_url: "${SETUP_WATCHTOWER_URL:-}"
 vault_telegram_credentials:
-  bot_token: ""
-  chat_id: ""
-vault_slack_webhook: ""
+  bot_token: "${SETUP_TELEGRAM_TOKEN:-}"
+  chat_id: "${SETUP_TELEGRAM_CHATID:-}"
+vault_slack_webhook: "${SETUP_SLACK_WEBHOOK:-}"
 
 # System
 vault_system_users:
   admin_password: "$admin_pw"
-  admin_ssh_key: ""
+  admin_ssh_key: "${SETUP_ADMIN_SSH_KEY:-}"
 VAULT
 
     chmod 600 "$tmp_vault"

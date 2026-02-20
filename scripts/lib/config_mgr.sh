@@ -50,9 +50,7 @@ detect_ip() {
 }
 
 detect_timezone() {
-    timedatectl show --property=Timezone --value 2>/dev/null || \
-        cat /etc/timezone 2>/dev/null || \
-        echo "UTC"
+    echo "America/Vancouver"
 }
 
 detect_user() {
@@ -104,6 +102,21 @@ quick_setup_wizard() {
     yaml_write "$all_vars" "target_timezone" "$timezone"
     yaml_write "$all_vars" "target_admin_user" "$admin_user"
 
+    # SSH Key Auto-Detection
+    echo ""
+    local ssh_pub=""
+    if [[ -f "$HOME/.ssh/id_ed25519.pub" ]]; then
+        ssh_pub="$HOME/.ssh/id_ed25519.pub"
+    elif [[ -f "$HOME/.ssh/id_rsa.pub" ]]; then
+        ssh_pub="$HOME/.ssh/id_rsa.pub"
+    fi
+
+    if [[ -n "$ssh_pub" ]]; then
+        if confirm "Found SSH key ($ssh_pub). Add this key to vault for admin access?"; then
+            export SETUP_ADMIN_SSH_KEY=$(cat "$ssh_pub")
+        fi
+    fi
+
     print_success "Configuration updated: $all_vars"
 
     # Advanced settings
@@ -151,6 +164,10 @@ with open('$all_vars', 'w') as f:
     if confirm "Configure email notifications (SMTP)?"; then
         configure_email
     fi
+
+    # Chat Notifications
+    echo ""
+    configure_chat_notifications
 
     # Backup configuration
     echo ""
@@ -200,9 +217,36 @@ configure_email() {
     smtp_port=$(prompt_input "SMTP port" "587")
     smtp_user=$(prompt_input "SMTP username" "")
     smtp_from=$(prompt_input "From address" "$smtp_user")
+    local smtp_pass=""
+    if [[ -n "$smtp_user" ]]; then
+        smtp_pass=$(prompt_secret "SMTP password / App Password")
+    fi
 
-    print_info "SMTP password should be added to vault.yml under vault_smtp_credentials"
-    print_step "Run: make vault-edit"
+    # Export for secrets_mgr.sh
+    export SETUP_SMTP_HOST="$smtp_host"
+    export SETUP_SMTP_PORT="$smtp_port"
+    export SETUP_SMTP_USER="$smtp_user"
+    export SETUP_SMTP_FROM="$smtp_from"
+    export SETUP_SMTP_PASS="$smtp_pass"
+}
+
+# =============================================================================
+# CHAT NOTIFICATIONS CONFIG
+# =============================================================================
+configure_chat_notifications() {
+    if confirm "Configure Discord notifications?"; then
+        export SETUP_DISCORD_WEBHOOK=$(prompt_secret "Discord Webhook URL")
+    fi
+    if confirm "Configure Slack notifications?"; then
+        export SETUP_SLACK_WEBHOOK=$(prompt_secret "Slack Webhook URL")
+    fi
+    if confirm "Configure Telegram notifications?"; then
+        export SETUP_TELEGRAM_TOKEN=$(prompt_secret "Telegram Bot Token")
+        export SETUP_TELEGRAM_CHATID=$(prompt_input "Telegram Chat ID")
+    fi
+    if confirm "Configure Watchtower updates via webhook?"; then
+        export SETUP_WATCHTOWER_URL=$(prompt_secret "Watchtower Notification URL (e.g. discord://token@id)")
+    fi
 }
 
 # =============================================================================
@@ -226,12 +270,15 @@ configure_backup() {
             print_info "Set restic_destinations.type=local and path=$backup_path in group_vars/targets.yml"
             ;;
         2)
+            export SETUP_S3_ACCESS=$(prompt_input "S3 Access Key")
+            export SETUP_S3_SECRET=$(prompt_secret "S3 Secret Key")
             print_info "Set restic_destinations.type=s3 in group_vars/targets.yml"
-            print_info "Add S3 credentials to vault.yml under vault_restic_credentials"
             ;;
         3)
             local nas_path
             nas_path=$(prompt_input "NAS mount path" "/mnt/nas/backups")
+            export SETUP_NAS_USER=$(prompt_input "NAS username")
+            export SETUP_NAS_PASS=$(prompt_secret "NAS password")
             print_info "Set restic_destinations.type=nas and path=$nas_path in group_vars/targets.yml"
             ;;
     esac
