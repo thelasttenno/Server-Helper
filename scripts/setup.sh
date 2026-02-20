@@ -133,68 +133,107 @@ show_main_menu() {
 # =============================================================================
 # DEPLOY MENU
 # =============================================================================
-show_deploy_menu() {
-    clear
-    print_header "Deploy Infrastructure"
-    echo ""
-    echo "  ${CYAN}1)${NC}  Full deployment (site.yml)"
-    echo "  ${CYAN}2)${NC}  Control node only"
-    echo "  ${CYAN}3)${NC}  Target nodes only"
-    echo "  ${CYAN}4)${NC}  Add new server"
-    echo "  ${CYAN}5)${NC}  Dry run (check mode)"
-    echo "  ${CYAN}0)${NC}  Back"
-    echo ""
-    echo -n "  Select option: "
-}
+deploy_menu() {
+    while true; do
+        clear
+        print_header "Deploy Infrastructure"
+        echo ""
+        echo "  ${CYAN}1)${NC}  Full deployment (site.yml)"
+        echo "  ${CYAN}2)${NC}  Control node only"
+        echo "  ${CYAN}3)${NC}  Target nodes only"
+        echo "  ${CYAN}4)${NC}  Add new server"
+        echo "  ${CYAN}5)${NC}  Dry run (check mode)"
+        echo "  ${CYAN}0)${NC}  Back"
+        echo ""
+        echo -n "  Select option: "
 
-handle_deploy_menu() {
-    local choice
-    read -r choice
-    case $choice in
-        1) log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/site.yml'" ;;
-        2) log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/control.yml'" ;;
-        3) log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/target.yml'" ;;
-        4)
-            echo -n "  Hostname (must be in inventory): "
-            local host
-            read -r host
-            log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/add-target.yml' --limit '$host'"
-            ;;
-        5) log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/site.yml' --check --diff" ;;
-        0) return ;;
-    esac
+        local choice
+        read -r choice
+        case $choice in
+            1) log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/site.yml'" ;;
+            2) log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/control.yml'" ;;
+            3) log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/target.yml'" ;;
+            4)
+                echo -n "  Hostname (must be in inventory): "
+                local host
+                read -r host
+                log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/add-target.yml' --limit '$host'"
+                ;;
+            5) log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/site.yml' --check --diff" ;;
+            0) return ;;
+            *) print_error "Invalid option" ; sleep 1 ;;
+        esac
+
+        echo ""
+        echo "  Press Enter to continue..."
+        read -r
+    done
 }
 
 # =============================================================================
 # SECRETS MENU
 # =============================================================================
-show_secrets_menu() {
-    clear
-    print_header "Secrets Management"
-    echo ""
-    echo "  ${CYAN}1)${NC}  Generate all secrets (fresh)"
-    echo "  ${CYAN}2)${NC}  Generate missing secrets (idempotent)"
-    echo "  ${CYAN}3)${NC}  Edit vault"
-    echo "  ${CYAN}4)${NC}  View vault"
-    echo "  ${CYAN}5)${NC}  Re-key vault"
-    echo "  ${CYAN}6)${NC}  Validate vault"
-    echo "  ${CYAN}0)${NC}  Back"
-    echo ""
-    echo -n "  Select option: "
+secrets_menu() {
+    while true; do
+        clear
+        print_header "Secrets Management"
+        echo ""
+        echo "  ${CYAN}1)${NC}  Generate all secrets (fresh)"
+        echo "  ${CYAN}2)${NC}  Generate missing secrets (idempotent)"
+        echo "  ${CYAN}3)${NC}  Edit vault"
+        echo "  ${CYAN}4)${NC}  View vault"
+        echo "  ${CYAN}5)${NC}  Re-key vault"
+        echo "  ${CYAN}6)${NC}  Validate vault"
+        echo "  ${CYAN}0)${NC}  Back"
+        echo ""
+        echo -n "  Select option: "
+
+        local choice
+        read -r choice
+        case $choice in
+            1) generate_secrets "fresh" ;;
+            2) generate_secrets "idempotent" ;;
+            3) vault_edit ;;
+            4) vault_view ;;
+            5) vault_rekey ;;
+            6) vault_validate ;;
+            0) return ;;
+            *) print_error "Invalid option" ; sleep 1 ;;
+        esac
+
+        echo ""
+        echo "  Press Enter to continue..."
+        read -r
+    done
 }
 
-handle_secrets_menu() {
-    local choice
-    read -r choice
-    case $choice in
-        1) generate_secrets "fresh" ;;
-        2) generate_secrets "idempotent" ;;
-        3) vault_edit ;;
-        4) vault_view ;;
-        5) vault_rekey ;;
-        6) vault_validate ;;
-        0) return ;;
-    esac
+# =============================================================================
+# UPDATES & UPGRADES MENU
+# =============================================================================
+updates_menu() {
+    while true; do
+        clear
+        print_header "Updates & Upgrades"
+        echo ""
+        echo "  ${CYAN}1)${NC}  System updates (apt)"
+        echo "  ${CYAN}2)${NC}  Docker image upgrades"
+        echo "  ${CYAN}0)${NC}  Back"
+        echo ""
+        echo -n "  Select option: "
+
+        local uchoice
+        read -r uchoice
+        case $uchoice in
+            1) log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/update.yml'" ;;
+            2) upgrade_menu ;;
+            0) return ;;
+            *) print_error "Invalid option" ; sleep 1 ;;
+        esac
+
+        echo ""
+        echo "  Press Enter to continue..."
+        read -r
+    done
 }
 
 # =============================================================================
@@ -214,32 +253,10 @@ main() {
         read -r choice
         case $choice in
             1) quick_setup_wizard ;;
-            2)
-                show_secrets_menu
-                handle_secrets_menu
-                ;;
-            3)
-                show_deploy_menu
-                handle_deploy_menu
-                ;;
+            2) secrets_menu ;;
+            3) deploy_menu ;;
             4) fleet_management_menu ;;
-            5)
-                clear
-                print_header "Updates & Upgrades"
-                echo ""
-                echo "  ${CYAN}1)${NC}  System updates (apt)"
-                echo "  ${CYAN}2)${NC}  Docker image upgrades"
-                echo "  ${CYAN}0)${NC}  Back"
-                echo ""
-                echo -n "  Select option: "
-                local uchoice
-                read -r uchoice
-                case $uchoice in
-                    1) log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/update.yml'" ;;
-                    2) upgrade_menu ;;
-                    0) ;;
-                esac
-                ;;
+            5) updates_menu ;;
             6) log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/backup.yml'" ;;
             7) testing_menu ;;
             8) run_health_check ;;

@@ -106,6 +106,40 @@ quick_setup_wizard() {
 
     print_success "Configuration updated: $all_vars"
 
+    # Advanced settings
+    echo ""
+    if confirm "Configure advanced settings (DNS, Docker, swap)?"; then
+        echo ""
+        local dns_servers docker_path swap_size
+
+        dns_servers=$(prompt_input "DNS upstream servers (comma-separated)" "1.1.1.1,8.8.8.8")
+        docker_path=$(prompt_input "Docker stack path" "/opt/stacks")
+        swap_size=$(prompt_input "Swap size in GB" "2")
+
+        # Write DNS servers as a YAML list
+        python3 -c "
+import yaml
+with open('$all_vars') as f:
+    data = yaml.safe_load(f) or {}
+dns = data.setdefault('target_dns', {})
+dns['upstream_servers'] = [s.strip() for s in '$dns_servers'.split(',') if s.strip()]
+dns['search_domain'] = '{{ target_domain }}'
+with open('$all_vars', 'w') as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+" 2>/dev/null
+
+        yaml_write "$all_vars" "docker_stack_path" "$docker_path"
+        yaml_write "$all_vars" "swap_size_gb" "$swap_size"
+
+        if confirm "Auto-upgrade system packages on deploy?"; then
+            yaml_write "$all_vars" "common_upgrade_packages" "true"
+        else
+            yaml_write "$all_vars" "common_upgrade_packages" "false"
+        fi
+
+        print_success "Advanced settings updated"
+    fi
+
     # DNS configuration
     echo ""
     if confirm "Configure custom DNS records?"; then

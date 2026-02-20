@@ -118,26 +118,33 @@ vault_validate() {
 # VAULT INTERACTIVE MENU
 # =============================================================================
 vault_menu() {
-    clear
-    print_header "Vault Operations"
-    echo ""
-    echo "  ${CYAN}1)${NC}  Encrypt vault"
-    echo "  ${CYAN}2)${NC}  Edit vault"
-    echo "  ${CYAN}3)${NC}  View vault"
-    echo "  ${CYAN}4)${NC}  Re-key vault"
-    echo "  ${CYAN}5)${NC}  Validate vault"
-    echo "  ${CYAN}0)${NC}  Back"
-    echo ""
-    echo -n "  Select option: "
+    while true; do
+        clear
+        print_header "Vault Operations"
+        echo ""
+        echo "  ${CYAN}1)${NC}  Encrypt vault"
+        echo "  ${CYAN}2)${NC}  Edit vault"
+        echo "  ${CYAN}3)${NC}  View vault"
+        echo "  ${CYAN}4)${NC}  Re-key vault"
+        echo "  ${CYAN}5)${NC}  Validate vault"
+        echo "  ${CYAN}0)${NC}  Back"
+        echo ""
+        echo -n "  Select option: "
 
-    local choice
-    read -r choice
-    case $choice in
-        1) vault_encrypt ;;
-        2) vault_edit ;;
-        3) vault_view ;;
-        4) vault_rekey ;;
-        5) vault_validate ;;
-        0) return ;;
-    esac
+        local choice
+        read -r choice
+        case $choice in
+            1) vault_encrypt ;;
+            2) vault_edit ;;
+            3) vault_view ;;
+            4) vault_rekey ;;
+            5) vault_validate ;;
+            0) return ;;
+            *) print_error "Invalid option" ; sleep 1 ;;
+        esac
+
+        echo ""
+        echo "  Press Enter to continue..."
+        read -r
+    done
 }

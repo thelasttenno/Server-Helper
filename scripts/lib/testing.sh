@@ -4,29 +4,36 @@
 # =============================================================================
 
 testing_menu() {
-    clear
-    print_header "Testing"
-    echo ""
-    echo "  ${CYAN}1)${NC}  Test all roles"
-    echo "  ${CYAN}2)${NC}  Test specific role"
-    echo "  ${CYAN}3)${NC}  Syntax check only"
-    echo "  ${CYAN}4)${NC}  Lint check"
-    echo "  ${CYAN}0)${NC}  Back"
-    echo ""
-    echo -n "  Select option: "
-    local choice
-    read -r choice
-    case $choice in
-        1) test_all_roles ;;
-        2)
-            local role
-            role=$(prompt_input "Role name")
-            test_role "$role"
-            ;;
-        3) log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/site.yml' --syntax-check" ;;
-        4) log_exec "yamllint -c '$PROJECT_ROOT/.yamllint' '$PROJECT_ROOT/'" ;;
-        0) return ;;
-    esac
+    while true; do
+        clear
+        print_header "Testing"
+        echo ""
+        echo "  ${CYAN}1)${NC}  Test all roles"
+        echo "  ${CYAN}2)${NC}  Test specific role"
+        echo "  ${CYAN}3)${NC}  Syntax check only"
+        echo "  ${CYAN}4)${NC}  Lint check"
+        echo "  ${CYAN}0)${NC}  Back"
+        echo ""
+        echo -n "  Select option: "
+        local choice
+        read -r choice
+        case $choice in
+            1) test_all_roles ;;
+            2)
+                local role
+                role=$(prompt_input "Role name")
+                test_role "$role"
+                ;;
+            3) log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/site.yml' --syntax-check" ;;
+            4) log_exec "yamllint -c '$PROJECT_ROOT/.yamllint' '$PROJECT_ROOT/'" ;;
+            0) return ;;
+            *) print_error "Invalid option" ; sleep 1 ;;
+        esac
+
+        echo ""
+        echo "  Press Enter to continue..."
+        read -r
+    done
 }
 
 test_all_roles() {

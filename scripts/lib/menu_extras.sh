@@ -19,28 +19,35 @@ open_service_ui() {
 }
 
 extras_menu() {
-    clear
-    print_header "Extras"
-    echo ""
-    echo "  ${CYAN}1)${NC}  Add new server"
-    echo "  ${CYAN}2)${NC}  Open service UIs"
-    echo "  ${CYAN}3)${NC}  Validate fleet"
-    echo "  ${CYAN}4)${NC}  Run linting"
-    echo "  ${CYAN}5)${NC}  View project version"
-    echo "  ${CYAN}6)${NC}  Ansible Galaxy install"
-    echo "  ${CYAN}0)${NC}  Back"
-    echo ""
-    echo -n "  Select option: "
+    while true; do
+        clear
+        print_header "Extras"
+        echo ""
+        echo "  ${CYAN}1)${NC}  Add new server"
+        echo "  ${CYAN}2)${NC}  Open service UIs"
+        echo "  ${CYAN}3)${NC}  Validate fleet"
+        echo "  ${CYAN}4)${NC}  Run linting"
+        echo "  ${CYAN}5)${NC}  View project version"
+        echo "  ${CYAN}6)${NC}  Ansible Galaxy install"
+        echo "  ${CYAN}0)${NC}  Back"
+        echo ""
+        echo -n "  Select option: "
 
-    local choice
-    read -r choice
-    case $choice in
-        1) add_host ;;
-        2) open_service_ui ;;
-        3) validate_fleet ;;
-        4) log_exec "ansible-lint '$PROJECT_ROOT/playbooks/'" ;;
-        5) print_info "Server Helper v$(cat "$PROJECT_ROOT/VERSION")" ;;
-        6) log_exec "ansible-galaxy collection install -r '$PROJECT_ROOT/requirements.yml' --force" ;;
-        0) return ;;
-    esac
+        local choice
+        read -r choice
+        case $choice in
+            1) add_host ;;
+            2) open_service_ui ;;
+            3) validate_fleet ;;
+            4) log_exec "ansible-lint '$PROJECT_ROOT/playbooks/'" ;;
+            5) print_info "Server Helper v$(cat "$PROJECT_ROOT/VERSION")" ;;
+            6) log_exec "ansible-galaxy collection install -r '$PROJECT_ROOT/requirements.yml' --force" ;;
+            0) return ;;
+            *) print_error "Invalid option" ; sleep 1 ;;
+        esac
+
+        echo ""
+        echo "  Press Enter to continue..."
+        read -r
+    done
 }

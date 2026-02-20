@@ -84,10 +84,16 @@ log_exec() {
 # =============================================================================
 confirm() {
     local prompt="${1:-Are you sure?}"
-    echo -n "  $prompt [y/N]: "
-    local reply
-    read -r reply
-    [[ "$reply" =~ ^[Yy]$ ]]
+    while true; do
+        echo -n "  $prompt [y/N]: "
+        local reply
+        read -r reply
+        case "${reply,,}" in
+            y|yes) return 0 ;;
+            n|no|"") return 1 ;;
+            *) print_warning "Please answer y/yes or n/no." ;;
+        esac
+    done
 }
 
 prompt_input() {

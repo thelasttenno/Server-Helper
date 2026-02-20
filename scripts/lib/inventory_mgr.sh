@@ -143,28 +143,35 @@ for group in ['control', 'targets']:
 # FLEET MANAGEMENT MENU
 # =============================================================================
 fleet_management_menu() {
-    clear
-    print_header "Fleet Management"
-    echo ""
-    echo "  ${CYAN}1)${NC}  List inventory"
-    echo "  ${CYAN}2)${NC}  Add host"
-    echo "  ${CYAN}3)${NC}  Remove host"
-    echo "  ${CYAN}4)${NC}  Validate inventory"
-    echo "  ${CYAN}5)${NC}  Ping all hosts"
-    echo "  ${CYAN}6)${NC}  Docker status (all hosts)"
-    echo "  ${CYAN}0)${NC}  Back"
-    echo ""
-    echo -n "  Select option: "
+    while true; do
+        clear
+        print_header "Fleet Management"
+        echo ""
+        echo "  ${CYAN}1)${NC}  List inventory"
+        echo "  ${CYAN}2)${NC}  Add host"
+        echo "  ${CYAN}3)${NC}  Remove host"
+        echo "  ${CYAN}4)${NC}  Validate inventory"
+        echo "  ${CYAN}5)${NC}  Ping all hosts"
+        echo "  ${CYAN}6)${NC}  Docker status (all hosts)"
+        echo "  ${CYAN}0)${NC}  Back"
+        echo ""
+        echo -n "  Select option: "
 
-    local choice
-    read -r choice
-    case $choice in
-        1) list_inventory ;;
-        2) add_host ;;
-        3) remove_host ;;
-        4) validate_inventory ;;
-        5) log_exec "ansible -i '$INVENTORY_FILE' all -m ping" ;;
-        6) log_exec "ansible -i '$INVENTORY_FILE' all -m command -a 'docker ps --format \"table {{.Names}}\t{{.Status}}\t{{.Ports}}\"'" ;;
-        0) return ;;
-    esac
+        local choice
+        read -r choice
+        case $choice in
+            1) list_inventory ;;
+            2) add_host ;;
+            3) remove_host ;;
+            4) validate_inventory ;;
+            5) log_exec "ansible -i '$INVENTORY_FILE' all -m ping" ;;
+            6) log_exec "ansible -i '$INVENTORY_FILE' all -m command -a 'docker ps --format \"table {{.Names}}\t{{.Status}}\t{{.Ports}}\"'" ;;
+            0) return ;;
+            *) print_error "Invalid option" ; sleep 1 ;;
+        esac
+
+        echo ""
+        echo "  Press Enter to continue..."
+        read -r
+    done
 }
