@@ -1,6 +1,6 @@
 ---
 # =============================================================================
-# Server Helper v2.0 — site.yml (Main Entry Point)
+# Server Helper v0.4.0 — Main Playbookml (Main Entry Point)
 # =============================================================================
 # Full 3-tier deployment:
 #   1. Pre-flight: Detect virtualization, set skip flags
@@ -65,6 +65,8 @@
       tags: [watchtower]
     - role: restic
       tags: [restic]
+    - role: notifications
+      tags: [notifications]
 
 # =============================================================================
 # TIER 2: Target Agents
@@ -111,6 +113,8 @@
       tags: [uptime_kuma]
     - role: dockge
       tags: [dockge]
+    - role: homarr
+      tags: [homarr]
 
 # =============================================================================
 # POST-DEPLOY: Distribute Step-CA root certificate
@@ -168,7 +172,7 @@
       ansible.builtin.debug:
         msg: |
           ══════════════════════════════════════════════════
-          Server Helper v2.0 — Deployment Complete
+          Server Helper v0.4.0 — Deployment Complete
           ══════════════════════════════════════════════════
 
           Service URLs:
@@ -180,5 +184,7 @@
             Authentik:   https://auth.{{ target_domain }}
             Step-CA:     https://step-ca.{{ target_domain }}
             Dockge:      https://dockge.{{ target_domain }}
+            Homarr:      https://dashboard.{{ target_domain }}
+            Homarr:      https://dashboard.{{ target_domain }}
 
           ══════════════════════════════════════════════════

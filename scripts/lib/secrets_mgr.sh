@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# secrets_mgr.sh — Password generation, interactive prompts, vault generation
+# secrets_mgr.sh — Server Helper v0.4.0 Secrets Managementeractive prompts, vault generation
 # =============================================================================
 
 # =============================================================================

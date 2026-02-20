@@ -10,9 +10,10 @@ services:
       WATCHTOWER_INCLUDE_STOPPED: "{{ target_watchtower.include_stopped | lower }}"
       WATCHTOWER_INCLUDE_RESTARTING: "{{ target_watchtower.include_restarting | lower }}"
       WATCHTOWER_NOTIFICATIONS: "{{ 'shoutrrr' if target_watchtower.notifications else '' }}"
+      WATCHTOWER_NOTIFICATION_URL: "{{ vault_watchtower_notification_url | default('') }}"
       TZ: "{{ target_timezone }}"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/v1/update"]
       interval: 60s

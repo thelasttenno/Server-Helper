@@ -131,9 +131,17 @@ quick_setup_wizard() {
     fi
 
     echo ""
+    echo ""
     print_success "Quick setup complete!"
     print_info "Review files in group_vars/ before deploying."
-    print_info "Next step: make deploy"
+    
+    echo ""
+    if confirm "Ready to deploy infrastructure now?"; then
+        echo ""
+        log_exec "ansible-playbook -i '$PROJECT_ROOT/inventory/hosts.yml' '$PROJECT_ROOT/playbooks/site.yml'"
+    else
+        print_info "Next step: make deploy"
+    fi
 }
 
 # =============================================================================

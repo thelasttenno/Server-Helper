@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### New Control Stack Services
+
+- **Homarr Dashboard**: Centralized dashboard for all services, secured by Authentik SSO
+  - Role: `roles/homarr`
+  - URL: `https://dashboard.{{ target_domain }}`
+
+#### Service Integrations
+
+- **Centralized Logging**: Traefik access logs and Fail2Ban logs are now shipped to Loki
+- **Notifications**: Watchtower now supports alerting (e.g., Discord) via `vault_watchtower_notification_url`
+- **SSO**: Dockge and Homarr added to Authentik/Traefik middleware configuration
+
 #### Security Audit & Hardening
 
 - `no_log: true` on all Ansible tasks that template vault secrets (11 tasks across 7 roles)

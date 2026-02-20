@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Server Helper v2.0 — Quick Setup Entry Point
+# Server Helper v0.4.0 — Quick Setup Entry Point
 # =============================================================================
 # Wrapper: delegates to scripts/setup.sh so you can run ./setup.sh from root.
 # =============================================================================

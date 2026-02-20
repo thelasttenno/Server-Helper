@@ -12,24 +12,23 @@
 # 1. Clone the repository
 git clone <repo-url> && cd Server-Helper-Reborn
 
-# 2. Copy example files
-cp group_vars/all.example.yml group_vars/all.yml
-cp group_vars/vault.example.yml group_vars/vault.yml
-cp inventory/hosts.example.yml inventory/hosts.yml
-
-# 3. Install Ansible Galaxy dependencies
-make deps
-
-# 4. Run the interactive setup wizard
-make setup
+# 2. Run the interactive setup wizard
+bash setup.sh
 ```
 
-The setup wizard walks you through:
+The script automatically handles:
+
+- Copying default configuration files
+- Installing Ansible dependencies
+- Launching the interactive wizard
+
+The wizard walks you through:
 
 - Network configuration (domain, control node IP)
 - Inventory setup (adding your servers)
 - Secret generation (passwords, API keys)
 - Vault encryption
+- **Deployment** (optional)
 
 ## First Deployment
 
@@ -58,7 +57,9 @@ Deployment order:
 | Pi-hole | `https://pihole.{domain}` | 8053 |
 | Authentik | `https://auth.{domain}` | 9000 |
 | Step-CA | `https://step-ca.{domain}` | 9443 |
+| Step-CA | `https://step-ca.{domain}` | 9443 |
 | Dockge | `https://dockge.{domain}` | 5001 |
+| Homarr | `https://dashboard.{domain}` | 7575 |
 | Loki | *(internal only)* | 3100 |
 
 Services with complex post-deploy setup (Authentik, Step-CA, Pi-hole, Uptime Kuma) render a `SETUP-GUIDE.md` into their stack directory at `/opt/stacks/{service}/`.

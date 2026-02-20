@@ -12,6 +12,7 @@ services:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - promtail-positions:/tmp/positions
+      - traefik-logs:/var/log/traefik:ro
     command: -config.file=/etc/promtail/config.yml
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9080/ready"]
@@ -22,3 +23,5 @@ services:
 
 volumes:
   promtail-positions:
+  traefik-logs:
+    external: true

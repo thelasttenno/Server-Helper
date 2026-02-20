@@ -12,7 +12,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik.yml:/traefik.yml:ro
       - ./dynamic-config.yml:/dynamic-config.yml:ro
+      - ./dynamic-config.yml:/dynamic-config.yml:ro
       - ./acme:/acme
+      - traefik-logs:/var/log/traefik
     networks:
       - traefik-public
     labels:
@@ -33,3 +35,6 @@ services:
 networks:
   traefik-public:
     external: true
+
+volumes:
+  traefik-logs:

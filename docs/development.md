@@ -5,7 +5,7 @@
 ```
 ├── ansible.cfg                 # Ansible configuration
 ├── Makefile                    # 40+ automation targets
-├── VERSION                     # Semver (2.0.0)
+├── VERSION                     # Semver (0.4.0)
 ├── requirements.yml            # Galaxy dependencies
 ├── group_vars/                 # Variable hierarchy
 ├── host_vars/                  # Per-host overrides

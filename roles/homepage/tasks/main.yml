@@ -1,0 +1,39 @@
+---
+# Role: homepage — Deploy Homepage Dashboard
+# https://github.com/gethomepage/homepage
+
+- name: Create Homepage stack directory
+  ansible.builtin.file:
+    path: "{{ docker_stack_path }}/homepage/config"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+    recurse: true
+
+- name: Deploy Homepage configuration files
+  ansible.builtin.template:
+    src: "{{ item }}.yaml.j2"
+    dest: "{{ docker_stack_path }}/homepage/config/{{ item }}.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - services
+    - widgets
+    - settings
+  notify: Restart homepage
+
+- name: Deploy Homepage Docker Compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ docker_stack_path }}/homepage/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart homepage
+
+- name: Start Homepage
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_stack_path }}/homepage"
+    state: present

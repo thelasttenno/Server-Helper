@@ -41,3 +41,21 @@ scrape_configs:
           job: authlog
           host: '{{ inventory_hostname }}'
           __path__: /var/log/auth.log
+
+  # Traefik access logs
+  - job_name: traefik
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: traefik
+          host: '{{ inventory_hostname }}'
+          __path__: /var/log/traefik/access.log
+
+  # Fail2Ban logs
+  - job_name: fail2ban
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: fail2ban
+          host: '{{ inventory_hostname }}'
+          __path__: /var/log/fail2ban.log

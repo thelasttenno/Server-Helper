@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Server Helper v2.0 — setup.sh (Interactive Setup & Menu)
+# Server Helper v0.4.0 — setup.sh (Interactive Setup & Menu)
 # =============================================================================
 # Main entry point for the Server Helper CLI.
 # Sources library modules from scripts/lib/ and presents an interactive menu.
@@ -47,6 +47,62 @@ source_lib "health_check.sh"
 source_lib "menu_extras.sh"
 source_lib "testing.sh"
 source_lib "upgrade.sh"
+
+# =============================================================================
+# AUTO-INITIALIZATION
+# =============================================================================
+
+# Copy example config files if they don't exist
+init_config_files() {
+    print_step "Checking configuration files..."
+    local updated=0
+
+    # Pair structure: source:dest
+    local configs=(
+        "group_vars/all.example.yml:group_vars/all.yml"
+        "group_vars/vault.example.yml:group_vars/vault.yml"
+        "inventory/hosts.example.yml:inventory/hosts.yml"
+    )
+
+    for config in "${configs[@]}"; do
+        local src="${config%%:*}"
+        local dest="${config##*:}"
+        
+        if [[ ! -f "$PROJECT_ROOT/$dest" ]]; then
+            if [[ -f "$PROJECT_ROOT/$src" ]]; then
+                cp "$PROJECT_ROOT/$src" "$PROJECT_ROOT/$dest"
+                print_success "Created $dest from defaults"
+                updated=1
+            else
+                print_warning "Missing example file: $src"
+            fi
+        fi
+    done
+
+    if [[ $updated -eq 1 ]]; then
+        echo ""
+    fi
+}
+
+# Check and install Ansible dependencies
+check_ansible_deps() {
+    print_step "Checking Ansible dependencies..."
+    
+    # Check if collections path exists or if we can list collections effectively
+    if ! ansible-galaxy collection list 2>/dev/null | grep -q "community.docker"; then
+        print_warning "Ansible collections missing or incomplete."
+        print_step "Installing dependencies (make deps)..."
+        if make deps; then
+            print_success "Dependencies installed"
+            echo ""
+        else
+            print_error "Failed to install dependencies. Check network/permissions."
+            exit 1
+        fi
+    else
+        print_success "Dependencies already installed"
+    fi
+}
 
 # =============================================================================
 # VERSION
@@ -145,6 +201,10 @@ handle_secrets_menu() {
 # MAIN LOOP
 # =============================================================================
 main() {
+    # Auto-initialization
+    init_config_files
+    check_ansible_deps
+
     # Pre-flight checks
     check_requirements
 

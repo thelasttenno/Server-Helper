@@ -12,6 +12,15 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - dockge-data:/app/data
       - {{ docker_stack_path }}:{{ docker_stack_path }}
+      - "traefik.enable=true"
+      - "traefik.http.routers.dockge.rule=Host(`dockge.{{ target_domain }}`)"
+      - "traefik.http.routers.dockge.entrypoints=websecure"
+      - "traefik.http.routers.dockge.tls.certresolver=letsencrypt"
+      - "traefik.http.services.dockge.loadbalancer.server.port=5001"
+      - "traefik.http.routers.dockge.middlewares=auth,security-headers"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://authentik:9000/outpost.goauthentik.io/auth/traefik"
+      - "traefik.http.middlewares.auth.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.auth.forwardauth.authResponseHeaders=X-authentik-username,X-authentik-groups,X-authentik-email,X-authentik-name,X-authentik-uid,X-authentik-jwt,X-authentik-meta-jwks,X-authentik-meta-outpost,X-authentik-meta-provider,X-authentik-meta-app,X-authentik-meta-version"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:5001"]
       interval: 30s

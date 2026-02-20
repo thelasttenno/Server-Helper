@@ -1,6 +1,6 @@
 ---
 # =============================================================================
-# Server Helper v2.0 — Vault Example
+# Server Helper v0.4.0 — Vault SecretsExample
 # =============================================================================
 # Copy to vault.yml, fill in values, then encrypt:
 #   cp group_vars/vault.example.yml group_vars/vault.yml
@@ -80,6 +80,7 @@ vault_smtp_credentials:
   to: []
 
 vault_discord_webhook: ""
+vault_watchtower_notification_url: "" # e.g. discord://token@id, slack://token@hook
 vault_telegram_credentials:
   bot_token: ""
   chat_id: ""

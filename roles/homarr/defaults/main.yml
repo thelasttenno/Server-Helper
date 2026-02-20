@@ -1,0 +1,6 @@
+---
+# Role: homarr — Defaults
+control_homarr:
+  enabled: true
+  version: "latest"
+  port: 7575
