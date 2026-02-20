@@ -162,6 +162,25 @@ VAULT
     # Encrypt and move to final path
     echo ""
     if confirm "Encrypt vault now?"; then
+        # Ensure vault password file exists
+        local vault_pw_file="$PROJECT_ROOT/.vault_password"
+        if [[ ! -f "$vault_pw_file" ]]; then
+            print_warning "No vault password file found at $vault_pw_file"
+            echo ""
+            if confirm "Generate a random vault password?"; then
+                openssl rand -hex 32 > "$vault_pw_file"
+                chmod 600 "$vault_pw_file"
+                print_success "Vault password generated and saved to .vault_password"
+                print_warning "Back up this file! If you lose it, you cannot decrypt your vault."
+            else
+                local vault_pw
+                vault_pw=$(prompt_secret "Enter vault password")
+                echo "$vault_pw" > "$vault_pw_file"
+                chmod 600 "$vault_pw_file"
+                print_success "Vault password saved to .vault_password"
+            fi
+        fi
+
         ansible-vault encrypt "$tmp_vault" && \
             mv -f "$tmp_vault" "$vault_file" && \
             chmod 600 "$vault_file" && \

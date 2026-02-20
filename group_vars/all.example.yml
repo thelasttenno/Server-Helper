@@ -8,7 +8,7 @@
 # Domain & Network — REQUIRED: Change these for your environment
 target_domain: "example.com"
 target_control_ip: "192.168.1.10"
-target_timezone: "America/Los_Angeles"
+target_timezone: "America/Vancouver"
 
 # DNS — upstream resolvers used before Pi-hole is active
 target_dns:
