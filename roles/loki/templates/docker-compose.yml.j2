@@ -14,6 +14,8 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     networks:
       - traefik-public
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
       interval: 30s

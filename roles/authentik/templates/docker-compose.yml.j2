@@ -21,6 +21,7 @@ services:
       - "traefik.http.routers.authentik.entrypoints=websecure"
       - "traefik.http.routers.authentik.tls.certresolver=letsencrypt"
       - "traefik.http.services.authentik.loadbalancer.server.port=9000"
+      - "com.centurylinklabs.watchtower.enable=true"
     depends_on:
       authentik-db:
         condition: service_healthy
@@ -45,6 +46,8 @@ services:
       - authentik-templates:/templates
     networks:
       - authentik-internal
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     depends_on:
       authentik-db:
         condition: service_healthy
@@ -63,6 +66,8 @@ services:
       - authentik-db:/var/lib/postgresql/data
     networks:
       - authentik-internal
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U authentik"]
       interval: 10s
@@ -80,6 +85,8 @@ services:
       - authentik-redis:/data
     networks:
       - authentik-internal
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "{{ vault_authentik_credentials.redis_password }}", "ping"]
       interval: 10s

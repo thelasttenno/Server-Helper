@@ -4,14 +4,19 @@ services:
     image: tecnativa/docker-socket-proxy:{{ target_docker_socket_proxy.version }}
     container_name: docker-socket-proxy
     restart: unless-stopped
-    ports:
-      - "{{ target_docker_socket_proxy.port }}:2375"
     env_file:
       - .env
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - socket-network
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:2375/_ping"]
       interval: 30s
       timeout: 5s
       retries: 3
+
+networks:
+  socket-network:
+    name: socket-network
+    driver: bridge

@@ -6,13 +6,18 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      DOCKER_HOST: "tcp://docker-socket-proxy:2375"
     volumes:
       - ./promtail-config.yml:/etc/promtail/config.yml:ro
       - /var/log:/var/log:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - promtail-positions:/tmp/positions
       - traefik-logs:/var/log/traefik:ro
+    networks:
+      - socket-network
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     command: -config.file=/etc/promtail/config.yml
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9080/ready"]
@@ -24,4 +29,8 @@ services:
 volumes:
   promtail-positions:
   traefik-logs:
+    external: true
+
+networks:
+  socket-network:
     external: true

@@ -1,5 +1,11 @@
 ---
-# Role: docker_socket_proxy — Read-only Docker API proxy with UFW rules
+# Role: docker_socket_proxy — Secure Docker API proxy for internal networks
+
+- name: Create socket-network Docker network
+  community.docker.docker_network:
+    name: socket-network
+    driver: bridge
+    state: present
 
 - name: Create Docker Socket Proxy stack directory
   ansible.builtin.file:
@@ -24,14 +30,6 @@
     owner: root
     group: root
     mode: "0600"
-
-- name: Allow Docker Socket Proxy from control node only
-  community.general.ufw:
-    rule: allow
-    port: "{{ target_docker_socket_proxy.port | string }}"
-    proto: tcp
-    from_ip: "{{ target_control_ip }}"
-    comment: "Docker Socket Proxy from control"
 
 - name: Start Docker Socket Proxy
   community.docker.docker_compose_v2:

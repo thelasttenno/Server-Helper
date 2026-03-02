@@ -28,6 +28,7 @@ services:
       - "traefik.http.routers.pihole.tls.certresolver=letsencrypt"
       - "traefik.http.services.pihole.loadbalancer.server.port=80"
       - "traefik.http.routers.pihole.middlewares=security-headers"
+      - "com.centurylinklabs.watchtower.enable=true"
     depends_on:
       unbound:
         condition: service_healthy
@@ -46,6 +47,8 @@ services:
       - ./unbound/unbound.conf:/opt/unbound/etc/unbound/unbound.conf:ro
     networks:
       - pihole-internal
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     healthcheck:
       test: ["CMD", "drill", "@127.0.0.1", "cloudflare.com"]
       interval: 30s

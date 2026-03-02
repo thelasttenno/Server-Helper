@@ -9,14 +9,13 @@ services:
       - "{{ control_traefik.https_port }}:443"
       - "{{ control_traefik.dashboard_port }}:8080"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik.yml:/traefik.yml:ro
-      - ./dynamic-config.yml:/dynamic-config.yml:ro
       - ./dynamic-config.yml:/dynamic-config.yml:ro
       - ./acme:/acme
       - traefik-logs:/var/log/traefik
     networks:
       - traefik-public
+      - socket-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.dashboard.rule=Host(`traefik.{{ target_domain }}`)"
@@ -25,6 +24,7 @@ services:
       - "traefik.http.routers.dashboard.service=api@internal"
       - "traefik.http.routers.dashboard.middlewares=auth,security-headers"
       - "traefik.http.middlewares.auth.basicauth.users={{ _traefik_htpasswd }}"
+      - "com.centurylinklabs.watchtower.enable=true"
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 30s
@@ -35,6 +35,9 @@ services:
 networks:
   traefik-public:
     external: true
+  socket-network:
+    external: true
 
 volumes:
   traefik-logs:
+

@@ -175,6 +175,12 @@ with open('$all_vars', 'w') as f:
         configure_backup
     fi
 
+    # Unmanaged Service Auto-Discovery
+    echo ""
+    if confirm "Scan for existing unmanaged Docker stacks and host services?"; then
+        bash "$PROJECT_ROOT/scripts/lib/service_scanner.sh"
+    fi
+
     # Secrets generation
     echo ""
     if confirm "Generate secrets now?"; then

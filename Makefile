@@ -245,6 +245,11 @@ doctor: ## Run full environment diagnostic check
 	@test -f ~/.ssh/id_ed25519 && echo "  $(GREEN)✓$(RESET) Ed25519 key found" || (test -f ~/.ssh/id_rsa && echo "  $(GREEN)✓$(RESET) RSA key found" || echo "  $(YELLOW)⚠$(RESET) No SSH key found in ~/.ssh/")
 	@echo ""
 
+##@ Discovery
+.PHONY: scan-services
+scan-services: ## Scan local machine for unmanaged Docker stacks & bare-metal apps
+	@bash scripts/lib/service_scanner.sh
+
 ##@ Setup
 .PHONY: git-hooks
 git-hooks: ## Install git hooks

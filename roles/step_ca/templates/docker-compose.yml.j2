@@ -20,6 +20,7 @@ services:
       - "traefik.http.routers.step-ca.tls.certresolver=letsencrypt"
       - "traefik.http.services.step-ca.loadbalancer.server.port=9443"
       - "traefik.http.services.step-ca.loadbalancer.server.scheme=https"
+      - "com.centurylinklabs.watchtower.enable=true"
     healthcheck:
       test: ["CMD", "step", "ca", "health"]
       interval: 30s
