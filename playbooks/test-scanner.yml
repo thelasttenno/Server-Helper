@@ -1,0 +1,32 @@
+- hosts: control
+  become: true
+  tasks:
+    - name: Create test stack directory
+      ansible.builtin.file:
+        path: /opt/stacks/test-app
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create test stack docker-compose
+      ansible.builtin.copy:
+        dest: /opt/stacks/test-app/docker-compose.yml
+        content: |
+          services:
+            myapp:
+              image: nginx:latest
+              ports:
+                - 8081:80
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Fix script line endings
+      ansible.builtin.shell: dos2unix /opt/Server-Helper/scripts/lib/service_scanner.sh
+
+    - name: Run service scanner script
+      ansible.builtin.shell: |
+        echo -e 'Y\ntestapp\n8081\nN\n' | bash /opt/Server-Helper/scripts/lib/service_scanner.sh
+      args:
+        executable: /bin/bash
