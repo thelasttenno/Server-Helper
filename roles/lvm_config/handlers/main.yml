@@ -10,3 +10,4 @@
     fi
     {% endfor %}
   when: lvm_volumes.stdout_lines | default([]) | length > 0
+  changed_when: true

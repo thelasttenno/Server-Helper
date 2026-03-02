@@ -20,3 +20,5 @@ ignore: |
   .github/
   roles/*/molecule/
   .ansible_cache/
+  .venv/
+  group_vars/vault.yml

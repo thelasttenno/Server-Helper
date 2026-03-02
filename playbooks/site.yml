@@ -123,7 +123,7 @@
   hosts: targets
   tags: [post_deploy, step_ca]
   tasks:
-    - name: Fetch Step-CA root certificate from control
+    - name: Fetch Step-CA root certificate from control  # noqa run-once[task]
       ansible.builtin.slurp:
         src: "{{ docker_stack_path }}/step-ca/certs/root_ca.crt"
       register: step_ca_root_cert

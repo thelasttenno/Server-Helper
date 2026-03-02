@@ -40,7 +40,7 @@ extras_menu() {
             2) open_service_ui ;;
             3) validate_fleet ;;
             4) log_exec "ansible-lint '$PROJECT_ROOT/playbooks/'" ;;
-            5) print_info "Server Helper v$(cat "$PROJECT_ROOT/VERSION")" ;;
+            5) print_info "Server Helper v$(cat "$PROJECT_ROOT/VERSION" 2>/dev/null || echo "unknown")" ;;
             6) log_exec "ansible-galaxy collection install -r '$PROJECT_ROOT/requirements.yml' --force" ;;
             0) return ;;
             *) print_error "Invalid option" ; sleep 1 ;;

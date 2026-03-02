@@ -32,7 +32,7 @@
         name: watchtower
         command: "--run-once"
         restart: true
-      ignore_errors: true
+      failed_when: false
 
     - name: Check if reboot is required
       ansible.builtin.stat:

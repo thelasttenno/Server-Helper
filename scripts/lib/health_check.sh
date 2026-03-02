@@ -78,7 +78,9 @@ check_disk_space() {
         usage=$(echo "$line" | grep -oP '\d+%' | head -1 || echo "N/A")
         local used_num=${usage%%%}
 
-        if [[ "$used_num" -gt 90 ]]; then
+        if [[ "$used_num" == "N/A" ]]; then
+            print_warning "$host — usage unavailable"
+        elif [[ "$used_num" -gt 90 ]]; then
             print_error "$host — ${usage} used (CRITICAL)"
         elif [[ "$used_num" -gt 80 ]]; then
             print_warning "$host — ${usage} used (WARNING)"

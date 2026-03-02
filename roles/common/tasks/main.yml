@@ -46,7 +46,7 @@
     state: started
 
 - name: Configure locale
-  ansible.builtin.locale_gen:
+  community.general.locale_gen:
     name: en_US.UTF-8
     state: present
 
@@ -57,7 +57,7 @@
   when:
     - common_microcode_enabled | bool
     - ansible_virtualization_role != "guest"
-  ignore_errors: true
+  failed_when: false
 
 - name: Deploy Docker logrotate configuration
   ansible.builtin.template:

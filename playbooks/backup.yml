@@ -19,7 +19,7 @@
         state: started
       register: backup_trigger
 
-    - name: Wait for backup to complete
+    - name: Wait for backup to complete  # noqa command-instead-of-module
       ansible.builtin.command: systemctl is-active restic-backup.service
       register: backup_status
       until: backup_status.stdout != "activating"

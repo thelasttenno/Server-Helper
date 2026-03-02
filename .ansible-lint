@@ -1,0 +1,7 @@
+---
+profile: min
+warn_list: []
+skip_list:
+  # The project globally uses `target_` and `control_` variable prefixes
+  # across all roles to manage tier state, rather than role-specific prefixes.
+  - var-naming[no-role-prefix]

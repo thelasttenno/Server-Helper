@@ -62,7 +62,7 @@ add_host() {
 import yaml
 with open('$INVENTORY_FILE') as f:
     data = yaml.safe_load(f)
-hosts = data['all']['children']['$group'].setdefault('hosts', {})
+hosts = data.setdefault('all', {}).setdefault('children', {}).setdefault('$group', {}).setdefault('hosts', {})
 hosts['$hostname'] = {'ansible_host': '$ip'}
 with open('$INVENTORY_FILE', 'w') as f:
     yaml.dump(data, f, default_flow_style=False, sort_keys=False)
